@@ -1,0 +1,8 @@
+{
+  "name": "家长会总结与反思",
+  "description": "期末家长会核心要点、问答总结与暑期规划网页。采用响应式极简蓝白风格设计。",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
