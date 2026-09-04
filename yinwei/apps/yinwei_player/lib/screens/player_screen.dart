@@ -1,4 +1,9 @@
+import 'dart:io';
+
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:yinwei_player/bridge/engine_bootstrap.dart';
 import 'package:yinwei_player/models/spatial_params.dart';
 import 'package:yinwei_player/state/engine_controller.dart';
 import 'package:yinwei_player/theme/yinwei_theme.dart';
@@ -6,7 +11,7 @@ import 'package:yinwei_player/widgets/now_playing_panel.dart';
 import 'package:yinwei_player/widgets/orbit_visualizer.dart';
 import 'package:yinwei_player/widgets/position_sidebar.dart';
 
-/// Main window — wired to [EngineController] (P2.3).
+/// Main window — wired to [EngineController] (P2.3 / P2.4 native).
 class PlayerScreen extends StatefulWidget {
   const PlayerScreen({super.key, this.controller});
 
@@ -18,11 +23,19 @@ class PlayerScreen extends StatefulWidget {
 
 class _PlayerScreenState extends State<PlayerScreen> {
   late final EngineController _ctrl;
+  late final EngineBackend _backend;
 
   @override
   void initState() {
     super.initState();
-    _ctrl = widget.controller ?? EngineController();
+    if (widget.controller != null) {
+      _ctrl = widget.controller!;
+      _backend = EngineBackend.mock;
+    } else {
+      final boot = EngineBootstrap.create();
+      _backend = boot.backend;
+      _ctrl = EngineController(engine: boot.api, backendLabel: boot.detail);
+    }
     _ctrl.addListener(_onChange);
   }
 
@@ -112,7 +125,11 @@ class _PlayerScreenState extends State<PlayerScreen> {
                   ],
                 ),
               ),
-              _StatusBar(buildId: kYinweiUiBuild),
+              _StatusBar(
+                buildId: '$kYinweiUiBuild · $kYinweiBridgeBuild',
+                backend: c.backendLabel,
+                native: _backend == EngineBackend.native,
+              ),
             ],
           ),
           if (c.busy)
@@ -133,15 +150,25 @@ class _PlayerScreenState extends State<PlayerScreen> {
   }
 
   Future<void> _onOpen() async {
-    // file_picker on Windows host; mock path for structure until wired.
     try {
-      await _ctrl.openPath('/mock/Across the Room.wav');
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: const ['wav', 'mp3', 'flac', 'ogg', 'm4a', 'aac'],
+        dialogTitle: '打开本地音频',
+      );
+      if (result == null || result.files.isEmpty) return;
+      final path = result.files.single.path;
+      if (path == null || path.isEmpty) {
+        throw StateError('无法读取文件路径');
+      }
+      await _ctrl.openPath(path);
       if (!mounted) return;
+      final label = _backend == EngineBackend.native ? '真引擎' : '演示引擎 Mock';
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('已打开（演示引擎 Mock）— 真 HRTF 需接 NativeEngine'),
+        SnackBar(
+          content: Text('已打开（$label）'),
           behavior: SnackBarBehavior.floating,
-          duration: Duration(seconds: 2),
+          duration: const Duration(seconds: 2),
         ),
       );
     } catch (e) {
@@ -154,9 +181,13 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
   Future<void> _onExport() async {
     try {
-      await _ctrl.exportWav('/tmp/yinwei-export.wav');
+      final dir = await getDownloadsDirectory() ?? await getTemporaryDirectory();
+      final name = _ctrl.track.title.isEmpty ? 'yinwei-export' : _ctrl.track.title;
+      final safe = name.replaceAll(RegExp(r'[\\/:*?"<>|]'), '_');
+      final out = '${dir.path}${Platform.pathSeparator}${safe}_spatial.wav';
+      await _ctrl.exportWav(out);
       if (!mounted) return;
-      final msg = _ctrl.lastError ?? 'Export finished (MockEngine / native path)';
+      final msg = _ctrl.lastError ?? '已导出：$out';
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(msg), behavior: SnackBarBehavior.floating),
       );
@@ -210,9 +241,15 @@ class _TitleBar extends StatelessWidget {
 }
 
 class _StatusBar extends StatelessWidget {
-  const _StatusBar({required this.buildId});
+  const _StatusBar({
+    required this.buildId,
+    required this.backend,
+    required this.native,
+  });
 
   final String buildId;
+  final String backend;
+  final bool native;
 
   @override
   Widget build(BuildContext context) {
@@ -229,18 +266,19 @@ class _StatusBar extends StatelessWidget {
           Container(
             width: 7,
             height: 7,
-            decoration: const BoxDecoration(
-              color: YinweiColors.success,
+            decoration: BoxDecoration(
+              color: native ? YinweiColors.success : YinweiColors.textSecondary,
               shape: BoxShape.circle,
             ),
           ),
           const SizedBox(width: 8),
-          Text('Offline', style: style),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 10),
-            child: Text('·', style: style),
+          Flexible(
+            child: Text(
+              backend,
+              style: style,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
-          Text('Local file', style: style),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 10),
             child: Text('·', style: style),

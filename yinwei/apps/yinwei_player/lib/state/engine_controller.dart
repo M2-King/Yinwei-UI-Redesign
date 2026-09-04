@@ -8,15 +8,18 @@ import 'package:yinwei_player/models/spatial_params.dart';
 /// Bumped when UI wiring changes — shown in status bar so Windows hosts
 /// can confirm they pulled the latest build.
 const String kYinweiUiBuild = 'ui-6';
+const String kYinweiBridgeBuild = 'p2.4-ffi';
 
 /// App state for the locked Player UI (IMPLEMENTATION_P2 §5.1).
 class EngineController extends ChangeNotifier {
-  EngineController({EngineApi? engine}) : _engine = engine ?? MockEngine() {
+  EngineController({EngineApi? engine, this.backendLabel = 'Mock'})
+      : _engine = engine ?? MockEngine() {
     // Keep engine params aligned with UI defaults immediately.
     unawaited(_engine.setParams(params));
   }
 
   final EngineApi _engine;
+  final String backendLabel;
 
   TrackMeta track = TrackMeta.demo;
   SpatialParams params = SpatialParams();

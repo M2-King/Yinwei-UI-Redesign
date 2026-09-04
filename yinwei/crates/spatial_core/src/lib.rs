@@ -15,6 +15,8 @@ mod playback;
 mod session;
 #[cfg(feature = "realtime")]
 mod frb_api;
+#[cfg(feature = "realtime")]
+mod ffi;
 
 pub use decode::{save_wav, write_test_sine_wav, DecodedAudio, StereoFrame};
 pub use error::SpatialError;

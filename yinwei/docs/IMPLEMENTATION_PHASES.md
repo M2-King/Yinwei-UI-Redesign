@@ -18,7 +18,7 @@ flowchart LR
 |----|------|------|------|
 | **P0** | 离线 HRTF + CLI 导出 WAV | `cargo test` + `yinwei … -o out.wav` | **完成** |
 | **P1** | 实时试听（cpal）+ 参数热更新 | 本机耳机可听 Original/Spatial/音位 | **P1.1–P1.3 代码已合入**（云端无声卡则跳过听感） |
-| **P2** | Flutter ↔ Rust（FRB）接到锁定 UI | 点播放/音位/导出走真引擎 | **P2.0–P2.4 进行中**（Session+Dart 已合；Windows codegen 待办） |
+| **P2** | Flutter ↔ Rust（FRB/C ABI）接到锁定 UI | 点播放/音位/导出走真引擎 | **P2.4 Native FFI 已合入**（Windows 需编 DLL） |
 | **P3** | Windows `.exe` 打包 | 安装后离线可用 | 未开始 |
 
 ---
@@ -123,6 +123,6 @@ yinwei/
 
 ## 当前执行焦点
 
-**P2**：[`IMPLEMENTATION_P2.md`](./IMPLEMENTATION_P2.md)  
-已完成 P2.1 Session + P2.3 Mock 接线 + P2.4 yaml。  
-下一项：Windows 上 FRB codegen → `NativeEngine` + file_picker（P2.5）。
+**P2**：[`IMPLEMENTATION_P2.md`](./IMPLEMENTATION_P2.md) / [`IMPLEMENTATION_P2_4.md`](./IMPLEMENTATION_P2_4.md)  
+已完成 P2.1–P2.3 + **P2.4 C ABI / dart:ffi NativeEngine**。  
+下一项：P2.5 导出文件对话框打磨；本机用 `tools/build_native_windows.ps1` 验听。
