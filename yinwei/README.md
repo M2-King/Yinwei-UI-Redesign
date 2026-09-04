@@ -37,10 +37,17 @@ flutter run -d windows
 
 ## Status
 
-- [x] Implementation spec + mockup
-- [x] `spatial_core` public API + presets + tests
-- [x] Flutter UI shell matching mockup (demo track / mock transport)
-- [ ] Artezon HRTF + Mid/Side DSP
-- [ ] cpal realtime + FRB wire-up
-- [ ] Export WAV end-to-end
+- [x] Implementation spec + desktop/mobile mockups
+- [x] `spatial_core` HRTF backend (decode, Mid/Side, export WAV)
+- [x] `yinwei` CLI offline exporter
+- [x] Flutter UI shell matching mockup
+- [ ] cpal realtime + flutter_rust_bridge
 - [ ] Windows installer
+
+## Backend smoke
+
+```bash
+cd yinwei
+cargo test -p spatial_core
+cargo run -p yinwei_cli -- sample.wav -o out.wav --preset left-rear --motion fixed
+```

@@ -159,11 +159,31 @@ Public surface for Flutter bridge:
 
 ## 8. Implementation order
 
-1. `spatial_core` types + stub DSP (passthrough) + tests  
-2. Wire Artezon HRTF / M-S (next PR)  
-3. Flutter UI pixel-close to mockup (mock engine)  
-4. `flutter_rust_bridge` + cpal realtime  
-5. Export WAV + Windows packaging  
+1. ~~`spatial_core` types + stub DSP + tests~~  
+2. ~~Wire Artezon HRTF / M-S + decode + export WAV + CLI~~  
+3. Flutter UI pixel-close to mockup (done shell; wire FRB next)  
+4. `flutter_rust_bridge` + cpal realtime preview  
+5. Windows packaging  
+
+## 11. Backend modules (`spatial_core`)
+
+| Module | Role |
+|--------|------|
+| `decode.rs` | symphonia load → 44.1 kHz stereo; WAV save |
+| `mid_side.rs` | L/R ↔ Mid/Side |
+| `crossover.rs` | Linkwitz-Riley 80 Hz (Artezon) |
+| `hrtf_render.rs` | IRCAM HRIR + Mid/Side HRTF + orbit |
+| `reverb.rs` | freeverb wet mix |
+| `lib.rs` `Engine` | open / params / export_wav |
+
+HRIR asset: `crates/spatial_core/assets/IRC_1002_C.bin` (MIT, Artezon/IRCAM).
+
+CLI smoke:
+
+```bash
+cd yinwei
+cargo run -p yinwei_cli -- /path/in.mp3 -o /path/out.wav --preset left-rear
+```
 
 ## 9. Out of scope (MVP)
 
