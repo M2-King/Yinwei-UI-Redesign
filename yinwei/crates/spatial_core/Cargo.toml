@@ -1,0 +1,17 @@
+[package]
+name = "spatial_core"
+version = "0.1.0"
+edition = "2021"
+description = "Yinwei / 音围 spatial HRTF engine (library)"
+license = "MIT"
+
+[lib]
+name = "spatial_core"
+crate-type = ["cdylib", "staticlib", "rlib"]
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+thiserror = "2"
+
+[dev-dependencies]
+approx = "0.5"
