@@ -1,19 +1,28 @@
 use std::path::PathBuf;
+use std::time::Duration;
 
 use clap::{Parser, ValueEnum};
 use spatial_core::{
-    apply_preset, Engine, MotionMode, PlaybackMode, PositionPreset, SpatialParams,
+    apply_preset, Engine, MotionMode, PlaybackMode, PositionPreset, RealtimePlayer, SpatialParams,
 };
 
 #[derive(Parser, Debug)]
-#[command(name = "yinwei", about = "音围 Spatial Player — offline HRTF export CLI")]
+#[command(name = "yinwei", about = "音围 Spatial Player — offline HRTF export / realtime play")]
 struct Args {
     /// Input audio file (wav/mp3/flac/ogg/m4a)
     input: PathBuf,
 
-    /// Output WAV path
+    /// Output WAV path (required unless --play)
     #[arg(short, long)]
-    output: PathBuf,
+    output: Option<PathBuf>,
+
+    /// Play through default audio device after rendering (P1)
+    #[arg(long, default_value_t = false)]
+    play: bool,
+
+    /// Seconds to play when using --play (0 = whole file)
+    #[arg(long, default_value_t = 0)]
+    play_secs: u64,
 
     /// Bypass HRTF
     #[arg(long, default_value_t = false)]
@@ -54,22 +63,8 @@ enum MotionArg {
     Orbit,
 }
 
-fn main() {
-    let args = Args::parse();
-    let engine = Engine::new();
-    let meta = engine
-        .open(&args.input)
-        .unwrap_or_else(|e| {
-            eprintln!("open failed: {e}");
-            std::process::exit(1);
-        });
-
-    println!(
-        "loaded: {}  {} ms  {} Hz",
-        meta.title, meta.duration_ms, meta.sample_rate
-    );
-
-    let preset = match args.preset {
+fn map_preset(p: PresetArg) -> PositionPreset {
+    match p {
         PresetArg::Front => PositionPreset::Front,
         PresetArg::LeftFront => PositionPreset::LeftFront,
         PresetArg::RightFront => PositionPreset::RightFront,
@@ -79,10 +74,29 @@ fn main() {
         PresetArg::RightRear => PositionPreset::RightRear,
         PresetArg::Back => PositionPreset::Back,
         PresetArg::Overhead => PositionPreset::Overhead,
-    };
+    }
+}
+
+fn main() {
+    let args = Args::parse();
+    if !args.play && args.output.is_none() {
+        eprintln!("error: specify -o/--output or --play");
+        std::process::exit(2);
+    }
+
+    let engine = Engine::new();
+    let meta = engine.open(&args.input).unwrap_or_else(|e| {
+        eprintln!("open failed: {e}");
+        std::process::exit(1);
+    });
+
+    println!(
+        "loaded: {}  {} ms  {} Hz",
+        meta.title, meta.duration_ms, meta.sample_rate
+    );
 
     let mut params = SpatialParams::default();
-    apply_preset(&mut params, preset);
+    apply_preset(&mut params, map_preset(args.preset));
     params.motion = match args.motion {
         MotionArg::Fixed => MotionMode::Fixed,
         MotionArg::Orbit => MotionMode::Orbit,
@@ -110,12 +124,50 @@ fn main() {
         }
     };
 
-    engine
-        .export_wav(&args.output, Some(&mut progress))
-        .unwrap_or_else(|e| {
-            eprintln!("\nexport failed: {e}");
+    if let Some(out) = &args.output {
+        engine
+            .export_wav(out, Some(&mut progress))
+            .unwrap_or_else(|e| {
+                eprintln!("\nexport failed: {e}");
+                std::process::exit(1);
+            });
+        println!("\nwrote {}", out.display());
+    }
+
+    if args.play {
+        print!("\rbuilding preview…");
+        let _ = std::io::Write::flush(&mut std::io::stdout());
+        let (sr, frames) = engine.render_frames(Some(&mut progress)).unwrap_or_else(|e| {
+            eprintln!("\nrender failed: {e}");
+            std::process::exit(1);
+        });
+        println!("\npreview frames: {} @ {} Hz", frames.len(), sr);
+
+        if !RealtimePlayer::has_output_device() {
+            eprintln!("no audio output device — skip --play (buffer render OK)");
+            return;
+        }
+
+        let player = RealtimePlayer::new();
+        player.set_sample_rate(sr);
+        player.load_frames(frames).unwrap();
+        player.play().unwrap_or_else(|e| {
+            eprintln!("play failed: {e}");
             std::process::exit(1);
         });
 
-    println!("\nwrote {}", args.output.display());
+        let total_ms = meta.duration_ms;
+        let limit_ms = if args.play_secs == 0 {
+            total_ms
+        } else {
+            args.play_secs.saturating_mul(1000).min(total_ms)
+        };
+
+        println!("playing… (headphones recommended)");
+        while player.is_playing() && player.position_ms() < limit_ms {
+            std::thread::sleep(Duration::from_millis(50));
+        }
+        let _ = player.stop();
+        println!("done");
+    }
 }

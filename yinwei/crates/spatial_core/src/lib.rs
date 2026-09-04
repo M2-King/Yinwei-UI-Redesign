@@ -9,12 +9,17 @@ mod params;
 mod presets;
 mod reverb;
 
+#[cfg(feature = "realtime")]
+mod playback;
+
 pub use decode::{save_wav, write_test_sine_wav, DecodedAudio, StereoFrame};
 pub use error::SpatialError;
 pub use hrtf_render::{spherical_to_vec, HrtfRenderer};
 pub use params::{
     MotionMode, PlaybackMode, SpatialParams, TrackInfo, DEFAULT_PARAMS,
 };
+#[cfg(feature = "realtime")]
+pub use playback::RealtimePlayer;
 pub use presets::{apply_preset, PositionPreset, PRESET_TABLE};
 
 use std::path::{Path, PathBuf};
@@ -173,12 +178,11 @@ impl Engine {
         Ok(())
     }
 
-    /// Offline render entire track to WAV using current params/mode.
-    pub fn export_wav(
+    /// Render current track with current mode/params into memory (P1 preview buffer).
+    pub fn render_frames(
         &self,
-        out_path: impl AsRef<Path>,
         mut on_progress: Option<&mut dyn FnMut(f32)>,
-    ) -> Result<(), SpatialError> {
+    ) -> Result<(u32, Vec<StereoFrame>), SpatialError> {
         let mut g = self.inner.lock().map_err(|_| SpatialError::LockPoisoned)?;
         let decoded = g.decoded.as_ref().ok_or(SpatialError::NoTrackLoaded)?;
         let params = g.params.clone();
@@ -202,8 +206,16 @@ impl Engine {
                 renderer.render(&source_frames, &params, on_progress)?
             }
         };
+        Ok((sample_rate, frames))
+    }
 
-        drop(g);
+    /// Offline render entire track to WAV using current params/mode.
+    pub fn export_wav(
+        &self,
+        out_path: impl AsRef<Path>,
+        on_progress: Option<&mut dyn FnMut(f32)>,
+    ) -> Result<(), SpatialError> {
+        let (sample_rate, frames) = self.render_frames(on_progress)?;
         save_wav(out_path.as_ref(), &frames, sample_rate)
     }
 }
@@ -270,18 +282,28 @@ mod tests {
     }
 
     #[test]
-    fn export_original_passthrough() {
-        let dir = std::env::temp_dir().join(format!("yinwei_test_orig_{}", std::process::id()));
+    fn render_frames_spatial_differs_from_original() {
+        let dir = std::env::temp_dir().join(format!("yinwei_render_{}", std::process::id()));
         let _ = std::fs::create_dir_all(&dir);
         let input = dir.join("in.wav");
-        let output = dir.join("out.wav");
-        write_test_sine_wav(&input, 0.25, 220.0).unwrap();
+        write_test_sine_wav(&input, 0.4, 440.0).unwrap();
 
         let e = Engine::new();
         e.open(&input).unwrap();
+        e.apply_position_preset(PositionPreset::LeftRear).unwrap();
+
         e.set_playback_mode(PlaybackMode::Original).unwrap();
-        e.export_wav(&output, None).unwrap();
-        assert!(output.exists());
+        let (_, orig) = e.render_frames(None).unwrap();
+
+        e.set_playback_mode(PlaybackMode::Spatial).unwrap();
+        let (_, spat) = e.render_frames(None).unwrap();
+
+        assert_eq!(orig.len(), spat.len());
+        let mut diff = 0.0f32;
+        for i in (0..orig.len()).step_by(64) {
+            diff += (orig[i].0 - spat[i].0).abs() + (orig[i].1 - spat[i].1).abs();
+        }
+        assert!(diff > 0.01, "spatial should alter the signal, diff={diff}");
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

@@ -17,6 +17,11 @@ biquad = "0.4"
 freeverb = "0.1"
 hound = "3.5"
 symphonia = { version = "0.5", features = ["mp3", "aac", "flac", "ogg", "pcm", "isomp4"] }
+cpal = { version = "0.15", optional = true }
+
+[features]
+default = ["realtime"]
+realtime = ["dep:cpal"]
 
 [dev-dependencies]
 approx = "0.5"

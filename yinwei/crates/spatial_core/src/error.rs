@@ -16,6 +16,8 @@ pub enum SpatialError {
     Decode(String),
     #[error("hrtf error: {0}")]
     Hrtf(String),
+    #[error("audio device: {0}")]
+    AudioDevice(String),
     #[error("not implemented: {0}")]
     NotImplemented(String),
 }
