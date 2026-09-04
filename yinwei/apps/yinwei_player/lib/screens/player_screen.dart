@@ -1,154 +1,186 @@
 import 'package:flutter/material.dart';
 import 'package:yinwei_player/models/spatial_params.dart';
+import 'package:yinwei_player/state/engine_controller.dart';
 import 'package:yinwei_player/theme/yinwei_theme.dart';
 import 'package:yinwei_player/widgets/now_playing_panel.dart';
 import 'package:yinwei_player/widgets/orbit_visualizer.dart';
 import 'package:yinwei_player/widgets/position_sidebar.dart';
 
-/// Main window layout matching the approved Apple-design mockup.
+/// Main window — wired to [EngineController] (P2.3).
 class PlayerScreen extends StatefulWidget {
-  const PlayerScreen({super.key});
+  const PlayerScreen({super.key, this.controller});
+
+  final EngineController? controller;
 
   @override
   State<PlayerScreen> createState() => _PlayerScreenState();
 }
 
-class _PlayerScreenState extends State<PlayerScreen>
-    with SingleTickerProviderStateMixin {
-  late SpatialParams _params;
-  final TrackMeta _track = TrackMeta.demo;
-  PlaybackMode _mode = PlaybackMode.spatial;
-  bool _playing = false;
-  Duration _position = const Duration(minutes: 1, seconds: 42);
-  late final AnimationController _orbitClock;
+class _PlayerScreenState extends State<PlayerScreen> {
+  late final EngineController _ctrl;
 
   @override
   void initState() {
     super.initState();
-    _params = SpatialParams();
-    _orbitClock = AnimationController(
-      vsync: this,
-      duration: const Duration(seconds: 1),
-    )..addListener(() {
-        if (_playing && _params.motion == MotionMode.orbit) {
-          setState(() {});
-        }
-      });
-    _orbitClock.repeat();
+    _ctrl = widget.controller ?? EngineController();
+    _ctrl.addListener(_onChange);
+  }
+
+  void _onChange() {
+    if (mounted) setState(() {});
   }
 
   @override
   void dispose() {
-    _orbitClock.dispose();
-    super.dispose();
-  }
-
-  double get _visualAzimuth {
-    final elapsed = Duration(
-      milliseconds: (_orbitClock.lastElapsedDuration?.inMilliseconds ?? 0) +
-          DateTime.now().millisecondsSinceEpoch % 1000000,
-    );
-    // Prefer wall-clock for continuous orbit while playing.
-    if (_playing && _params.motion == MotionMode.orbit) {
-      final t = DateTime.now().millisecondsSinceEpoch / 1000.0;
-      final turns = t * _params.orbitHz;
-      var az = _params.azimuthDeg + turns * 360.0;
-      az %= 360.0;
-      if (az > 180) az -= 360;
-      if (az <= -180) az += 360;
-      return az;
+    _ctrl.removeListener(_onChange);
+    if (widget.controller == null) {
+      _ctrl.dispose();
     }
-    return _params.visualAzimuthDeg(elapsed);
+    super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
+    final c = _ctrl;
     return Scaffold(
-      body: Column(
+      body: Stack(
         children: [
-          _TitleBar(),
-          Expanded(
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Expanded(
-                  flex: 5,
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(28, 12, 12, 12),
-                    child: OrbitVisualizer(
-                      azimuthDeg: _visualAzimuth,
-                      active: _playing && _mode == PlaybackMode.spatial,
+          Column(
+            children: [
+              _TitleBar(onOpen: _onOpen),
+              Expanded(
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Expanded(
+                      flex: 5,
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(28, 12, 12, 12),
+                        child: OrbitVisualizer(
+                          azimuthDeg: c.azimuthDeg,
+                          active: c.playing && c.mode == PlaybackMode.spatial,
+                        ),
+                      ),
                     ),
-                  ),
-                ),
-                Expanded(
-                  flex: 5,
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 24),
-                    child: NowPlayingPanel(
-                      track: _track,
-                      position: _position,
-                      isPlaying: _playing,
-                      playbackMode: _mode,
-                      onSeek: (d) => setState(() => _position = d),
-                      onPlayPause: () => setState(() => _playing = !_playing),
-                      onModeChanged: (m) => setState(() => _mode = m),
+                    Expanded(
+                      flex: 5,
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 24),
+                        child: NowPlayingPanel(
+                          track: c.track,
+                          position: c.position,
+                          isPlaying: c.playing,
+                          playbackMode: c.mode,
+                          onSeek: (d) => c.seek(d),
+                          onPlayPause: () => c.togglePlay(),
+                          onModeChanged: (m) => c.setMode(m),
+                        ),
+                      ),
                     ),
-                  ),
+                    PositionSidebar(
+                      params: c.params,
+                      onChanged: (p) => c.setParams(p),
+                      onExport: _onExport,
+                      onSavePreset: () {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('Save Preset — local JSON in a later slice'),
+                            behavior: SnackBarBehavior.floating,
+                          ),
+                        );
+                      },
+                    ),
+                  ],
                 ),
-                PositionSidebar(
-                  params: _params,
-                  onChanged: (p) => setState(() => _params = p),
-                  onExport: _onExport,
-                  onSavePreset: _onSavePreset,
-                ),
-              ],
-            ),
+              ),
+              const _StatusBar(),
+            ],
           ),
-          const _StatusBar(),
+          if (c.busy)
+            Positioned(
+              left: 0,
+              right: 0,
+              bottom: 36,
+              child: LinearProgressIndicator(
+                value: c.jobProgress <= 0 ? null : c.jobProgress,
+                backgroundColor: Colors.white10,
+                color: YinweiColors.accent,
+                minHeight: 3,
+              ),
+            ),
         ],
       ),
     );
   }
 
-  void _onExport() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Export WAV — wire to spatial_core::export_wav next'),
-        behavior: SnackBarBehavior.floating,
-      ),
-    );
+  Future<void> _onOpen() async {
+    // file_picker on Windows host; mock path for structure until wired.
+    try {
+      await _ctrl.openPath('/mock/Across the Room.wav');
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Opened via EngineController (MockEngine) — swap NativeEngine after FRB'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('$e'), behavior: SnackBarBehavior.floating),
+      );
+    }
   }
 
-  void _onSavePreset() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Save Preset — local JSON presets coming next'),
-        behavior: SnackBarBehavior.floating,
-      ),
-    );
+  Future<void> _onExport() async {
+    try {
+      await _ctrl.exportWav('/tmp/yinwei-export.wav');
+      if (!mounted) return;
+      final msg = _ctrl.lastError ?? 'Export finished (MockEngine / native path)';
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(msg), behavior: SnackBarBehavior.floating),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('$e'), behavior: SnackBarBehavior.floating),
+      );
+    }
   }
 }
 
 class _TitleBar extends StatelessWidget {
+  const _TitleBar({required this.onOpen});
+
+  final VoidCallback onOpen;
+
   @override
   Widget build(BuildContext context) {
     return SizedBox(
       height: 52,
-      child: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        child: Row(
           children: [
-            Text(
-              '音围',
-              style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.w600,
-                    letterSpacing: 0.5,
-                  ),
+            const Spacer(),
+            Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(
+                  '音围',
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w600,
+                        letterSpacing: 0.5,
+                      ),
+                ),
+                Text('Spatial Player', style: Theme.of(context).textTheme.labelSmall),
+              ],
             ),
-            Text(
-              'Spatial Player',
-              style: Theme.of(context).textTheme.labelSmall,
+            const Spacer(),
+            IconButton(
+              onPressed: onOpen,
+              tooltip: 'Open local file',
+              icon: const Icon(Icons.folder_open_rounded, color: YinweiColors.accent),
             ),
           ],
         ),
@@ -182,17 +214,18 @@ class _StatusBar extends StatelessWidget {
           ),
           const SizedBox(width: 8),
           Text('Offline', style: style),
-          _dot(style),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 10),
+            child: Text('·', style: style),
+          ),
           Text('Local file', style: style),
-          _dot(style),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 10),
+            child: Text('·', style: style),
+          ),
           Text('Headphones recommended', style: style),
         ],
       ),
     );
   }
-
-  Widget _dot(TextStyle? style) => Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 10),
-        child: Text('·', style: style),
-      );
 }

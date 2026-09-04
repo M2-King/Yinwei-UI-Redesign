@@ -1,41 +1,37 @@
-/// Bridge stubs for `flutter_rust_bridge` → `spatial_core`.
-///
-/// Replace method bodies with generated FRB bindings once the Rust DSP
-/// crate is linked. Keep signatures stable so UI does not churn.
+/// Stable Engine API per docs/IMPLEMENTATION_P2.md §5.2
 library;
 
 import 'package:yinwei_player/models/spatial_params.dart';
 
-abstract final class EngineApi {
-  static Future<TrackMeta> open(String path) async {
-    throw UnimplementedError('FRB: Engine::open');
-  }
+abstract class EngineApi {
+  Future<TrackMeta> open(String path);
 
-  static Future<void> setParams(SpatialParams params) async {
-    throw UnimplementedError('FRB: Engine::set_params');
-  }
+  Future<void> setParams(SpatialParams params);
 
-  static Future<void> setPlaybackMode(PlaybackMode mode) async {
-    throw UnimplementedError('FRB: Engine::set_playback_mode');
-  }
+  Future<SpatialParams> applyPreset(PositionPreset preset);
 
-  static Future<void> play() async {
-    throw UnimplementedError('FRB: Engine::play');
-  }
+  Future<void> setPlaybackMode(PlaybackMode mode);
 
-  static Future<void> pause() async {
-    throw UnimplementedError('FRB: Engine::pause');
-  }
+  Future<void> rebuildPreview({void Function(double progress)? onProgress});
 
-  static Future<void> seek(Duration position) async {
-    throw UnimplementedError('FRB: Engine::seek');
-  }
+  Future<void> play();
 
-  static Future<void> exportWav(String outPath) async {
-    throw UnimplementedError('FRB: Engine::export_wav');
-  }
+  Future<void> pause();
 
-  static Future<double> currentAzimuthDeg() async {
-    throw UnimplementedError('FRB: Engine::current_azimuth_deg');
-  }
+  Future<void> seek(Duration position);
+
+  Future<Duration> position();
+
+  Future<bool> isPlaying();
+
+  Future<double> currentAzimuthDeg();
+
+  Future<void> exportWav(
+    String outPath, {
+    void Function(double progress)? onProgress,
+  });
+
+  Future<void> dispose();
+
+  Future<bool> isPreviewDirty();
 }

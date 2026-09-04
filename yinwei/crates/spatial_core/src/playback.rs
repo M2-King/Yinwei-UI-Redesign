@@ -12,13 +12,17 @@ use cpal::{FromSample, Sample, SampleFormat, Stream, StreamConfig};
 use crate::decode::StereoFrame;
 use crate::error::SpatialError;
 
+/// cpal::Stream is !Send on some hosts; we only move it between mutex guards.
+struct SendStream(#[allow(dead_code)] Stream);
+unsafe impl Send for SendStream {}
+
 /// Holds playable PCM and an optional live cpal stream.
 pub struct RealtimePlayer {
     frames: Arc<Mutex<Vec<StereoFrame>>>,
     cursor: Arc<AtomicU64>,
     playing: Arc<AtomicBool>,
     sample_rate: Arc<AtomicU64>,
-    stream: Mutex<Option<Stream>>,
+    stream: Mutex<Option<SendStream>>,
 }
 
 impl RealtimePlayer {
@@ -132,7 +136,7 @@ impl RealtimePlayer {
         stream
             .play()
             .map_err(|e| SpatialError::AudioDevice(e.to_string()))?;
-        *slot = Some(stream);
+        *slot = Some(SendStream(stream));
         Ok(())
     }
 }

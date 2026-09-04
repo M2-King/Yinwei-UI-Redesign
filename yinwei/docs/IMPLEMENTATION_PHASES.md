@@ -18,7 +18,7 @@ flowchart LR
 |----|------|------|------|
 | **P0** | 离线 HRTF + CLI 导出 WAV | `cargo test` + `yinwei … -o out.wav` | **完成** |
 | **P1** | 实时试听（cpal）+ 参数热更新 | 本机耳机可听 Original/Spatial/音位 | **P1.1–P1.3 代码已合入**（云端无声卡则跳过听感） |
-| **P2** | Flutter ↔ Rust（FRB）接到锁定 UI | 点播放/音位/导出走真引擎 | 未开始 |
+| **P2** | Flutter ↔ Rust（FRB）接到锁定 UI | 点播放/音位/导出走真引擎 | **P2.0–P2.4 进行中**（Session+Dart 已合；Windows codegen 待办） |
 | **P3** | Windows `.exe` 打包 | 安装后离线可用 | 未开始 |
 
 ---
@@ -77,26 +77,27 @@ yinwei in.wav --play --preset right --motion orbit
 
 ## P2 — Flutter 桥接
 
-### P2.1 `flutter_rust_bridge` 生成
+> **详细规格（先于代码）**：[`IMPLEMENTATION_P2.md`](./IMPLEMENTATION_P2.md)
 
-| Dart | Rust |
+### P2.0 规格
+
+- API / DTO / UI 事件 / FRB 策略 / 验收 — 见上文件 §1–§9
+
+### P2.1–P2.5（摘要）
+
+| 子段 | 内容 |
 |------|------|
-| `EngineApi.open` | `Engine::open` |
-| `setParams` / `applyPreset` | `set_params` / `apply_position_preset` |
-| `play` / `pause` / `seek` | + cpal player |
-| `exportWav` | `export_wav` |
-| `currentAzimuthDeg` | 可视化 |
-
-### P2.2 UI 接线
-
-- 替换 demo transport → 真引擎  
-- Export WAV → 文件选择器 + 进度  
-- Open file → 本地路径  
+| P2.1 | Rust `PlayerSession` |
+| P2.2 | DTO 与 Dart 模型对齐 |
+| P2.3 | `EngineController` + UI 接线 |
+| P2.4 | FRB 脚手架（Windows codegen） |
+| P2.5 | 文件选择器 + 导出进度 |
 
 ### P2 验收
 
-- Windows 上 Flutter 跑通：打开 → 试听 → 改音位 → 导出  
+- Windows：打开 → 试听 → 改音位 → 导出  
 - 与手机/桌面样图控件一一对应  
+- 云端：Session + Dart 契约可测，无 Flutter 不阻塞 P2.1–P2.3  
 
 ---
 
@@ -122,5 +123,5 @@ yinwei/
 
 ## 当前执行焦点
 
-**P1 代码已合入**（`render_frames` + `RealtimePlayer` + CLI `--play`）。  
-下一焦点：**P2 Flutter ↔ Rust 桥接**。
+**P2.0 规格已锁定**：[`IMPLEMENTATION_P2.md`](./IMPLEMENTATION_P2.md)。  
+**正在做 P2.1**：Rust `PlayerSession`。

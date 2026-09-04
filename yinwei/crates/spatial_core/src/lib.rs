@@ -11,6 +11,10 @@ mod reverb;
 
 #[cfg(feature = "realtime")]
 mod playback;
+#[cfg(feature = "realtime")]
+mod session;
+#[cfg(feature = "realtime")]
+mod frb_api;
 
 pub use decode::{save_wav, write_test_sine_wav, DecodedAudio, StereoFrame};
 pub use error::SpatialError;
@@ -21,6 +25,14 @@ pub use params::{
 #[cfg(feature = "realtime")]
 pub use playback::RealtimePlayer;
 pub use presets::{apply_preset, PositionPreset, PRESET_TABLE};
+#[cfg(feature = "realtime")]
+pub use session::{global_session, PlayerSession};
+#[cfg(feature = "realtime")]
+pub use frb_api::{
+    api_apply_preset, api_current_azimuth_deg, api_dispose, api_export_wav, api_is_playing,
+    api_is_preview_dirty, api_open, api_pause, api_play, api_position_ms, api_rebuild_preview,
+    api_seek_ms, api_set_mode, api_set_params, new_session,
+};
 
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};

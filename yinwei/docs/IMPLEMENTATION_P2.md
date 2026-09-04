@@ -237,7 +237,11 @@ flutter run -d windows
 - [x] Session API / DTO / 错误表写清  
 - [x] Dart 文件与 UI 事件映射写清  
 - [x] FRB 脚手架与无 Flutter 环境策略写清  
-- [ ] **开始 P2.1 代码**（下一提交）
+- [x] **P2.1 代码开工**（PlayerSession）  
+- [x] **P2.3** EngineController + PlayerScreen 接线（MockEngine）  
+- [x] **P2.4** FRB yaml 脚手架  
+- [ ] P2.5 file_picker 真机（Windows）  
+- [ ] Windows 上 `flutter_rust_bridge_codegen generate` + NativeEngine  
 
 ---
 
@@ -245,5 +249,9 @@ flutter run -d windows
 
 | 项 | 状态 |
 |----|------|
-| P2.0 本文档 | **已写待开工** |
-| P2.1–P2.5 | 未开始 |
+| P2.0 本文档 | **已锁定** |
+| P2.1 PlayerSession | **已实现** |
+| P2.2 / frb_api | **已实现薄封装** |
+| P2.3 Dart Controller + UI | **已接线 MockEngine** |
+| P2.4 FRB codegen | 脚手架；待 Windows |
+| P2.5 文件选择器 | 待 Windows |
