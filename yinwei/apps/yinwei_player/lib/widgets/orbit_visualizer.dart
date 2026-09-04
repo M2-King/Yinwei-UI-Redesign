@@ -3,27 +3,25 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:yinwei_player/theme/yinwei_theme.dart';
 
-/// Left-panel ring + blue source dot (Apple mockup).
-///
-/// Sized with [LayoutBuilder] (not AspectRatio) so a tall square never
-/// overflows the row and paints over the sidebar ("穿层").
+/// Left-panel ring:
+/// - **Blue ball** = playhead (same clock as the bottom scrubber, real-time)
+/// - **Dim tick** = spatial source azimuth (presets / Orbit)
 class OrbitVisualizer extends StatelessWidget {
   const OrbitVisualizer({
     super.key,
+    required this.playhead,
     required this.azimuthDeg,
     this.elevationDeg = 0,
-    this.playhead = 0,
     this.active = true,
     this.orbiting = false,
   });
 
-  /// 0° = front (top of ring), positive = clockwise toward right.
+  /// 0..1 track playhead — drives the blue ball.
+  final double playhead;
+
+  /// Spatial source azimuth in degrees (0 = front/top).
   final double azimuthDeg;
   final double elevationDeg;
-
-  /// 0..1 track playhead — draws a faint progress arc so the left panel
-  /// visibly tracks scrubbing / playback even in Fixed mode.
-  final double playhead;
   final bool active;
   final bool orbiting;
 
@@ -41,9 +39,9 @@ class OrbitVisualizer extends StatelessWidget {
             height: side,
             child: CustomPaint(
               painter: _OrbitPainter(
+                playhead: playhead.clamp(0.0, 1.0),
                 azimuthDeg: azimuthDeg,
                 elevationDeg: elevationDeg,
-                playhead: playhead.clamp(0.0, 1.0),
                 active: active,
                 orbiting: orbiting,
               ),
@@ -57,16 +55,16 @@ class OrbitVisualizer extends StatelessWidget {
 
 class _OrbitPainter extends CustomPainter {
   _OrbitPainter({
+    required this.playhead,
     required this.azimuthDeg,
     required this.elevationDeg,
-    required this.playhead,
     required this.active,
     required this.orbiting,
   });
 
+  final double playhead;
   final double azimuthDeg;
   final double elevationDeg;
-  final double playhead;
   final bool active;
   final bool orbiting;
 
@@ -77,60 +75,66 @@ class _OrbitPainter extends CustomPainter {
     final elevNorm = (elevationDeg.clamp(-90, 90) / 90.0);
     final r = baseR * (1.0 - elevNorm * 0.18);
 
-    // Track ring.
+    // Base ring.
     canvas.drawCircle(
       c,
       r,
       Paint()
         ..style = PaintingStyle.stroke
-        ..strokeWidth = orbiting ? 1.6 : 1.2
-        ..color = Colors.white.withOpacity(orbiting ? 0.16 : 0.08),
+        ..strokeWidth = 1.2
+        ..color = Colors.white.withOpacity(0.08),
     );
 
-    // Playhead progress (full ring) — always moves with scrubber / play.
+    // --- Playhead (blue): angle from top, clockwise, = scrubber ---
+    final playRad = _playheadToCanvas(playhead);
+    final playSweep = playhead * 2 * math.pi;
+
     if (playhead > 0.001) {
       canvas.drawArc(
         Rect.fromCircle(center: c, radius: r),
         -math.pi / 2,
-        playhead * 2 * math.pi,
+        playSweep,
         false,
         Paint()
           ..style = PaintingStyle.stroke
-          ..strokeWidth = 2
+          ..strokeWidth = 3.5
           ..strokeCap = StrokeCap.round
-          ..color = Colors.white.withOpacity(0.22),
+          ..color = YinweiColors.accent.withOpacity(active ? 0.7 : 0.3),
       );
     }
 
-    final rad = _toCanvasAngle(azimuthDeg);
-    final trailLen = orbiting ? 1.6 : 1.1;
-
-    canvas.drawArc(
-      Rect.fromCircle(center: c, radius: r),
-      rad - trailLen,
-      trailLen,
-      false,
-      Paint()
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = orbiting ? 4 : 3
-        ..strokeCap = StrokeCap.round
-        ..color = YinweiColors.accent.withOpacity(active ? 0.45 : 0.18),
+    final playDot = Offset(
+      c.dx + r * math.cos(playRad),
+      c.dy + r * math.sin(playRad),
     );
-
-    final dot = Offset(c.dx + r * math.cos(rad), c.dy + r * math.sin(rad));
-
     canvas.drawCircle(
-      dot,
-      orbiting ? 14 : 11,
+      playDot,
+      12,
       Paint()..color = YinweiColors.accent.withOpacity(0.28),
     );
+    canvas.drawCircle(playDot, 6, Paint()..color = YinweiColors.accent);
+
+    // --- Source azimuth (dim tick): presets / Orbit ---
+    final azRad = _azimuthToCanvas(azimuthDeg);
+    final azDot = Offset(
+      c.dx + r * math.cos(azRad),
+      c.dy + r * math.sin(azRad),
+    );
     canvas.drawCircle(
-      dot,
-      orbiting ? 7 : 6,
-      Paint()..color = YinweiColors.accent,
+      azDot,
+      orbiting ? 5 : 4,
+      Paint()
+        ..color = Colors.white.withOpacity(orbiting ? 0.55 : 0.28)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.5,
+    );
+    canvas.drawCircle(
+      azDot,
+      2.2,
+      Paint()..color = Colors.white.withOpacity(orbiting ? 0.75 : 0.4),
     );
 
-    // Listener at center.
+    // Listener.
     canvas.drawCircle(
       c,
       3.5,
@@ -138,16 +142,21 @@ class _OrbitPainter extends CustomPainter {
     );
   }
 
-  double _toCanvasAngle(double azimuthDeg) {
-    // 0° front = top; positive azimuth → right.
+  /// Playhead 0..1 → canvas radians (0 at top, clockwise).
+  double _playheadToCanvas(double p) {
+    return -math.pi / 2 + p * 2 * math.pi;
+  }
+
+  /// Compass azimuth 0° front/top → canvas radians.
+  double _azimuthToCanvas(double azimuthDeg) {
     return (azimuthDeg - 90) * math.pi / 180.0;
   }
 
   @override
   bool shouldRepaint(covariant _OrbitPainter old) =>
+      old.playhead != playhead ||
       old.azimuthDeg != azimuthDeg ||
       old.elevationDeg != elevationDeg ||
-      old.playhead != playhead ||
       old.active != active ||
       old.orbiting != orbiting;
 }
