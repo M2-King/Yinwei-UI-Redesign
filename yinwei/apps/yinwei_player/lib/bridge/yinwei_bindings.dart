@@ -86,16 +86,34 @@ class YinweiBindings {
   }
 
   static DynamicLibrary _openLib() {
+    final errors = <String>[];
     if (Platform.isWindows) {
-      for (final name in ['spatial_core.dll', 'libspatial_core.dll']) {
-        try {
-          return DynamicLibrary.open(name);
-        } catch (_) {}
-      }
-      // Absolute fallback: next to the executable.
+      final candidates = <String>[
+        'spatial_core.dll',
+        'libspatial_core.dll',
+      ];
       final exe = Platform.resolvedExecutable;
       final dir = File(exe).parent.path;
-      return DynamicLibrary.open('$dir\\spatial_core.dll');
+      candidates.addAll([
+        '$dir\\spatial_core.dll',
+        '$dir\\libspatial_core.dll',
+      ]);
+      // Common flutter run output folders relative to cwd.
+      final cwd = Directory.current.path;
+      candidates.addAll([
+        '$cwd\\spatial_core.dll',
+        '$cwd\\windows\\runner\\spatial_core.dll',
+        '$cwd\\build\\windows\\x64\\runner\\Debug\\spatial_core.dll',
+        '$cwd\\build\\windows\\x64\\runner\\Release\\spatial_core.dll',
+      ]);
+      for (final name in candidates) {
+        try {
+          return DynamicLibrary.open(name);
+        } catch (e) {
+          errors.add('$name → $e');
+        }
+      }
+      throw StateError('spatial_core.dll load failed:\n${errors.join('\n')}');
     }
     if (Platform.isLinux) {
       return DynamicLibrary.open('libspatial_core.so');

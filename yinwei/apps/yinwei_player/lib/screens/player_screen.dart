@@ -166,9 +166,13 @@ class _PlayerScreenState extends State<PlayerScreen> {
       final label = _backend == EngineBackend.native ? '真引擎' : '演示引擎 Mock';
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('已打开（$label）'),
+          content: Text(
+            _backend == EngineBackend.native
+                ? '已打开（$label）'
+                : '已打开（$label）— 左下角仍是 Mock：先跑 build_native_windows.ps1 再完全重启',
+          ),
           behavior: SnackBarBehavior.floating,
-          duration: const Duration(seconds: 2),
+          duration: const Duration(seconds: 3),
         ),
       );
     } catch (e) {
