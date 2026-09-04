@@ -7,7 +7,7 @@ import 'package:yinwei_player/models/spatial_params.dart';
 
 /// Bumped when UI wiring changes — shown in status bar so Windows hosts
 /// can confirm they pulled the latest build.
-const String kYinweiUiBuild = 'ui-4';
+const String kYinweiUiBuild = 'ui-5';
 
 /// App state for the locked Player UI (IMPLEMENTATION_P2 §5.1).
 class EngineController extends ChangeNotifier {

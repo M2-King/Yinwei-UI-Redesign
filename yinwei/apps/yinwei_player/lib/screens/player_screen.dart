@@ -58,13 +58,16 @@ class _PlayerScreenState extends State<PlayerScreen> {
                         padding: const EdgeInsets.fromLTRB(28, 12, 12, 12),
                         child: OrbitVisualizer(
                           key: ValueKey(
-                            'orbit-ph${c.playhead.toStringAsFixed(4)}-'
+                            'sphere-ph${c.playhead.toStringAsFixed(4)}-'
                             'az${c.azimuthDeg.toStringAsFixed(1)}-'
+                            'el${c.params.elevationDeg.toStringAsFixed(0)}-'
+                            'd${c.params.distanceM.toStringAsFixed(2)}-'
                             '${c.params.motion.name}',
                           ),
                           playhead: c.playhead,
                           azimuthDeg: c.azimuthDeg,
                           elevationDeg: c.params.elevationDeg,
+                          distanceM: c.params.distanceM,
                           orbiting: c.params.motion == MotionMode.orbit &&
                               c.mode == PlaybackMode.spatial,
                           active: c.mode == PlaybackMode.spatial,
