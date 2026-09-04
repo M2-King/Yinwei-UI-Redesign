@@ -261,7 +261,12 @@ class _LabeledSlider extends StatelessWidget {
               Text(valueLabel, style: Theme.of(context).textTheme.labelSmall),
             ],
           ),
-          Slider(value: value.clamp(min, max), min: min, max: max, onChanged: onChanged),
+          Slider(
+            value: value.clamp(min, max).toDouble(),
+            min: min,
+            max: max,
+            onChanged: onChanged,
+          ),
         ],
       ),
     );

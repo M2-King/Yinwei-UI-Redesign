@@ -116,13 +116,16 @@ class _Scrubber extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final maxMs = duration.inMilliseconds.toDouble().clamp(1, double.infinity);
-    final value = position.inMilliseconds.clamp(0, duration.inMilliseconds);
+    final maxMs =
+        duration.inMilliseconds.toDouble().clamp(1.0, double.infinity).toDouble();
+    final value = position.inMilliseconds
+        .clamp(0, duration.inMilliseconds)
+        .toDouble();
 
     return Column(
       children: [
         Slider(
-          value: value.toDouble(),
+          value: value,
           max: maxMs,
           onChanged: (v) => onSeek(Duration(milliseconds: v.round())),
         ),

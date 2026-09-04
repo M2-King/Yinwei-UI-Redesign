@@ -123,5 +123,6 @@ yinwei/
 
 ## 当前执行焦点
 
-**P2.0 规格已锁定**：[`IMPLEMENTATION_P2.md`](./IMPLEMENTATION_P2.md)。  
-**正在做 P2.1**：Rust `PlayerSession`。
+**P2**：[`IMPLEMENTATION_P2.md`](./IMPLEMENTATION_P2.md)  
+已完成 P2.1 Session + P2.3 Mock 接线 + P2.4 yaml。  
+下一项：Windows 上 FRB codegen → `NativeEngine` + file_picker（P2.5）。
