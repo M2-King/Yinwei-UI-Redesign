@@ -6,28 +6,30 @@ Offline HRTF spatial audio **player** (Windows-first): open a local file → pre
 
 ```
 yinwei/
-  docs/IMPLEMENTATION.md   # UI ↔ engine contract (from approved mockup)
-  assets/ui-mockup.jpg     # Approved Apple-design reference
-  crates/spatial_core/     # Rust engine API (DSP next)
-  apps/yinwei_player/      # Flutter Windows UI shell
+  docs/IMPLEMENTATION.md          # UI ↔ engine contract
+  docs/IMPLEMENTATION_PHASES.md   # P0–P3 分段计划
+  assets/                         # Desktop + mobile mockups
+  crates/spatial_core/            # Rust HRTF engine + cpal
+  crates/yinwei_cli/              # Export / --play CLI
+  apps/yinwei_player/             # Flutter Windows UI shell
+  apps/web_preview/               # Mobile UI preview
 ```
 
 ## Spec
 
-See [docs/IMPLEMENTATION.md](docs/IMPLEMENTATION.md).
+- [docs/IMPLEMENTATION.md](docs/IMPLEMENTATION.md)
+- [docs/IMPLEMENTATION_PHASES.md](docs/IMPLEMENTATION_PHASES.md)
 
 ## Develop
-
-### Rust engine
 
 ```bash
 cd yinwei
 cargo test -p spatial_core
+cargo run -p yinwei_cli --release -- sample.wav -o out.wav --preset left-rear
+cargo run -p yinwei_cli --release -- sample.wav --play --preset right --play-secs 5
 ```
 
-### Flutter UI
-
-Requires Flutter SDK (Windows host for desktop target):
+Flutter (Windows host):
 
 ```bash
 cd yinwei/apps/yinwei_player
@@ -37,17 +39,8 @@ flutter run -d windows
 
 ## Status
 
-- [x] Implementation spec + desktop/mobile mockups
-- [x] `spatial_core` HRTF backend (decode, Mid/Side, export WAV)
-- [x] `yinwei` CLI offline exporter
-- [x] Flutter UI shell matching mockup
-- [ ] cpal realtime + flutter_rust_bridge
-- [ ] Windows installer
-
-## Backend smoke
-
-```bash
-cd yinwei
-cargo test -p spatial_core
-cargo run -p yinwei_cli -- sample.wav -o out.wav --preset left-rear --motion fixed
-```
+- [x] UI mockups locked + phased implementation docs
+- [x] **P0** offline HRTF + CLI export
+- [x] **P1** `render_frames` + cpal `RealtimePlayer` + `--play`
+- [ ] **P2** flutter_rust_bridge → Flutter player
+- [ ] **P3** Windows installer

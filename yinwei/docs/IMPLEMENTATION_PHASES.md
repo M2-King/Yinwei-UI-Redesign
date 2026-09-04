@@ -122,4 +122,5 @@ yinwei/
 
 ## 当前执行焦点
 
-**正在做 P1.1 + P1.2**：`render_frames` + cpal `OutputPlayer`。
+**P1 代码已合入**（`render_frames` + `RealtimePlayer` + CLI `--play`）。  
+下一焦点：**P2 Flutter ↔ Rust 桥接**。

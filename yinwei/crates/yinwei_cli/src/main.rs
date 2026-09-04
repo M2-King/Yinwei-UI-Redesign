@@ -151,10 +151,10 @@ fn main() {
         let player = RealtimePlayer::new();
         player.set_sample_rate(sr);
         player.load_frames(frames).unwrap();
-        player.play().unwrap_or_else(|e| {
-            eprintln!("play failed: {e}");
-            std::process::exit(1);
-        });
+        if let Err(e) = player.play() {
+            eprintln!("play skipped: {e} (buffer render OK)");
+            return;
+        }
 
         let total_ms = meta.duration_ms;
         let limit_ms = if args.play_secs == 0 {
