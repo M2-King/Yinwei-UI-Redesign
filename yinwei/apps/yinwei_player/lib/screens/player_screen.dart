@@ -55,22 +55,29 @@ class _PlayerScreenState extends State<PlayerScreen> {
                     Expanded(
                       flex: 5,
                       child: Padding(
-                        padding: const EdgeInsets.fromLTRB(28, 12, 12, 12),
+                        padding: const EdgeInsets.fromLTRB(28, 12, 12, 20),
                         child: OrbitVisualizer(
-                          key: ValueKey(
-                            'sphere-ph${c.playhead.toStringAsFixed(4)}-'
-                            'az${c.azimuthDeg.toStringAsFixed(1)}-'
-                            'el${c.params.elevationDeg.toStringAsFixed(0)}-'
-                            'd${c.params.distanceM.toStringAsFixed(2)}-'
-                            '${c.params.motion.name}',
-                          ),
                           playhead: c.playhead,
                           azimuthDeg: c.azimuthDeg,
                           elevationDeg: c.params.elevationDeg,
                           distanceM: c.params.distanceM,
+                          envelopment: c.params.envelopment,
                           orbiting: c.params.motion == MotionMode.orbit &&
                               c.mode == PlaybackMode.spatial,
                           active: c.mode == PlaybackMode.spatial,
+                          onPoseChanged: (az, el) {
+                            final next = c.params.copy()
+                              ..azimuthDeg = az
+                              ..elevationDeg = el
+                              ..selectedPreset = null;
+                            c.setParams(next);
+                          },
+                          onDistanceChanged: (d) {
+                            final next = c.params.copy()
+                              ..distanceM = d
+                              ..selectedPreset = null;
+                            c.setParams(next);
+                          },
                         ),
                       ),
                     ),
