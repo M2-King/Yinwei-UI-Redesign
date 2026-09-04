@@ -4,11 +4,15 @@ import 'package:flutter/material.dart';
 import 'package:yinwei_player/theme/yinwei_theme.dart';
 
 /// Left-panel ring + blue source dot (Apple mockup).
+///
+/// Sized with [LayoutBuilder] (not AspectRatio) so a tall square never
+/// overflows the row and paints over the sidebar ("穿层").
 class OrbitVisualizer extends StatelessWidget {
   const OrbitVisualizer({
     super.key,
     required this.azimuthDeg,
     this.elevationDeg = 0,
+    this.playhead = 0,
     this.active = true,
     this.orbiting = false,
   });
@@ -16,21 +20,37 @@ class OrbitVisualizer extends StatelessWidget {
   /// 0° = front (top of ring), positive = clockwise toward right.
   final double azimuthDeg;
   final double elevationDeg;
+
+  /// 0..1 track playhead — draws a faint progress arc so the left panel
+  /// visibly tracks scrubbing / playback even in Fixed mode.
+  final double playhead;
   final bool active;
   final bool orbiting;
 
   @override
   Widget build(BuildContext context) {
-    return AspectRatio(
-      aspectRatio: 1,
-      child: CustomPaint(
-        painter: _OrbitPainter(
-          azimuthDeg: azimuthDeg,
-          elevationDeg: elevationDeg,
-          active: active,
-          orbiting: orbiting,
-        ),
-      ),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final side = math.min(constraints.maxWidth, constraints.maxHeight);
+        if (side <= 0 || !side.isFinite) {
+          return const SizedBox.shrink();
+        }
+        return Center(
+          child: SizedBox(
+            width: side,
+            height: side,
+            child: CustomPaint(
+              painter: _OrbitPainter(
+                azimuthDeg: azimuthDeg,
+                elevationDeg: elevationDeg,
+                playhead: playhead.clamp(0.0, 1.0),
+                active: active,
+                orbiting: orbiting,
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 }
@@ -39,12 +59,14 @@ class _OrbitPainter extends CustomPainter {
   _OrbitPainter({
     required this.azimuthDeg,
     required this.elevationDeg,
+    required this.playhead,
     required this.active,
     required this.orbiting,
   });
 
   final double azimuthDeg;
   final double elevationDeg;
+  final double playhead;
   final bool active;
   final bool orbiting;
 
@@ -52,65 +74,72 @@ class _OrbitPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     final c = Offset(size.width / 2, size.height / 2);
     final baseR = size.shortestSide * 0.38;
-    // Elevation pulls the ring radius slightly (visual cue only).
     final elevNorm = (elevationDeg.clamp(-90, 90) / 90.0);
     final r = baseR * (1.0 - elevNorm * 0.18);
 
-    final ring = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = orbiting ? 1.6 : 1.2
-      ..color = Colors.white.withValues(alpha: orbiting ? 0.14 : 0.08);
-    canvas.drawCircle(c, r, ring);
-
-    // Soft trail arc behind the dot.
-    final trailLen = orbiting ? 1.6 : 1.1;
-    final trail = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = orbiting ? 4 : 3
-      ..strokeCap = StrokeCap.round
-      ..shader = SweepGradient(
-        startAngle: _toCanvasAngle(azimuthDeg) - trailLen,
-        endAngle: _toCanvasAngle(azimuthDeg),
-        colors: [
-          YinweiColors.accent.withValues(alpha: 0),
-          YinweiColors.accent.withValues(alpha: active ? (orbiting ? 0.7 : 0.55) : 0.2),
-        ],
-        transform: GradientRotation(_toCanvasAngle(azimuthDeg) - trailLen),
-      ).createShader(Rect.fromCircle(center: c, radius: r));
-    canvas.drawArc(
-      Rect.fromCircle(center: c, radius: r),
-      _toCanvasAngle(azimuthDeg) - trailLen,
-      trailLen,
-      false,
-      trail,
+    // Track ring.
+    canvas.drawCircle(
+      c,
+      r,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = orbiting ? 1.6 : 1.2
+        ..color = Colors.white.withOpacity(orbiting ? 0.16 : 0.08),
     );
 
+    // Playhead progress (full ring) — always moves with scrubber / play.
+    if (playhead > 0.001) {
+      canvas.drawArc(
+        Rect.fromCircle(center: c, radius: r),
+        -math.pi / 2,
+        playhead * 2 * math.pi,
+        false,
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 2
+          ..strokeCap = StrokeCap.round
+          ..color = Colors.white.withOpacity(0.22),
+      );
+    }
+
     final rad = _toCanvasAngle(azimuthDeg);
+    final trailLen = orbiting ? 1.6 : 1.1;
+
+    canvas.drawArc(
+      Rect.fromCircle(center: c, radius: r),
+      rad - trailLen,
+      trailLen,
+      false,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = orbiting ? 4 : 3
+        ..strokeCap = StrokeCap.round
+        ..color = YinweiColors.accent.withOpacity(active ? 0.45 : 0.18),
+    );
+
     final dot = Offset(c.dx + r * math.cos(rad), c.dy + r * math.sin(rad));
 
     canvas.drawCircle(
       dot,
-      orbiting ? 12 : 10,
-      Paint()..color = YinweiColors.accent.withValues(alpha: 0.25),
+      orbiting ? 14 : 11,
+      Paint()..color = YinweiColors.accent.withOpacity(0.28),
     );
     canvas.drawCircle(
       dot,
-      orbiting ? 6.5 : 5.5,
+      orbiting ? 7 : 6,
       Paint()..color = YinweiColors.accent,
     );
 
-    // Listener mark at center.
+    // Listener at center.
     canvas.drawCircle(
       c,
       3.5,
-      Paint()..color = Colors.white.withValues(alpha: 0.35),
+      Paint()..color = Colors.white.withOpacity(0.4),
     );
   }
 
-  /// Map compass azimuth (0=front/up) to canvas radians.
   double _toCanvasAngle(double azimuthDeg) {
-    // UI: 0° front = top; positive azimuth → right.
-    // Screen Y grows down: angle 0 at top = -pi/2 from +X.
+    // 0° front = top; positive azimuth → right.
     return (azimuthDeg - 90) * math.pi / 180.0;
   }
 
@@ -118,6 +147,7 @@ class _OrbitPainter extends CustomPainter {
   bool shouldRepaint(covariant _OrbitPainter old) =>
       old.azimuthDeg != azimuthDeg ||
       old.elevationDeg != elevationDeg ||
+      old.playhead != playhead ||
       old.active != active ||
       old.orbiting != orbiting;
 }

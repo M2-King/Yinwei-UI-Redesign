@@ -57,8 +57,14 @@ class _PlayerScreenState extends State<PlayerScreen> {
                       child: Padding(
                         padding: const EdgeInsets.fromLTRB(28, 12, 12, 12),
                         child: OrbitVisualizer(
+                          key: ValueKey(
+                            'orbit-${c.azimuthDeg.toStringAsFixed(1)}-'
+                            '${c.playhead.toStringAsFixed(3)}-'
+                            '${c.params.motion.name}',
+                          ),
                           azimuthDeg: c.azimuthDeg,
                           elevationDeg: c.params.elevationDeg,
+                          playhead: c.playhead,
                           orbiting: c.params.motion == MotionMode.orbit &&
                               c.mode == PlaybackMode.spatial,
                           active: c.mode == PlaybackMode.spatial,
@@ -96,7 +102,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
                   ],
                 ),
               ),
-              const _StatusBar(),
+              _StatusBar(buildId: kYinweiUiBuild),
             ],
           ),
           if (c.busy)
@@ -194,7 +200,9 @@ class _TitleBar extends StatelessWidget {
 }
 
 class _StatusBar extends StatelessWidget {
-  const _StatusBar();
+  const _StatusBar({required this.buildId});
+
+  final String buildId;
 
   @override
   Widget build(BuildContext context) {
@@ -228,6 +236,8 @@ class _StatusBar extends StatelessWidget {
             child: Text('·', style: style),
           ),
           Text('Headphones recommended', style: style),
+          const Spacer(),
+          Text(buildId, style: style?.copyWith(color: YinweiColors.accent)),
         ],
       ),
     );

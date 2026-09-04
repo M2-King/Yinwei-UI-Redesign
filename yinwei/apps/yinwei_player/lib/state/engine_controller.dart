@@ -5,9 +5,16 @@ import 'package:yinwei_player/bridge/engine_api.dart';
 import 'package:yinwei_player/bridge/mock_engine.dart';
 import 'package:yinwei_player/models/spatial_params.dart';
 
+/// Bumped when UI wiring changes — shown in status bar so Windows hosts
+/// can confirm they pulled the latest build.
+const String kYinweiUiBuild = 'ui-3';
+
 /// App state for the locked Player UI (IMPLEMENTATION_P2 §5.1).
 class EngineController extends ChangeNotifier {
-  EngineController({EngineApi? engine}) : _engine = engine ?? MockEngine();
+  EngineController({EngineApi? engine}) : _engine = engine ?? MockEngine() {
+    // Keep engine params aligned with UI defaults immediately.
+    unawaited(_engine.setParams(params));
+  }
 
   final EngineApi _engine;
 
@@ -24,29 +31,38 @@ class EngineController extends ChangeNotifier {
 
   Timer? _tick;
 
+  double get playhead {
+    final total = track.duration.inMilliseconds;
+    if (total <= 0) return 0;
+    return (position.inMilliseconds / total).clamp(0.0, 1.0);
+  }
+
   Future<void> openPath(String path) async {
     await _run(() async {
       track = await _engine.open(path);
       hasOpenedFile = true;
       position = Duration.zero;
       playing = false;
+      _tick?.cancel();
+      await _engine.setParams(params);
       await _engine.rebuildPreview(onProgress: _onProgress);
-      azimuthDeg = await _engine.currentAzimuthDeg();
+      _syncAzimuth();
     });
   }
 
   Future<void> setParams(SpatialParams next) async {
     params = next.copy();
+    _syncAzimuth();
+    notifyListeners(); // sync UI first — don't wait on engine
     await _engine.setParams(params);
-    // Keep left orbit dot in sync with sidebar (presets / azimuth / orbit).
-    azimuthDeg = params.visualAzimuthDeg(position);
-    notifyListeners();
   }
 
   Future<void> applyPreset(PositionPreset preset) async {
-    params = await _engine.applyPreset(preset);
-    azimuthDeg = params.visualAzimuthDeg(position);
+    final next = params.copy()..applyPreset(preset);
+    params = next;
+    _syncAzimuth();
     notifyListeners();
+    await _engine.setParams(params);
   }
 
   Future<void> setMode(PlaybackMode next) async {
@@ -64,20 +80,28 @@ class EngineController extends ChangeNotifier {
   }
 
   Future<void> play() async {
-    await _run(() async {
+    lastError = null;
+    try {
       final dirty = await _engine.isPreviewDirty();
       if (dirty) {
+        busy = true;
+        notifyListeners();
         await _engine.rebuildPreview(onProgress: _onProgress);
+        busy = false;
       }
       try {
         await _engine.play();
       } catch (e) {
-        // AudioDevice: still mark playing for mock orbit UI; show message.
         lastError = e.toString();
       }
       playing = true;
       _startTick();
-    });
+      notifyListeners();
+    } catch (e) {
+      lastError = e.toString();
+      busy = false;
+      notifyListeners();
+    }
   }
 
   Future<void> pause() async {
@@ -85,13 +109,14 @@ class EngineController extends ChangeNotifier {
     playing = false;
     _tick?.cancel();
     position = await _engine.position();
+    _syncAzimuth();
     notifyListeners();
   }
 
   Future<void> seek(Duration d) async {
     await _engine.seek(d);
     position = d;
-    azimuthDeg = await _engine.currentAzimuthDeg();
+    _syncAzimuth();
     notifyListeners();
   }
 
@@ -101,6 +126,10 @@ class EngineController extends ChangeNotifier {
     });
   }
 
+  void _syncAzimuth() {
+    azimuthDeg = params.visualAzimuthDeg(position);
+  }
+
   void _onProgress(double p) {
     jobProgress = p;
     notifyListeners();
@@ -108,15 +137,13 @@ class EngineController extends ChangeNotifier {
 
   void _startTick() {
     _tick?.cancel();
-    _tick = Timer.periodic(const Duration(milliseconds: 50), (_) async {
+    _tick = Timer.periodic(const Duration(milliseconds: 33), (_) async {
       if (!playing) return;
-      position = await _engine.position();
-      // Prefer engine azimuth; fall back to local orbit math for snappy UI.
-      final engineAz = await _engine.currentAzimuthDeg();
-      azimuthDeg = params.motion == MotionMode.orbit
-          ? params.visualAzimuthDeg(position)
-          : engineAz;
-      playing = await _engine.isPlaying();
+      final pos = await _engine.position();
+      final still = await _engine.isPlaying();
+      position = pos;
+      _syncAzimuth();
+      playing = still;
       if (!playing) _tick?.cancel();
       notifyListeners();
     });

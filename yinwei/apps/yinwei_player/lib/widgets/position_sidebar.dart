@@ -23,6 +23,7 @@ class PositionSidebar extends StatelessWidget {
 
     return Container(
       width: 300,
+      clipBehavior: Clip.hardEdge,
       decoration: const BoxDecoration(
         color: YinweiColors.panel,
         border: Border(left: BorderSide(color: YinweiColors.hairline)),
