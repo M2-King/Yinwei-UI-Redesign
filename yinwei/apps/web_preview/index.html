@@ -2,346 +2,234 @@
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>音围 · Spatial Player Preview</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <title>音围 · Spatial Player</title>
   <style>
     :root {
-      --bg: #0B0B0D;
-      --panel: #141416;
-      --elevated: #1C1C1E;
-      --hairline: rgba(255,255,255,0.08);
+      --bg: #000000;
+      --card: #1C1C1E;
+      --elevated: #2C2C2E;
+      --hairline: rgba(255,255,255,0.1);
       --accent: #0A84FF;
       --text: #F5F5F7;
       --muted: #8E8E93;
       --success: #30D158;
-      --radius: 12px;
+      --safe-b: env(safe-area-inset-bottom, 0px);
+      --safe-t: env(safe-area-inset-top, 0px);
     }
-    * { box-sizing: border-box; margin: 0; padding: 0; }
+    * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
     html, body {
       height: 100%;
       background: var(--bg);
       color: var(--text);
-      font-family: "SF Pro Text", "Segoe UI", -apple-system, BlinkMacSystemFont, sans-serif;
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", sans-serif;
       -webkit-font-smoothing: antialiased;
     }
-    .window {
+    .app {
       min-height: 100%;
+      max-width: 430px;
+      margin: 0 auto;
+      padding: calc(12px + var(--safe-t)) 16px calc(20px + var(--safe-b));
       display: flex;
       flex-direction: column;
+      gap: 14px;
     }
-    .titlebar {
-      height: 52px;
+    .nav {
       display: flex;
-      align-items: center;
-      justify-content: center;
-      flex-direction: column;
-      gap: 2px;
-      border-bottom: 1px solid var(--hairline);
-    }
-    .titlebar h1 { font-size: 15px; font-weight: 600; letter-spacing: 0.4px; }
-    .titlebar p { font-size: 11px; color: var(--muted); }
-    .main {
-      flex: 1;
-      display: grid;
-      grid-template-columns: 1.1fr 1.1fr 300px;
-      min-height: 0;
-    }
-    .viz {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      padding: 24px;
-    }
-    #orbit {
-      width: min(420px, 90%);
-      aspect-ratio: 1;
-    }
-    .now {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      padding: 24px 16px;
-      gap: 10px;
-    }
-    .cover {
-      width: 220px;
-      height: 220px;
-      border-radius: 14px;
-      background:
-        linear-gradient(145deg, #2a2a2e, #121214),
-        radial-gradient(circle at 30% 30%, #3a4a5a, transparent 60%);
-      border: 1px solid var(--hairline);
-      display: grid;
-      place-items: center;
-      color: var(--muted);
-      font-size: 48px;
-      margin-bottom: 18px;
-      overflow: hidden;
-    }
-    .cover img { width: 100%; height: 100%; object-fit: cover; }
-    .track-title { font-size: 22px; font-weight: 600; letter-spacing: -0.3px; }
-    .track-artist { font-size: 13px; color: var(--muted); }
-    .track-album { font-size: 11px; color: var(--muted); }
-    .scrubber {
-      width: min(320px, 100%);
-      margin-top: 16px;
-    }
-    .scrubber input[type=range] { width: 100%; }
-    .times {
-      display: flex;
+      align-items: flex-start;
       justify-content: space-between;
-      font-size: 11px;
-      color: var(--muted);
-      margin-top: 4px;
+    }
+    .nav h1 { font-size: 28px; font-weight: 700; letter-spacing: -0.4px; line-height: 1.1; }
+    .nav .sub { font-size: 13px; color: var(--muted); margin-top: 2px; }
+    .nav .open {
+      width: 36px; height: 36px; border-radius: 50%;
+      border: 0; background: var(--card); color: var(--accent);
+      font-size: 18px; display: grid; place-items: center;
+    }
+    .viz-wrap {
+      display: flex; justify-content: center; padding: 4px 0 8px;
+    }
+    #orbit { width: min(72vw, 280px); aspect-ratio: 1; }
+    .card {
+      background: var(--card);
+      border-radius: 16px;
+      padding: 14px;
+    }
+    .np {
+      display: grid;
+      grid-template-columns: 64px 1fr;
+      gap: 12px;
+      align-items: center;
+    }
+    .art {
+      width: 64px; height: 64px; border-radius: 10px;
+      background: linear-gradient(145deg, #3a4550, #1a1a1c);
+      display: grid; place-items: center; color: var(--muted); font-size: 22px;
+    }
+    .np-title { font-size: 16px; font-weight: 600; }
+    .np-artist { font-size: 13px; color: var(--muted); margin-top: 2px; }
+    .scrub { margin-top: 12px; }
+    .scrub input { width: 100%; }
+    .times {
+      display: flex; justify-content: space-between;
+      font-size: 11px; color: var(--muted); margin-top: 4px;
     }
     .transport {
-      display: flex;
-      align-items: center;
-      gap: 14px;
+      display: flex; justify-content: center; align-items: center; gap: 28px;
       margin-top: 10px;
     }
     .transport button {
-      background: transparent;
-      border: 0;
-      color: var(--text);
-      cursor: pointer;
-      font-size: 18px;
-      width: 40px;
-      height: 40px;
-      border-radius: 50%;
+      border: 0; background: transparent; color: var(--text);
+      font-size: 22px; width: 44px; height: 44px;
     }
     .transport .play {
-      width: 56px;
-      height: 56px;
-      background: var(--elevated);
-      font-size: 22px;
+      width: 52px; height: 52px; border-radius: 50%;
+      background: var(--elevated); font-size: 24px;
     }
     .seg {
-      display: inline-flex;
-      background: var(--elevated);
-      border-radius: 9px;
-      padding: 3px;
-      margin-top: 14px;
-      gap: 2px;
+      display: flex; background: var(--elevated); border-radius: 10px; padding: 3px; gap: 2px;
     }
     .seg button {
-      border: 0;
-      background: transparent;
-      color: var(--muted);
-      font-size: 13px;
-      font-weight: 500;
-      padding: 8px 16px;
-      border-radius: 7px;
-      cursor: pointer;
+      flex: 1; border: 0; background: transparent; color: var(--muted);
+      font-size: 14px; font-weight: 600; padding: 10px 8px; border-radius: 8px;
     }
-    .seg button.active {
-      background: var(--accent);
-      color: #fff;
-    }
-    .sidebar {
-      background: var(--panel);
-      border-left: 1px solid var(--hairline);
-      padding: 20px 16px 16px;
-      display: flex;
-      flex-direction: column;
-      gap: 10px;
-      overflow: auto;
-    }
-    .label {
-      font-size: 11px;
-      color: var(--muted);
-      letter-spacing: 0.2px;
-      text-transform: uppercase;
+    .seg button.active { background: var(--accent); color: #fff; }
+    .section-label {
+      font-size: 15px; font-weight: 600; margin: 4px 0 8px;
     }
     .grid {
-      display: grid;
-      grid-template-columns: repeat(3, 1fr);
-      gap: 8px;
+      display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px;
     }
     .chip {
-      background: var(--elevated);
-      border: 0;
-      color: var(--muted);
-      border-radius: 10px;
-      padding: 12px 6px;
-      font-size: 11px;
-      font-weight: 500;
-      cursor: pointer;
+      border: 0; background: var(--elevated); color: var(--muted);
+      border-radius: 12px; min-height: 44px; font-size: 12px; font-weight: 500;
+      padding: 8px 4px;
     }
     .chip.active { background: var(--accent); color: #fff; }
+    .sliders { display: flex; flex-direction: column; gap: 6px; }
     .row {
-      display: flex;
-      justify-content: space-between;
-      font-size: 12px;
-      color: var(--muted);
-      margin-top: 6px;
+      display: flex; justify-content: space-between; font-size: 13px; color: var(--muted);
     }
-    .row strong { color: var(--muted); font-weight: 500; }
     input[type=range] {
-      -webkit-appearance: none;
-      appearance: none;
-      width: 100%;
-      height: 3px;
-      background: var(--hairline);
-      border-radius: 2px;
-      outline: none;
-      margin: 10px 0 4px;
+      -webkit-appearance: none; appearance: none; width: 100%; height: 3px;
+      background: rgba(255,255,255,0.12); border-radius: 2px; outline: none; margin: 10px 0 2px;
     }
     input[type=range]::-webkit-slider-thumb {
-      -webkit-appearance: none;
-      width: 14px;
-      height: 14px;
-      border-radius: 50%;
-      background: #fff;
-      cursor: pointer;
-      box-shadow: 0 0 0 3px rgba(10,132,255,0.15);
-    }
-    .actions { margin-top: auto; display: flex; flex-direction: column; gap: 10px; padding-top: 12px; }
-    .btn {
-      height: 44px;
-      border-radius: var(--radius);
-      font-size: 14px;
-      font-weight: 600;
-      cursor: pointer;
-      border: 0;
-    }
-    .btn-primary { background: var(--accent); color: #fff; }
-    .btn-ghost {
-      background: transparent;
-      color: var(--text);
-      border: 1px solid var(--hairline);
+      -webkit-appearance: none; width: 18px; height: 18px; border-radius: 50%;
+      background: #fff; box-shadow: 0 0 0 4px rgba(10,132,255,0.2);
     }
     .status {
-      height: 36px;
-      border-top: 1px solid var(--hairline);
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      padding: 0 20px;
-      font-size: 11px;
-      color: var(--muted);
+      text-align: center; font-size: 11px; color: var(--muted);
+      display: flex; justify-content: center; align-items: center; gap: 6px;
     }
-    .dot {
-      width: 7px;
-      height: 7px;
-      border-radius: 50%;
-      background: var(--success);
+    .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--success); }
+    .export {
+      width: 100%; height: 50px; border: 0; border-radius: 14px;
+      background: var(--accent); color: #fff; font-size: 16px; font-weight: 700;
+    }
+    .save {
+      width: 100%; border: 0; background: transparent; color: var(--accent);
+      font-size: 15px; font-weight: 500; padding: 8px; margin-bottom: 4px;
     }
     .toast {
-      position: fixed;
-      bottom: 48px;
-      left: 50%;
-      transform: translateX(-50%);
-      background: var(--elevated);
-      border: 1px solid var(--hairline);
-      padding: 10px 16px;
-      border-radius: 10px;
-      font-size: 13px;
-      opacity: 0;
-      pointer-events: none;
-      transition: opacity .2s;
-      z-index: 20;
+      position: fixed; left: 50%; bottom: calc(28px + var(--safe-b));
+      transform: translateX(-50%); background: var(--card); border: 1px solid var(--hairline);
+      padding: 10px 14px; border-radius: 12px; font-size: 13px; opacity: 0;
+      transition: opacity .2s; pointer-events: none; max-width: 90vw; z-index: 20;
     }
     .toast.show { opacity: 1; }
-    .banner {
-      background: rgba(10,132,255,0.12);
-      color: #9ec5ff;
-      font-size: 12px;
-      text-align: center;
-      padding: 8px;
-      border-bottom: 1px solid var(--hairline);
-    }
-    @media (max-width: 980px) {
-      .main { grid-template-columns: 1fr; }
-      .sidebar { border-left: 0; border-top: 1px solid var(--hairline); }
+    @media (min-width: 860px) {
+      body { background: #111; }
+      .app {
+        max-width: 390px; margin: 24px auto;
+        border: 1px solid var(--hairline); border-radius: 28px;
+        min-height: calc(100vh - 48px);
+      }
     }
   </style>
 </head>
 <body>
-  <div class="window">
-    <div class="banner">Web UI preview · DSP/export 尚未接线 · Offline mock</div>
-    <header class="titlebar">
-      <h1>音围</h1>
-      <p>Spatial Player</p>
+  <div class="app">
+    <header class="nav">
+      <div>
+        <h1>音围</h1>
+        <div class="sub">Spatial Player</div>
+      </div>
+      <button class="open" id="openBtn" type="button" aria-label="Open file">📁</button>
     </header>
 
-    <div class="main">
-      <section class="viz">
-        <canvas id="orbit" width="500" height="500"></canvas>
-      </section>
-
-      <section class="now">
-        <div class="cover" id="cover">♪</div>
-        <div class="track-title">Across the Room</div>
-        <div class="track-artist">ODESZA</div>
-        <div class="track-album">A Moment Apart</div>
-
-        <div class="scrubber">
-          <input id="seek" type="range" min="0" max="231" value="102" />
-          <div class="times"><span id="t0">01:42</span><span>03:51</span></div>
-        </div>
-
-        <div class="transport">
-          <button type="button" aria-label="prev">⏮</button>
-          <button type="button" class="play" id="play" aria-label="play">⏸</button>
-          <button type="button" aria-label="next">⏭</button>
-        </div>
-
-        <div class="seg" id="ab">
-          <button type="button" data-mode="original">Original</button>
-          <button type="button" class="active" data-mode="spatial">Spatial</button>
-        </div>
-      </section>
-
-      <aside class="sidebar">
-        <div class="label">Position</div>
-        <div class="grid" id="presets"></div>
-
-        <div>
-          <div class="row"><span>Azimuth</span><strong id="azVal">90°</strong></div>
-          <input id="azimuth" type="range" min="-180" max="180" value="90" />
-        </div>
-        <div>
-          <div class="row"><span>Elevation</span><strong id="elVal">-10°</strong></div>
-          <input id="elevation" type="range" min="-90" max="90" value="-10" />
-        </div>
-        <div>
-          <div class="row"><span>Distance</span><strong id="distVal">2.10 m</strong></div>
-          <input id="distance" type="range" min="5" max="100" value="21" />
-        </div>
-
-        <div class="seg" id="motion" style="width:100%; justify-content:stretch;">
-          <button type="button" class="active" data-motion="fixed" style="flex:1">Fixed Position</button>
-          <button type="button" data-motion="orbit" style="flex:1">Orbit</button>
-        </div>
-
-        <div>
-          <div class="row"><span>Orbit Speed</span><strong id="hzVal">0.40 Hz</strong></div>
-          <input id="orbitHz" type="range" min="0" max="200" value="40" />
-        </div>
-        <div>
-          <div class="row"><span>Envelopment</span><strong id="envVal">60%</strong></div>
-          <input id="envelopment" type="range" min="0" max="100" value="60" />
-        </div>
-        <div>
-          <div class="row"><span>Reverb</span><strong id="revVal">20%</strong></div>
-          <input id="reverb" type="range" min="0" max="100" value="20" />
-        </div>
-
-        <div class="actions">
-          <button class="btn btn-primary" id="exportBtn" type="button">Export WAV</button>
-          <button class="btn btn-ghost" id="presetBtn" type="button">Save Preset</button>
-        </div>
-      </aside>
+    <div class="viz-wrap">
+      <canvas id="orbit" width="560" height="560"></canvas>
     </div>
 
-    <footer class="status">
-      <span class="dot"></span>
-      <span>Offline</span><span>·</span>
-      <span>Local file</span><span>·</span>
-      <span>Headphones recommended</span>
-    </footer>
+    <section class="card">
+      <div class="np">
+        <div class="art">♪</div>
+        <div>
+          <div class="np-title">Across the Room</div>
+          <div class="np-artist">ODESZA</div>
+        </div>
+      </div>
+      <div class="scrub">
+        <input id="seek" type="range" min="0" max="231" value="102" />
+        <div class="times"><span id="t0">01:42</span><span>03:51</span></div>
+      </div>
+      <div class="transport">
+        <button type="button">⏮</button>
+        <button type="button" class="play" id="play">⏸</button>
+        <button type="button">⏭</button>
+      </div>
+    </section>
+
+    <div class="seg" id="ab">
+      <button type="button" data-mode="original">Original</button>
+      <button type="button" class="active" data-mode="spatial">Spatial</button>
+    </div>
+
+    <div>
+      <div class="section-label">Position</div>
+      <div class="grid" id="presets"></div>
+    </div>
+
+    <div class="sliders">
+      <div>
+        <div class="row"><span>Azimuth</span><strong id="azVal">110°</strong></div>
+        <input id="azimuth" type="range" min="-180" max="180" value="110" />
+      </div>
+      <div>
+        <div class="row"><span>Elevation</span><strong id="elVal">-10°</strong></div>
+        <input id="elevation" type="range" min="-90" max="90" value="-10" />
+      </div>
+      <div>
+        <div class="row"><span>Distance</span><strong id="distVal">2.10 m</strong></div>
+        <input id="distance" type="range" min="5" max="100" value="21" />
+      </div>
+    </div>
+
+    <div class="seg" id="motion">
+      <button type="button" class="active" data-motion="fixed">Fixed</button>
+      <button type="button" data-motion="orbit">Orbit</button>
+    </div>
+
+    <div class="sliders">
+      <div>
+        <div class="row"><span>Orbit Speed</span><strong id="hzVal">0.40 Hz</strong></div>
+        <input id="orbitHz" type="range" min="0" max="200" value="40" />
+      </div>
+      <div>
+        <div class="row"><span>Envelopment</span><strong id="envVal">60%</strong></div>
+        <input id="envelopment" type="range" min="0" max="100" value="60" />
+      </div>
+      <div>
+        <div class="row"><span>Reverb</span><strong id="revVal">20%</strong></div>
+        <input id="reverb" type="range" min="0" max="100" value="20" />
+      </div>
+    </div>
+
+    <div class="status"><span class="dot"></span> Offline · Local file · Headphones recommended</div>
+    <button class="export" id="exportBtn" type="button">Export WAV</button>
+    <button class="save" id="presetBtn" type="button">Save Preset</button>
   </div>
   <div class="toast" id="toast"></div>
 
@@ -359,17 +247,10 @@
     ];
 
     const state = {
-      playing: true,
-      mode: 'spatial',
-      motion: 'fixed',
-      azimuth: 90,
-      elevation: -10,
-      distance: 2.1,
-      orbitHz: 0.4,
-      envelopment: 0.6,
-      reverb: 0.2,
-      preset: 'right',
-      start: performance.now(),
+      playing: true, mode: 'spatial', motion: 'fixed',
+      azimuth: 110, elevation: -10, distance: 2.1,
+      orbitHz: 0.4, envelopment: 0.6, reverb: 0.2,
+      preset: 'right', start: performance.now(),
     };
 
     const presetsEl = document.getElementById('presets');
@@ -379,63 +260,44 @@
       b.textContent = p.label;
       b.dataset.id = p.id;
       b.onclick = () => {
-        state.preset = p.id;
-        state.azimuth = p.az;
-        state.elevation = p.el;
-        state.distance = p.d;
-        syncInputs();
-        renderPresets();
+        state.preset = p.id; state.azimuth = p.az; state.elevation = p.el; state.distance = p.d;
+        syncInputs(); renderPresets();
       };
       presetsEl.appendChild(b);
     });
 
     function renderPresets() {
-      [...presetsEl.children].forEach((el) => {
-        el.classList.toggle('active', el.dataset.id === state.preset);
-      });
-    }
-
-    function syncInputs() {
-      document.getElementById('azimuth').value = state.azimuth;
-      document.getElementById('elevation').value = state.elevation;
-      document.getElementById('distance').value = Math.round(state.distance * 10);
-      document.getElementById('orbitHz').value = Math.round(state.orbitHz * 100);
-      document.getElementById('envelopment').value = Math.round(state.envelopment * 100);
-      document.getElementById('reverb').value = Math.round(state.reverb * 100);
-      updateLabels();
+      [...presetsEl.children].forEach((el) => el.classList.toggle('active', el.dataset.id === state.preset));
     }
 
     function updateLabels() {
-      document.getElementById('azVal').textContent = `${Math.round(state.azimuth)}°`;
-      document.getElementById('elVal').textContent = `${Math.round(state.elevation)}°`;
-      document.getElementById('distVal').textContent = `${state.distance.toFixed(2)} m`;
-      document.getElementById('hzVal').textContent = `${state.orbitHz.toFixed(2)} Hz`;
-      document.getElementById('envVal').textContent = `${Math.round(state.envelopment * 100)}%`;
-      document.getElementById('revVal').textContent = `${Math.round(state.reverb * 100)}%`;
+      azVal.textContent = `${Math.round(state.azimuth)}°`;
+      elVal.textContent = `${Math.round(state.elevation)}°`;
+      distVal.textContent = `${state.distance.toFixed(2)} m`;
+      hzVal.textContent = `${state.orbitHz.toFixed(2)} Hz`;
+      envVal.textContent = `${Math.round(state.envelopment * 100)}%`;
+      revVal.textContent = `${Math.round(state.reverb * 100)}%`;
     }
 
-    document.getElementById('azimuth').oninput = (e) => {
-      state.azimuth = +e.target.value; state.preset = null; renderPresets(); updateLabels();
-    };
-    document.getElementById('elevation').oninput = (e) => {
-      state.elevation = +e.target.value; state.preset = null; renderPresets(); updateLabels();
-    };
-    document.getElementById('distance').oninput = (e) => {
-      state.distance = +e.target.value / 10; state.preset = null; renderPresets(); updateLabels();
-    };
-    document.getElementById('orbitHz').oninput = (e) => {
-      state.orbitHz = +e.target.value / 100; updateLabels();
-    };
-    document.getElementById('envelopment').oninput = (e) => {
-      state.envelopment = +e.target.value / 100; updateLabels();
-    };
-    document.getElementById('reverb').oninput = (e) => {
-      state.reverb = +e.target.value / 100; updateLabels();
-    };
+    function syncInputs() {
+      azimuth.value = state.azimuth; elevation.value = state.elevation;
+      distance.value = Math.round(state.distance * 10);
+      orbitHz.value = Math.round(state.orbitHz * 100);
+      envelopment.value = Math.round(state.envelopment * 100);
+      reverb.value = Math.round(state.reverb * 100);
+      updateLabels();
+    }
 
-    document.getElementById('play').onclick = () => {
+    azimuth.oninput = (e) => { state.azimuth = +e.target.value; state.preset = null; renderPresets(); updateLabels(); };
+    elevation.oninput = (e) => { state.elevation = +e.target.value; state.preset = null; renderPresets(); updateLabels(); };
+    distance.oninput = (e) => { state.distance = +e.target.value / 10; state.preset = null; renderPresets(); updateLabels(); };
+    orbitHz.oninput = (e) => { state.orbitHz = +e.target.value / 100; updateLabels(); };
+    envelopment.oninput = (e) => { state.envelopment = +e.target.value / 100; updateLabels(); };
+    reverb.oninput = (e) => { state.reverb = +e.target.value / 100; updateLabels(); };
+
+    play.onclick = () => {
       state.playing = !state.playing;
-      document.getElementById('play').textContent = state.playing ? '⏸' : '▶';
+      play.textContent = state.playing ? '⏸' : '▶';
     };
 
     document.querySelectorAll('#ab button').forEach((btn) => {
@@ -444,7 +306,6 @@
         document.querySelectorAll('#ab button').forEach((b) => b.classList.toggle('active', b === btn));
       };
     });
-
     document.querySelectorAll('#motion button').forEach((btn) => {
       btn.onclick = () => {
         state.motion = btn.dataset.motion;
@@ -454,18 +315,16 @@
 
     function toast(msg) {
       const t = document.getElementById('toast');
-      t.textContent = msg;
-      t.classList.add('show');
+      t.textContent = msg; t.classList.add('show');
       setTimeout(() => t.classList.remove('show'), 2200);
     }
-    document.getElementById('exportBtn').onclick = () => toast('Export WAV — spatial_core 尚未接线（预览 UI）');
-    document.getElementById('presetBtn').onclick = () => toast('Save Preset — 本地 JSON 下一迭代');
+    exportBtn.onclick = () => toast('Export WAV — 引擎尚未接线（UI 预览）');
+    presetBtn.onclick = () => toast('Save Preset — 下一迭代');
+    openBtn.onclick = () => toast('Open local file — Flutter/原生下一迭代');
 
-    document.getElementById('seek').oninput = (e) => {
+    seek.oninput = (e) => {
       const s = +e.target.value;
-      const m = Math.floor(s / 60).toString().padStart(2, '0');
-      const sec = (s % 60).toString().padStart(2, '0');
-      document.getElementById('t0').textContent = `${m}:${sec}`;
+      t0.textContent = `${String(Math.floor(s/60)).padStart(2,'0')}:${String(s%60).padStart(2,'0')}`;
     };
 
     const canvas = document.getElementById('orbit');
@@ -475,51 +334,34 @@
       if (state.motion === 'orbit' && state.playing && state.mode === 'spatial') {
         const t = (performance.now() - state.start) / 1000;
         let az = state.azimuth + t * state.orbitHz * 360;
-        az = ((az + 180) % 360 + 360) % 360 - 180;
-        return az;
+        return ((az + 180) % 360 + 360) % 360 - 180;
       }
       return state.azimuth;
     }
 
     function draw() {
       const w = canvas.width, h = canvas.height;
-      const c = { x: w / 2, y: h / 2 };
-      const r = Math.min(w, h) * 0.38;
-      ctx.clearRect(0, 0, w, h);
-
-      ctx.beginPath();
-      ctx.arc(c.x, c.y, r, 0, Math.PI * 2);
-      ctx.strokeStyle = 'rgba(255,255,255,0.08)';
-      ctx.lineWidth = 1.5;
-      ctx.stroke();
+      const c = { x: w/2, y: h/2 }, r = Math.min(w,h) * 0.38;
+      ctx.clearRect(0,0,w,h);
+      ctx.beginPath(); ctx.arc(c.x,c.y,r,0,Math.PI*2);
+      ctx.strokeStyle = 'rgba(255,255,255,0.1)'; ctx.lineWidth = 2; ctx.stroke();
 
       const az = visualAzimuth();
       const rad = (az - 90) * Math.PI / 180;
       const active = state.playing && state.mode === 'spatial';
+      ctx.beginPath(); ctx.arc(c.x,c.y,r,rad-1.1,rad);
+      ctx.strokeStyle = active ? 'rgba(10,132,255,0.6)' : 'rgba(10,132,255,0.25)';
+      ctx.lineWidth = 4; ctx.lineCap = 'round'; ctx.stroke();
 
-      ctx.beginPath();
-      ctx.arc(c.x, c.y, r, rad - 1.1, rad);
-      ctx.strokeStyle = active ? 'rgba(10,132,255,0.55)' : 'rgba(10,132,255,0.2)';
-      ctx.lineWidth = 3;
-      ctx.lineCap = 'round';
-      ctx.stroke();
-
-      const x = c.x + r * Math.cos(rad);
-      const y = c.y + r * Math.sin(rad);
-      ctx.beginPath();
-      ctx.arc(x, y, 12, 0, Math.PI * 2);
-      ctx.fillStyle = 'rgba(10,132,255,0.25)';
-      ctx.fill();
-      ctx.beginPath();
-      ctx.arc(x, y, 6, 0, Math.PI * 2);
-      ctx.fillStyle = '#0A84FF';
-      ctx.fill();
-
+      const x = c.x + r * Math.cos(rad), y = c.y + r * Math.sin(rad);
+      ctx.beginPath(); ctx.arc(x,y,14,0,Math.PI*2);
+      ctx.fillStyle = 'rgba(10,132,255,0.28)'; ctx.fill();
+      ctx.beginPath(); ctx.arc(x,y,7,0,Math.PI*2);
+      ctx.fillStyle = '#0A84FF'; ctx.fill();
       requestAnimationFrame(draw);
     }
 
-    syncInputs();
-    draw();
+    syncInputs(); draw();
   </script>
 </body>
 </html>

@@ -1,7 +1,8 @@
 # 音围 Spatial Player — Implementation Spec
 
 > Source of truth for UI → state → engine mapping.  
-> Mockup: [`../assets/ui-mockup.jpg`](../assets/ui-mockup.jpg)
+> Desktop mockup: [`../assets/ui-mockup.jpg`](../assets/ui-mockup.jpg)  
+> Mobile mockup: [`../assets/ui-mockup-mobile.jpg`](../assets/ui-mockup-mobile.jpg)
 
 ## 1. Product lock
 
@@ -9,12 +10,12 @@
 |------|--------|
 | Name | 音围 / Spatial Player |
 | Form | Local-file **player** → preview → confirm **Export WAV** |
-| Platform MVP | Windows desktop (Flutter); architecture ready for macOS later |
+| Platform MVP | Windows desktop first (Flutter); **iOS/Android UI locked to mobile mockup** |
 | Stack | Flutter UI + Rust `spatial_core` via `flutter_rust_bridge` |
 | Backend | None (fully offline) |
 | Sources | Local audio only (MP3 / WAV / FLAC / OGG) |
 
-## 2. UI regions (from mockup)
+## 2. Desktop UI regions (from mockup)
 
 ```
 ┌─ Title: 音围 / Spatial Player ─────────────────────────────┐
@@ -27,6 +28,29 @@
 │  status: Offline · Local file · Headphones     │ Export   │ │
 └────────────────────────────────────────────────┴──────────┘
 ```
+
+## 2b. Mobile UI regions (iOS mockup)
+
+Vertical single column (not a shrunk desktop):
+
+```
+音围 / Spatial Player          [Open file]
+        Orbit visualizer (hero)
+   ┌─ NowPlaying card ─────────┐
+   │ art · title · scrubber    │
+   │ prev / play / next        │
+   └───────────────────────────┘
+   Original | Spatial
+   Position 3×3 chips
+   Azimuth / Elevation / Distance
+   Fixed | Orbit
+   Orbit Speed / Envelopment / Reverb
+   Offline · Local file · Headphones
+   [Export WAV]
+   Save Preset
+```
+
+Same state fields and engine mapping as desktop (§2.1–2.2). Mobile differences are layout only.
 
 ### 2.1 Now Playing (center)
 
