@@ -21,11 +21,11 @@ class EngineBootstrap {
         'Native · spatial_core',
       );
     }
-    final why = YinweiBindings.loadError ?? 'DLL not found';
+    final why = YinweiBindings.loadError ?? 'spatial_core.dll 未找到';
     return EngineBootstrap._(
       MockEngine(),
       EngineBackend.mock,
-      'Mock · $why',
+      'Mock · 请运行 build_native_windows.ps1 · $why',
     );
   }
 }
