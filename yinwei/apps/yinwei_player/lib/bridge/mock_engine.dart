@@ -3,12 +3,12 @@ import 'package:yinwei_player/models/spatial_params.dart';
 
 /// In-Dart stand-in when native `spatial_core` is not linked (CI / UI polish).
 class MockEngine implements EngineApi {
-  TrackMeta? _track;
+  TrackMeta? _track = TrackMeta.demo;
   SpatialParams _params = SpatialParams();
   PlaybackMode _mode = PlaybackMode.spatial;
   bool _playing = false;
   bool _dirty = true;
-  Duration _position = Duration.zero;
+  Duration _position = const Duration(minutes: 1, seconds: 42);
   DateTime? _playStarted;
   Duration _playAnchor = Duration.zero;
 
@@ -108,15 +108,9 @@ class MockEngine implements EngineApi {
 
   @override
   Future<double> currentAzimuthDeg() async {
-    if (_params.motion == MotionMode.orbit && _playing) {
-      final t = DateTime.now().millisecondsSinceEpoch / 1000.0;
-      var az = _params.azimuthDeg + t * _params.orbitHz * 360.0;
-      az %= 360.0;
-      if (az > 180) az -= 360;
-      if (az <= -180) az += 360;
-      return az;
-    }
-    return _params.azimuthDeg;
+    // Drive orbit from playhead so seek + play both move the left sphere.
+    final pos = await position();
+    return _params.visualAzimuthDeg(pos);
   }
 
   @override

@@ -37,13 +37,15 @@ class EngineController extends ChangeNotifier {
 
   Future<void> setParams(SpatialParams next) async {
     params = next.copy();
-    notifyListeners();
     await _engine.setParams(params);
+    // Keep left orbit dot in sync with sidebar (presets / azimuth / orbit).
+    azimuthDeg = params.visualAzimuthDeg(position);
+    notifyListeners();
   }
 
   Future<void> applyPreset(PositionPreset preset) async {
     params = await _engine.applyPreset(preset);
-    azimuthDeg = params.azimuthDeg;
+    azimuthDeg = params.visualAzimuthDeg(position);
     notifyListeners();
   }
 
@@ -89,6 +91,7 @@ class EngineController extends ChangeNotifier {
   Future<void> seek(Duration d) async {
     await _engine.seek(d);
     position = d;
+    azimuthDeg = await _engine.currentAzimuthDeg();
     notifyListeners();
   }
 
@@ -105,10 +108,14 @@ class EngineController extends ChangeNotifier {
 
   void _startTick() {
     _tick?.cancel();
-    _tick = Timer.periodic(const Duration(milliseconds: 100), (_) async {
+    _tick = Timer.periodic(const Duration(milliseconds: 50), (_) async {
       if (!playing) return;
       position = await _engine.position();
-      azimuthDeg = await _engine.currentAzimuthDeg();
+      // Prefer engine azimuth; fall back to local orbit math for snappy UI.
+      final engineAz = await _engine.currentAzimuthDeg();
+      azimuthDeg = params.motion == MotionMode.orbit
+          ? params.visualAzimuthDeg(position)
+          : engineAz;
       playing = await _engine.isPlaying();
       if (!playing) _tick?.cancel();
       notifyListeners();

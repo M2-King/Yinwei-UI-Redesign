@@ -58,7 +58,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
                         padding: const EdgeInsets.fromLTRB(28, 12, 12, 12),
                         child: OrbitVisualizer(
                           azimuthDeg: c.azimuthDeg,
-                          active: c.playing && c.mode == PlaybackMode.spatial,
+                          elevationDeg: c.params.elevationDeg,
+                          orbiting: c.params.motion == MotionMode.orbit &&
+                              c.mode == PlaybackMode.spatial,
+                          active: c.mode == PlaybackMode.spatial,
                         ),
                       ),
                     ),
@@ -120,8 +123,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Opened via EngineController (MockEngine) — swap NativeEngine after FRB'),
+          content: Text('已打开（演示引擎 Mock）— 真 HRTF 需接 NativeEngine'),
           behavior: SnackBarBehavior.floating,
+          duration: Duration(seconds: 2),
         ),
       );
     } catch (e) {
