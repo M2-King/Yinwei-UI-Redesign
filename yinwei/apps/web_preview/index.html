@@ -43,10 +43,15 @@
     .nav h1 { font-size: 28px; font-weight: 700; letter-spacing: -0.4px; line-height: 1.1; }
     .nav .sub { font-size: 13px; color: var(--muted); margin-top: 2px; }
     .nav .open {
-      width: 36px; height: 36px; border-radius: 50%;
-      border: 0; background: var(--card); color: var(--accent);
-      font-size: 18px; display: grid; place-items: center;
+      width: 40px; height: 40px; border-radius: 50%;
+      border: 1px solid rgba(255,255,255,0.08);
+      background: linear-gradient(180deg, #2a2a2c 0%, #1c1c1e 100%);
+      color: var(--accent);
+      display: grid; place-items: center;
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.12), 0 4px 12px rgba(0,0,0,0.35);
     }
+    .nav .open svg { width: 18px; height: 18px; }
+    .nav .open:active { transform: scale(0.94); }
     .viz-wrap {
       display: flex; justify-content: center; padding: 4px 0 8px;
     }
@@ -76,25 +81,79 @@
       font-size: 11px; color: var(--muted); margin-top: 4px;
     }
     .transport {
-      display: flex; justify-content: center; align-items: center; gap: 28px;
-      margin-top: 10px;
+      display: flex; justify-content: center; align-items: center; gap: 18px;
+      margin-top: 14px;
     }
-    .transport button {
-      border: 0; background: transparent; color: var(--text);
-      font-size: 22px; width: 44px; height: 44px;
+    .ctrl {
+      width: 48px; height: 48px; border-radius: 50%;
+      border: 1px solid rgba(255,255,255,0.08);
+      background: linear-gradient(180deg, #2c2c2e 0%, #1a1a1c 100%);
+      color: #fff;
+      display: grid; place-items: center;
+      box-shadow:
+        inset 0 1px 0 rgba(255,255,255,0.14),
+        0 6px 16px rgba(0,0,0,0.4);
+      transition: transform .12s ease, box-shadow .12s ease, filter .12s ease;
     }
-    .transport .play {
-      width: 52px; height: 52px; border-radius: 50%;
-      background: var(--elevated); font-size: 24px;
+    .ctrl svg { width: 20px; height: 20px; display: block; }
+    .ctrl:active {
+      transform: scale(0.92);
+      box-shadow: inset 0 2px 6px rgba(0,0,0,0.45);
+    }
+    .ctrl.play {
+      width: 64px; height: 64px;
+      background: linear-gradient(180deg, #3a3a3e 0%, #232326 55%, #1a1a1c 100%);
+      border-color: rgba(255,255,255,0.14);
+      box-shadow:
+        inset 0 1px 0 rgba(255,255,255,0.2),
+        0 0 0 1px rgba(10,132,255,0.15),
+        0 10px 28px rgba(0,0,0,0.5),
+        0 0 24px rgba(10,132,255,0.18);
+    }
+    .ctrl.play svg { width: 26px; height: 26px; }
+    .ctrl.play.is-playing {
+      background: linear-gradient(180deg, #1a6fd6 0%, #0A84FF 55%, #0660c0 100%);
+      border-color: rgba(255,255,255,0.22);
+      box-shadow:
+        inset 0 1px 0 rgba(255,255,255,0.28),
+        0 10px 28px rgba(10,132,255,0.35),
+        0 0 28px rgba(10,132,255,0.35);
     }
     .seg {
-      display: flex; background: var(--elevated); border-radius: 10px; padding: 3px; gap: 2px;
+      position: relative;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      background: rgba(44,44,46,0.92);
+      border-radius: 14px;
+      padding: 4px;
+      border: 1px solid rgba(255,255,255,0.06);
+      box-shadow: inset 0 1px 2px rgba(0,0,0,0.45);
+      isolation: isolate;
     }
+    .seg::before {
+      content: "";
+      position: absolute;
+      top: 4px; bottom: 4px; left: 4px;
+      width: calc(50% - 4px);
+      border-radius: 11px;
+      background: linear-gradient(180deg, #2f8fff 0%, #0A84FF 55%, #0770db 100%);
+      box-shadow:
+        inset 0 1px 0 rgba(255,255,255,0.28),
+        0 4px 12px rgba(10,132,255,0.35);
+      transition: transform .22s cubic-bezier(.2,.8,.2,1);
+      z-index: 0;
+    }
+    .seg[data-active="right"]::before { transform: translateX(100%); }
     .seg button {
-      flex: 1; border: 0; background: transparent; color: var(--muted);
-      font-size: 14px; font-weight: 600; padding: 10px 8px; border-radius: 8px;
+      position: relative; z-index: 1;
+      border: 0; background: transparent;
+      color: rgba(255,255,255,0.45);
+      font-size: 14px; font-weight: 600;
+      padding: 12px 8px; border-radius: 11px;
+      transition: color .18s ease;
     }
-    .seg button.active { background: var(--accent); color: #fff; }
+    .seg button.active { color: #fff; }
+    .seg button:active { transform: scale(0.98); }
     .section-label {
       font-size: 15px; font-weight: 600; margin: 4px 0 8px;
     }
@@ -102,11 +161,21 @@
       display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px;
     }
     .chip {
-      border: 0; background: var(--elevated); color: var(--muted);
+      border: 1px solid rgba(255,255,255,0.06);
+      background: linear-gradient(180deg, #2c2c2e 0%, #222224 100%);
+      color: var(--muted);
       border-radius: 12px; min-height: 44px; font-size: 12px; font-weight: 500;
       padding: 8px 4px;
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.08);
+      transition: transform .1s ease, background .15s ease, color .15s ease;
     }
-    .chip.active { background: var(--accent); color: #fff; }
+    .chip:active { transform: scale(0.96); }
+    .chip.active {
+      background: linear-gradient(180deg, #2f8fff 0%, #0A84FF 60%, #066fd0 100%);
+      color: #fff;
+      border-color: rgba(255,255,255,0.18);
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.25), 0 4px 12px rgba(10,132,255,0.3);
+    }
     .sliders { display: flex; flex-direction: column; gap: 6px; }
     .row {
       display: flex; justify-content: space-between; font-size: 13px; color: var(--muted);
@@ -156,7 +225,9 @@
         <h1>音围</h1>
         <div class="sub">Spatial Player</div>
       </div>
-      <button class="open" id="openBtn" type="button" aria-label="Open file">📁</button>
+      <button class="open" id="openBtn" type="button" aria-label="Open file">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7.5A2.5 2.5 0 0 1 5.5 5H9l2 2h7.5A2.5 2.5 0 0 1 21 9.5v7A2.5 2.5 0 0 1 18.5 19h-13A2.5 2.5 0 0 1 3 16.5v-9Z"/></svg>
+      </button>
     </header>
 
     <div class="viz-wrap">
@@ -165,7 +236,9 @@
 
     <section class="card">
       <div class="np">
-        <div class="art">♪</div>
+        <div class="art">
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="12" r="9"/><path d="M10 8.5v7l6-3.5-6-3.5Z" fill="currentColor" stroke="none"/></svg>
+        </div>
         <div>
           <div class="np-title">Across the Room</div>
           <div class="np-artist">ODESZA</div>
@@ -176,15 +249,21 @@
         <div class="times"><span id="t0">01:42</span><span>03:51</span></div>
       </div>
       <div class="transport">
-        <button type="button">⏮</button>
-        <button type="button" class="play" id="play">⏸</button>
-        <button type="button">⏭</button>
+        <button type="button" class="ctrl" aria-label="Previous">
+          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 6h2.2v12H6V6Zm3.2 6 8.8 5.4V6.6L9.2 12Z"/></svg>
+        </button>
+        <button type="button" class="ctrl play is-playing" id="play" aria-label="Pause">
+          <svg id="playIcon" viewBox="0 0 24 24" fill="currentColor"><path d="M8 6.5h2.8v11H8v-11Zm5.2 0H16v11h-2.8v-11Z"/></svg>
+        </button>
+        <button type="button" class="ctrl" aria-label="Next">
+          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M15.8 6H18v12h-2.2V6ZM6 17.4 14.8 12 6 6.6v10.8Z"/></svg>
+        </button>
       </div>
     </section>
 
-    <div class="seg" id="ab">
-      <button type="button" data-mode="original">Original</button>
-      <button type="button" class="active" data-mode="spatial">Spatial</button>
+    <div class="seg" id="ab" data-active="right">
+      <button type="button" data-mode="original" data-side="left">Original</button>
+      <button type="button" class="active" data-mode="spatial" data-side="right">Spatial</button>
     </div>
 
     <div>
@@ -207,9 +286,9 @@
       </div>
     </div>
 
-    <div class="seg" id="motion">
-      <button type="button" class="active" data-motion="fixed">Fixed</button>
-      <button type="button" data-motion="orbit">Orbit</button>
+    <div class="seg" id="motion" data-active="left">
+      <button type="button" class="active" data-motion="fixed" data-side="left">Fixed</button>
+      <button type="button" data-motion="orbit" data-side="right">Orbit</button>
     </div>
 
     <div class="sliders">
@@ -295,23 +374,29 @@
     envelopment.oninput = (e) => { state.envelopment = +e.target.value / 100; updateLabels(); };
     reverb.oninput = (e) => { state.reverb = +e.target.value / 100; updateLabels(); };
 
+    const ICON_PAUSE = '<svg id="playIcon" viewBox="0 0 24 24" fill="currentColor"><path d="M8 6.5h2.8v11H8v-11Zm5.2 0H16v11h-2.8v-11Z"/></svg>';
+    const ICON_PLAY = '<svg id="playIcon" viewBox="0 0 24 24" fill="currentColor"><path d="M9 6.8v10.4L17.2 12 9 6.8Z"/></svg>';
+
     play.onclick = () => {
       state.playing = !state.playing;
-      play.textContent = state.playing ? '⏸' : '▶';
+      play.classList.toggle('is-playing', state.playing);
+      play.setAttribute('aria-label', state.playing ? 'Pause' : 'Play');
+      play.innerHTML = state.playing ? ICON_PAUSE : ICON_PLAY;
     };
 
-    document.querySelectorAll('#ab button').forEach((btn) => {
-      btn.onclick = () => {
-        state.mode = btn.dataset.mode;
-        document.querySelectorAll('#ab button').forEach((b) => b.classList.toggle('active', b === btn));
-      };
-    });
-    document.querySelectorAll('#motion button').forEach((btn) => {
-      btn.onclick = () => {
-        state.motion = btn.dataset.motion;
-        document.querySelectorAll('#motion button').forEach((b) => b.classList.toggle('active', b === btn));
-      };
-    });
+    function wireSeg(root, onPick) {
+      root.querySelectorAll('button').forEach((btn) => {
+        btn.onclick = () => {
+          root.querySelectorAll('button').forEach((b) => b.classList.remove('active'));
+          btn.classList.add('active');
+          root.dataset.active = btn.dataset.side;
+          onPick(btn);
+        };
+      });
+    }
+
+    wireSeg(document.getElementById('ab'), (btn) => { state.mode = btn.dataset.mode; });
+    wireSeg(document.getElementById('motion'), (btn) => { state.motion = btn.dataset.motion; });
 
     function toast(msg) {
       const t = document.getElementById('toast');
