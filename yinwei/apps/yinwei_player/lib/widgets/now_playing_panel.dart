@@ -27,82 +27,105 @@ class NowPlayingPanel extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
-    return Column(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        Container(
-          width: 200,
-          height: 200,
-          decoration: BoxDecoration(
-            color: YinweiColors.panelElevated,
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: YinweiColors.hairline),
-            image: track.coverPath != null
-                ? DecorationImage(
-                    image: AssetImage(track.coverPath!),
-                    fit: BoxFit.cover,
-                  )
-                : null,
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final art = constraints.maxHeight < 560
+            ? (constraints.maxHeight < 480 ? 140.0 : 170.0)
+            : 200.0;
+        final gap = constraints.maxHeight < 560 ? 16.0 : 26.0;
+
+        return Center(
+          child: SingleChildScrollView(
+            physics: const ClampingScrollPhysics(),
+            child: ConstrainedBox(
+              constraints: BoxConstraints(minHeight: constraints.maxHeight),
+              child: IntrinsicHeight(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Container(
+                      width: art,
+                      height: art,
+                      decoration: BoxDecoration(
+                        color: YinweiColors.panelElevated,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: YinweiColors.hairline),
+                        image: track.coverPath != null
+                            ? DecorationImage(
+                                image: AssetImage(track.coverPath!),
+                                fit: BoxFit.cover,
+                              )
+                            : null,
+                      ),
+                      child: track.coverPath == null
+                          ? Icon(CupertinoIcons.music_note_2,
+                              size: art * 0.26,
+                              color: YinweiColors.textSecondary)
+                          : null,
+                    ),
+                    SizedBox(height: gap),
+                    Text(
+                      track.title,
+                      style: theme.textTheme.headlineMedium
+                          ?.copyWith(letterSpacing: -0.4),
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 6),
+                    Text(track.artist, style: theme.textTheme.bodySmall),
+                    if (track.album.isNotEmpty) ...[
+                      const SizedBox(height: 2),
+                      Text(track.album, style: theme.textTheme.labelSmall),
+                    ],
+                    SizedBox(height: gap),
+                    _Scrubber(
+                      position: position,
+                      duration: track.duration,
+                      onSeek: onSeek,
+                    ),
+                    const SizedBox(height: 16),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        IconButton(
+                          onPressed: () {},
+                          icon: const Icon(CupertinoIcons.backward_fill, size: 20),
+                          color: YinweiColors.textSecondary,
+                        ),
+                        const SizedBox(width: 10),
+                        IconButton.filled(
+                          style: IconButton.styleFrom(
+                            backgroundColor: YinweiColors.panelElevated,
+                            foregroundColor: YinweiColors.textPrimary,
+                            minimumSize: const Size(52, 52),
+                          ),
+                          onPressed: onPlayPause,
+                          icon: Icon(
+                            isPlaying
+                                ? CupertinoIcons.pause_fill
+                                : CupertinoIcons.play_fill,
+                            size: 24,
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        IconButton(
+                          onPressed: () {},
+                          icon: const Icon(CupertinoIcons.forward_fill, size: 20),
+                          color: YinweiColors.textSecondary,
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 20),
+                    _ModeSegmented(
+                      mode: playbackMode,
+                      onChanged: onModeChanged,
+                    ),
+                  ],
+                ),
+              ),
+            ),
           ),
-          child: track.coverPath == null
-              ? const Icon(CupertinoIcons.music_note_2,
-                  size: 52, color: YinweiColors.textSecondary)
-              : null,
-        ),
-        const SizedBox(height: 26),
-        Text(
-          track.title,
-          style: theme.textTheme.headlineMedium?.copyWith(letterSpacing: -0.4),
-          textAlign: TextAlign.center,
-        ),
-        const SizedBox(height: 6),
-        Text(track.artist, style: theme.textTheme.bodySmall),
-        if (track.album.isNotEmpty) ...[
-          const SizedBox(height: 2),
-          Text(track.album, style: theme.textTheme.labelSmall),
-        ],
-        const SizedBox(height: 26),
-        _Scrubber(
-          position: position,
-          duration: track.duration,
-          onSeek: onSeek,
-        ),
-        const SizedBox(height: 16),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            IconButton(
-              onPressed: () {},
-              icon: const Icon(CupertinoIcons.backward_fill, size: 20),
-              color: YinweiColors.textSecondary,
-            ),
-            const SizedBox(width: 10),
-            IconButton.filled(
-              style: IconButton.styleFrom(
-                backgroundColor: YinweiColors.panelElevated,
-                foregroundColor: YinweiColors.textPrimary,
-                minimumSize: const Size(52, 52),
-              ),
-              onPressed: onPlayPause,
-              icon: Icon(
-                isPlaying ? CupertinoIcons.pause_fill : CupertinoIcons.play_fill,
-                size: 24,
-              ),
-            ),
-            const SizedBox(width: 10),
-            IconButton(
-              onPressed: () {},
-              icon: const Icon(CupertinoIcons.forward_fill, size: 20),
-              color: YinweiColors.textSecondary,
-            ),
-          ],
-        ),
-        const SizedBox(height: 20),
-        _ModeSegmented(
-          mode: playbackMode,
-          onChanged: onModeChanged,
-        ),
-      ],
+        );
+      },
     );
   }
 }
