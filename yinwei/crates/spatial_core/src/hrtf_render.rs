@@ -37,8 +37,40 @@ pub fn spherical_to_vec(azimuth_deg: f32, elevation_deg: f32) -> Vec3 {
 }
 
 fn distance_gain(distance: f32) -> f32 {
-    let d = distance.max(0.1);
-    (1.0 / d).powf(1.5).min(2.0)
+    // Gentler inverse-distance from a 1.5 m reference.
+    // Far should not only sound "quieter" — pair with air LP + reverb below.
+    let d = distance.clamp(0.5, 10.0);
+    (1.5 / d).clamp(0.22, 1.25)
+}
+
+/// One-pole coefficient for air absorption (higher = brighter).
+fn air_absorption_coeff(distance: f32) -> f32 {
+    let t = ((distance - 0.5) / 9.5).clamp(0.0, 1.0);
+    0.96 - 0.42 * t
+}
+
+/// Wet mix grows with distance so "far" feels more room / less dry proximity.
+fn distance_reverb_mix(base: f32, distance: f32) -> f32 {
+    let t = ((distance - 0.5) / 9.5).clamp(0.0, 1.0);
+    (base * (0.3 + 1.05 * t) + 0.1 * t).clamp(0.0, 0.72)
+}
+
+struct OnePoleLp {
+    z_l: f32,
+    z_r: f32,
+}
+
+impl OnePoleLp {
+    fn new() -> Self {
+        Self { z_l: 0.0, z_r: 0.0 }
+    }
+
+    fn process(&mut self, l: f32, r: f32, coeff: f32) -> (f32, f32) {
+        let c = coeff.clamp(0.05, 0.99);
+        self.z_l += c * (l - self.z_l);
+        self.z_r += c * (r - self.z_r);
+        (self.z_l, self.z_r)
+    }
 }
 
 pub struct HrtfRenderer {
@@ -88,6 +120,7 @@ impl HrtfRenderer {
             spherical_to_vec(params.azimuth_deg + 110.0, params.elevation_deg * 0.5);
         let mut prev_dist = params.distance_m;
         let mut phase = 0.0f32;
+        let mut air_lp = OnePoleLp::new();
 
         let num_chunks = (total + CHUNK - 1) / CHUNK;
         let dt = CHUNK as f32 / self.sample_rate as f32;
@@ -112,12 +145,7 @@ impl HrtfRenderer {
             };
 
             // Fixed: Mid at selected 音位. Orbit: Mid holds base az, Side wraps around.
-            let mid_az = params.azimuth_deg
-                + if params.motion == MotionMode::Fixed {
-                    0.0
-                } else {
-                    0.0
-                };
+            let mid_az = params.azimuth_deg;
             let side_az = params.azimuth_deg + 120.0 + orbit_offset;
 
             let new_mid_pos = spherical_to_vec(mid_az, params.elevation_deg);
@@ -125,6 +153,8 @@ impl HrtfRenderer {
             let new_dist = params.distance_m;
             let prev_g = distance_gain(prev_dist);
             let new_g = distance_gain(new_dist);
+            let air_c = air_absorption_coeff(new_dist);
+            let wet = distance_reverb_mix(params.reverb_mix, new_dist);
 
             let mut bass = vec![0.0f32; CHUNK];
             let mut mid_high = vec![0.0f32; CHUNK];
@@ -214,11 +244,12 @@ impl HrtfRenderer {
                 let (sl, sr) = side_out[i];
                 let left = ml + sl + bass[i] * g;
                 let right = mr + sr + bass[i] * g;
-                let (rl, rr) = self.reverb.process(left, right);
-                let mix = params.reverb_mix;
+                // Air absorption: high frequencies fall off with distance.
+                let (dl, dr) = air_lp.process(left, right, air_c);
+                let (rl, rr) = self.reverb.process(dl, dr);
                 output[start + i] = (
-                    left * (1.0 - mix) + rl * mix,
-                    right * (1.0 - mix) + rr * mix,
+                    dl * (1.0 - wet) + rl * wet,
+                    dr * (1.0 - wet) + rr * wet,
                 );
             }
 
@@ -229,5 +260,26 @@ impl HrtfRenderer {
             cb(1.0);
         }
         Ok(output)
+    }
+}
+
+#[cfg(test)]
+mod distance_tests {
+    use super::*;
+
+    #[test]
+    fn farther_is_quieter_but_not_extreme() {
+        let near = distance_gain(0.5);
+        let mid = distance_gain(2.0);
+        let far = distance_gain(8.0);
+        assert!(near > mid && mid > far);
+        assert!(far > 0.2);
+        assert!(near < 1.3);
+    }
+
+    #[test]
+    fn farther_has_more_reverb_and_darker_air() {
+        assert!(air_absorption_coeff(0.5) > air_absorption_coeff(8.0));
+        assert!(distance_reverb_mix(0.2, 8.0) > distance_reverb_mix(0.2, 0.5));
     }
 }

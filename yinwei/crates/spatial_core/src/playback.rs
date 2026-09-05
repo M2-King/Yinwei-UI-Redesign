@@ -47,6 +47,21 @@ impl RealtimePlayer {
         Ok(())
     }
 
+    /// Hot-swap rendered PCM while keeping the playhead (live param updates).
+    pub fn swap_frames_keep_ms(
+        &self,
+        frames: Vec<StereoFrame>,
+        keep_ms: u64,
+    ) -> Result<(), SpatialError> {
+        let sr = self.sample_rate.load(Ordering::Relaxed).max(1);
+        let frame = keep_ms.saturating_mul(sr) / 1000;
+        let mut g = self.frames.lock().map_err(|_| SpatialError::LockPoisoned)?;
+        let len = frames.len() as u64;
+        *g = frames;
+        self.cursor.store(frame.min(len), Ordering::Relaxed);
+        Ok(())
+    }
+
     pub fn frame_count(&self) -> Result<usize, SpatialError> {
         let g = self.frames.lock().map_err(|_| SpatialError::LockPoisoned)?;
         Ok(g.len())

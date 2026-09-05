@@ -66,13 +66,28 @@ impl PlayerSession {
         &self,
         on_progress: Option<&mut dyn FnMut(f32)>,
     ) -> Result<(), SpatialError> {
+        let was_playing = self.player.is_playing();
         let (sr, frames) = self.engine.render_frames(on_progress)?;
         self.player.set_sample_rate(sr);
         let pos = self.player.position_ms();
-        self.player.load_frames(frames)?;
-        let _ = self.player.seek_ms(pos);
+        // Keep playhead across live rebuilds so Spatial params apply mid-song.
+        self.player.swap_frames_keep_ms(frames, pos)?;
         self.preview_dirty.store(false, Ordering::Relaxed);
         self.has_preview.store(true, Ordering::Relaxed);
+        if was_playing {
+            // Resume flag after buffer swap (stream may already be open).
+            let _ = self.player.play();
+        }
+        Ok(())
+    }
+
+    /// Apply params; if currently playing, rebuild preview so the new 音位 is audible
+    /// without requiring pause → play.
+    pub fn set_params_live(&self, params: SpatialParams) -> Result<(), SpatialError> {
+        self.set_params(params)?;
+        if self.player.is_playing() {
+            self.rebuild_preview(None)?;
+        }
         Ok(())
     }
 

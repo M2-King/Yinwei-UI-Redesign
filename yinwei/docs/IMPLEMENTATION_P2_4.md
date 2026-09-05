@@ -52,3 +52,18 @@ If status shows Mock: DLL missing — re-run the build script, then restart the 
 ## Next
 
 **P2.5** — richer export file dialog / progress UX polish (open picker already minimal in P2.4).
+
+## P2.4.1 follow-ups (distance + live 音位)
+
+| Issue | Fix |
+|-------|-----|
+| Distance felt like volume only | Softer inverse gain + air absorption LP + reverb wet↑ with distance |
+| Spatial pose needed pause→play | Debounced live `rebuildPreview` while playing; buffer hot-swap keeps playhead |
+
+Rebuild DLL after pull:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File tools\build_native_windows.ps1
+```
+
+Status bar bridge id should show `p2.4.1-live`.
