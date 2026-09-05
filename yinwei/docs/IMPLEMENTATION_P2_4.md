@@ -61,6 +61,16 @@ powershell -ExecutionPolicy Bypass -File tools\build_native_windows.ps1
 
 Status bar should show `p2.4.2-mp4`.
 
+## P2.4.3 — MP4 pitch / “电子音” fix
+
+Extractor is still **Symphonia** (`isomp4` + AAC), not FFmpeg. Video-only chipmunk / harsh playback came from decode bugs:
+
+1. **Mono AAC treated as stereo** when channel count was taken only from incomplete container params (`unwrap_or(2)`), so adjacent mono samples were paired as L/R → ~2× speed + metallic timbre. Now channel count / rate come from the **decoded** `AudioBuffer` spec.
+2. **`SampleBuffer` not grown** when later AAC packets needed more samples than the first packet (capacity is in *samples*, buffer size is in *frames*).
+3. Realtime cpal stream no longer always forces the device default rate over content 44.1 kHz.
+
+Rebuild DLL after pull. Status bar: `p2.4.3-mp4-fix`.
+
 ## Next
 
 **P2.5** — richer export file dialog / progress UX polish (open picker already minimal in P2.4).

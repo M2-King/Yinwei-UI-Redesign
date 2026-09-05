@@ -122,7 +122,23 @@ impl RealtimePlayer {
             .map_err(|e| SpatialError::AudioDevice(e.to_string()))?;
 
         let sample_format = supported.sample_format();
-        let config: StreamConfig = supported.into();
+        let mut config: StreamConfig = supported.clone().into();
+        // Keep content PCM rate when the device allows it. Blindly adopting the
+        // device default (often 48 kHz) while buffers are 44.1 kHz pitches up
+        // every file by ~9%.
+        let content_sr = self.sample_rate.load(Ordering::Relaxed).max(1) as u32;
+        if let Ok(ranges) = device.supported_output_configs() {
+            for range in ranges {
+                if range.channels() == config.channels
+                    && range.sample_format() == sample_format
+                    && range.min_sample_rate().0 <= content_sr
+                    && range.max_sample_rate().0 >= content_sr
+                {
+                    config.sample_rate = cpal::SampleRate(content_sr);
+                    break;
+                }
+            }
+        }
         self.sample_rate
             .store(config.sample_rate.0 as u64, Ordering::Relaxed);
 

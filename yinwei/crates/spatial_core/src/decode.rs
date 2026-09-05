@@ -52,16 +52,15 @@ pub fn load_audio(path: &Path) -> Result<DecodedAudio, SpatialError> {
     // MP4/MOV/M4A often list a video track first — pick the first *audio* track.
     let track = select_audio_track(format.as_ref())?;
     let track_id = track.id;
-    let sample_rate = track
-        .codec_params
-        .sample_rate
-        .ok_or_else(|| SpatialError::Decode("audio track missing sample rate".into()))?;
-    let channels = track
+
+    // Codec params can be incomplete for AAC-in-MP4 until the first frame is decoded.
+    // Prefer rate/channels from the decoded AudioBuffer spec once available.
+    let mut src_rate = track.codec_params.sample_rate;
+    let mut src_channels = track
         .codec_params
         .channels
         .map(|c| c.count())
-        .unwrap_or(2)
-        .max(1);
+        .unwrap_or(0);
 
     let mut decoder = symphonia::default::get_codecs()
         .make(&track.codec_params, &DecoderOptions::default())
@@ -71,7 +70,7 @@ pub fn load_audio(path: &Path) -> Result<DecodedAudio, SpatialError> {
             ))
         })?;
 
-    let mut mono_or_interleaved = Vec::new();
+    let mut interleaved = Vec::new();
     let mut sample_buf: Option<SampleBuffer<f32>> = None;
 
     loop {
@@ -97,14 +96,25 @@ pub fn load_audio(path: &Path) -> Result<DecodedAudio, SpatialError> {
 
         match decoder.decode(&packet) {
             Ok(decoded) => {
-                if sample_buf.is_none() {
-                    let spec = *decoded.spec();
-                    let duration = decoded.capacity() as u64;
-                    sample_buf = Some(SampleBuffer::new(duration, spec));
+                let spec = *decoded.spec();
+                // Trust decoded stream metadata over container hints.
+                src_rate = Some(spec.rate);
+                src_channels = spec.channels.count().max(1);
+
+                // SampleBuffer::capacity() is in *samples*, AudioBuffer::capacity() is in *frames*.
+                // Comparing them directly prevented growth → truncated AAC packets → chipmunk/fast audio.
+                let need_samples = decoded.capacity() * src_channels;
+                let recreate = sample_buf
+                    .as_ref()
+                    .map(|b| b.capacity() < need_samples)
+                    .unwrap_or(true);
+                if recreate {
+                    sample_buf = Some(SampleBuffer::new(decoded.capacity() as u64, spec));
                 }
+
                 if let Some(buf) = sample_buf.as_mut() {
                     buf.copy_interleaved_ref(decoded);
-                    mono_or_interleaved.extend_from_slice(buf.samples());
+                    interleaved.extend_from_slice(buf.samples());
                 }
             }
             Err(SymphoniaError::DecodeError(_)) => continue,
@@ -112,13 +122,18 @@ pub fn load_audio(path: &Path) -> Result<DecodedAudio, SpatialError> {
         }
     }
 
-    if mono_or_interleaved.is_empty() {
+    if interleaved.is_empty() {
         return Err(SpatialError::Decode(
             "no audio samples decoded — file may be video-only or DRM-protected".into(),
         ));
     }
 
-    let stereo = to_stereo(&mono_or_interleaved, channels);
+    let sample_rate = src_rate.ok_or_else(|| {
+        SpatialError::Decode("could not determine audio sample rate from stream".into())
+    })?;
+    let channels = src_channels.max(1);
+
+    let stereo = to_stereo(&interleaved, channels);
     let frames = if sample_rate == TARGET_RATE {
         stereo
     } else {
@@ -294,11 +309,39 @@ mod decode_tests {
         let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("assets/test_clip.mp4");
         assert!(path.exists(), "missing test fixture {:?}", path);
         let decoded = load_audio(&path).expect("mp4 audio extract");
-        // ~0.4s @ 44.1k ≈ 17640 frames
+        // Fixture is ~0.4s mono AAC @ 44.1k → ~17640 stereo frames after upmix.
+        let secs = decoded.frames.len() as f64 / decoded.sample_rate as f64;
         assert!(
-            decoded.frames.len() > 8_000,
-            "got {} frames",
+            (0.30..=0.55).contains(&secs),
+            "expected ~0.4s, got {secs:.3}s ({} frames) — mono-as-stereo would be ~0.2s",
             decoded.frames.len()
+        );
+    }
+
+    #[test]
+    fn mp4_48k_stereo_duration_is_sane() {
+        let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("assets/test_clip_48k_stereo.mp4");
+        if !path.exists() {
+            eprintln!("skip missing fixture {:?}", path);
+            return;
+        }
+        let d = load_audio(&path).expect("decode 48k mp4");
+        let secs = d.frames.len() as f64 / d.sample_rate as f64;
+        assert!(
+            (0.90..=1.15).contains(&secs),
+            "expected ~1s, got {secs:.3}s"
+        );
+    }
+
+    #[test]
+    fn mp4_mono_aac_is_not_halved() {
+        // Regression: treating mono AAC as stereo halves duration and sounds like chipmunk/电子音.
+        let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("assets/test_clip.mp4");
+        let d = load_audio(&path).expect("decode mono mp4");
+        let secs = d.frames.len() as f64 / d.sample_rate as f64;
+        assert!(
+            secs > 0.30,
+            "mono misread as stereo → ~2x speed; got {secs:.3}s"
         );
     }
 }
