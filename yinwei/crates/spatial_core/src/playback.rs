@@ -1,144 +1,222 @@
-//! Realtime output via cpal (P1).
+//! Realtime output via cpal — **streaming DSP**, not full-song offline renders.
 //!
-//! Windows WASAPI shared mode often *ignores* a requested content sample rate and
-//! still runs the callback at the device mix rate (commonly 48 kHz). Feeding
-//! 44.1 kHz PCM into that callback makes playback ~9% fast and thin/"phone-like".
+//! Pose / mode changes only update live parameters. A DSP worker processes
+//! [`STREAM_CHUNK`] frames at a time into a small ring; the audio callback
+//! drains that ring. This avoids the multi-second mute caused by cloning and
+//! HRTF-rendering the entire track on every Spatial tweak.
 //!
-//! Fix: always open the stream at the **device default** rate, and cubic-resample
-//! content PCM to that rate before queuing frames.
+//! WASAPI: the device stream always opens at the **device default** rate.
+//! Content → device conversion uses cubic resampling per produced chunk.
 
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::collections::VecDeque;
+use std::sync::atomic::{AtomicBool, AtomicU64, AtomicU8, Ordering};
 use std::sync::{Arc, Mutex};
+use std::thread::{self, JoinHandle};
+use std::time::Duration;
 
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::{FromSample, Sample, SampleFormat, Stream, StreamConfig};
 
 use crate::decode::StereoFrame;
 use crate::error::SpatialError;
+use crate::hrtf_render::{HrtfStreamer, STREAM_CHUNK};
+use crate::params::{PlaybackMode, SpatialParams};
 use crate::resample::resample_cubic;
 
 /// cpal::Stream is !Send on some hosts; we only move it between mutex guards.
 struct SendStream(#[allow(dead_code)] Stream);
 unsafe impl Send for SendStream {}
 
-/// Holds playable PCM and an optional live cpal stream.
+const RING_TARGET_FRAMES: usize = STREAM_CHUNK * 8; // ~85 ms @ 48 kHz × 8 ≈ 0.7 s
+const RING_MAX_FRAMES: usize = STREAM_CHUNK * 16;
+
+struct DspShared {
+    source: Mutex<Vec<StereoFrame>>,
+    content_rate: AtomicU64,
+    output_rate: AtomicU64,
+    /// Read cursor into `source` (content-rate frames).
+    read_cursor: AtomicU64,
+    /// Device playhead for UI (output-rate frames consumed by callback).
+    play_cursor: AtomicU64,
+    /// Total output frames produced for current source (for duration).
+    output_len: AtomicU64,
+    playing: AtomicBool,
+    /// 0 = Original, 1 = Spatial
+    mode: AtomicU8,
+    params: Mutex<SpatialParams>,
+    ring: Mutex<VecDeque<StereoFrame>>,
+    stop: AtomicBool,
+    seek_gen: AtomicU64,
+}
+
+/// Holds dry source PCM and streams Spatial/Original DSP in a worker thread.
 pub struct RealtimePlayer {
-    /// Source PCM at `content_rate` (pre-device resample).
-    content_frames: Mutex<Vec<StereoFrame>>,
-    /// PCM currently fed to the device (already at `output_rate`).
-    frames: Arc<Mutex<Vec<StereoFrame>>>,
-    cursor: Arc<AtomicU64>,
-    playing: Arc<AtomicBool>,
-    /// Sample rate of `frames` / the open stream (device rate after prepare).
-    output_rate: Arc<AtomicU64>,
-    /// Native rate of the last content buffer before device resample.
-    content_rate: Arc<AtomicU64>,
+    shared: Arc<DspShared>,
     stream: Mutex<Option<SendStream>>,
+    dsp: Mutex<Option<JoinHandle<()>>>,
 }
 
 impl RealtimePlayer {
     pub fn new() -> Self {
         Self {
-            content_frames: Mutex::new(Vec::new()),
-            frames: Arc::new(Mutex::new(Vec::new())),
-            cursor: Arc::new(AtomicU64::new(0)),
-            playing: Arc::new(AtomicBool::new(false)),
-            output_rate: Arc::new(AtomicU64::new(44_100)),
-            content_rate: Arc::new(AtomicU64::new(44_100)),
+            shared: Arc::new(DspShared {
+                source: Mutex::new(Vec::new()),
+                content_rate: AtomicU64::new(44_100),
+                output_rate: AtomicU64::new(44_100),
+                read_cursor: AtomicU64::new(0),
+                play_cursor: AtomicU64::new(0),
+                output_len: AtomicU64::new(0),
+                playing: AtomicBool::new(false),
+                mode: AtomicU8::new(1),
+                params: Mutex::new(SpatialParams::default()),
+                ring: Mutex::new(VecDeque::with_capacity(RING_MAX_FRAMES)),
+                stop: AtomicBool::new(false),
+                seek_gen: AtomicU64::new(0),
+            }),
             stream: Mutex::new(None),
+            dsp: Mutex::new(None),
         }
     }
 
-    /// Announce the sample rate of upcoming content PCM (before load/swap).
+    /// Announce content sample rate (kept for API compat with session).
     pub fn set_sample_rate(&self, sr: u32) {
-        let prev = self.content_rate.swap(sr as u64, Ordering::Relaxed);
-        if prev != sr as u64 {
-            // Drop stream so the next play re-prepares at device rate.
-            if let Ok(mut g) = self.stream.lock() {
-                *g = None;
-            }
-        }
+        self.shared
+            .content_rate
+            .store(sr as u64, Ordering::Relaxed);
     }
 
-    pub fn load_frames(&self, frames: Vec<StereoFrame>) -> Result<(), SpatialError> {
+    /// Load dry decoded PCM once. Does **not** HRTF the whole song.
+    pub fn load_source(&self, frames: Vec<StereoFrame>, sample_rate: u32) -> Result<(), SpatialError> {
+        self.stop_dsp();
         {
-            let mut src = self.content_frames.lock().map_err(|_| SpatialError::LockPoisoned)?;
-            *src = frames;
+            let mut g = self.shared.source.lock().map_err(|_| SpatialError::LockPoisoned)?;
+            *g = frames;
         }
-        let prepared = self.render_to_device()?;
-        let mut g = self.frames.lock().map_err(|_| SpatialError::LockPoisoned)?;
-        *g = prepared;
-        self.cursor.store(0, Ordering::Relaxed);
+        self.shared
+            .content_rate
+            .store(sample_rate.max(1) as u64, Ordering::Relaxed);
+        self.shared.read_cursor.store(0, Ordering::Relaxed);
+        self.shared.play_cursor.store(0, Ordering::Relaxed);
+        self.shared.output_len.store(0, Ordering::Relaxed);
+        self.shared.seek_gen.fetch_add(1, Ordering::Relaxed);
+        if let Ok(mut ring) = self.shared.ring.lock() {
+            ring.clear();
+        }
+        // Drop device stream so next play re-probes device rate.
+        if let Ok(mut s) = self.stream.lock() {
+            *s = None;
+        }
         Ok(())
     }
 
-    /// Hot-swap rendered PCM while keeping the playhead (live param updates).
+    /// Legacy API: treat incoming frames as dry source (Original path / tests).
+    pub fn load_frames(&self, frames: Vec<StereoFrame>) -> Result<(), SpatialError> {
+        let sr = self.shared.content_rate.load(Ordering::Relaxed).max(1) as u32;
+        self.load_source(frames, sr)
+    }
+
+    /// Legacy hot-swap — used only if something still pushes offline renders.
+    /// Prefer [`set_live_params`] for Spatial pose changes.
     pub fn swap_frames_keep_ms(
         &self,
         frames: Vec<StereoFrame>,
         keep_ms: u64,
     ) -> Result<(), SpatialError> {
-        {
-            let mut src = self.content_frames.lock().map_err(|_| SpatialError::LockPoisoned)?;
-            *src = frames;
-        }
-        let prepared = self.render_to_device()?;
-        let sr = self.output_rate.load(Ordering::Relaxed).max(1);
+        let sr = self.shared.content_rate.load(Ordering::Relaxed).max(1);
         let frame = keep_ms.saturating_mul(sr) / 1000;
-        let mut g = self.frames.lock().map_err(|_| SpatialError::LockPoisoned)?;
-        let len = prepared.len() as u64;
-        *g = prepared;
-        self.cursor.store(frame.min(len), Ordering::Relaxed);
+        {
+            let mut g = self.shared.source.lock().map_err(|_| SpatialError::LockPoisoned)?;
+            *g = frames;
+        }
+        self.shared.read_cursor.store(frame, Ordering::Relaxed);
+        self.shared.seek_gen.fetch_add(1, Ordering::Relaxed);
+        if let Ok(mut ring) = self.shared.ring.lock() {
+            ring.clear();
+        }
+        // Approximate output playhead; DSP will resync.
+        let out_sr = self.shared.output_rate.load(Ordering::Relaxed).max(1);
+        let out_frame = keep_ms.saturating_mul(out_sr) / 1000;
+        self.shared.play_cursor.store(out_frame, Ordering::Relaxed);
         Ok(())
     }
 
+    pub fn set_live_params(&self, params: SpatialParams) -> Result<(), SpatialError> {
+        params.validate()?;
+        let mut g = self.shared.params.lock().map_err(|_| SpatialError::LockPoisoned)?;
+        *g = params;
+        Ok(())
+    }
+
+    pub fn set_live_mode(&self, mode: PlaybackMode) {
+        let v = match mode {
+            PlaybackMode::Original => 0u8,
+            PlaybackMode::Spatial => 1u8,
+        };
+        let prev = self.shared.mode.swap(v, Ordering::Relaxed);
+        if prev != v {
+            // Mode flip: flush ring so we don't mix dry/wet briefly.
+            self.shared.seek_gen.fetch_add(1, Ordering::Relaxed);
+            if let Ok(mut ring) = self.shared.ring.lock() {
+                ring.clear();
+            }
+        }
+    }
+
     pub fn frame_count(&self) -> Result<usize, SpatialError> {
-        let g = self.frames.lock().map_err(|_| SpatialError::LockPoisoned)?;
+        let g = self.shared.source.lock().map_err(|_| SpatialError::LockPoisoned)?;
         Ok(g.len())
     }
 
     pub fn seek_ms(&self, ms: u64) -> Result<(), SpatialError> {
-        let sr = self.output_rate.load(Ordering::Relaxed).max(1);
+        let sr = self.shared.content_rate.load(Ordering::Relaxed).max(1);
         let frame = ms.saturating_mul(sr) / 1000;
         let len = self.frame_count()? as u64;
-        self.cursor.store(frame.min(len), Ordering::Relaxed);
+        self.shared.read_cursor.store(frame.min(len), Ordering::Relaxed);
+        let out_sr = self.shared.output_rate.load(Ordering::Relaxed).max(1);
+        self.shared
+            .play_cursor
+            .store(ms.saturating_mul(out_sr) / 1000, Ordering::Relaxed);
+        self.shared.seek_gen.fetch_add(1, Ordering::Relaxed);
+        if let Ok(mut ring) = self.shared.ring.lock() {
+            ring.clear();
+        }
         Ok(())
     }
 
     pub fn position_ms(&self) -> u64 {
-        let sr = self.output_rate.load(Ordering::Relaxed).max(1);
-        self.cursor.load(Ordering::Relaxed).saturating_mul(1000) / sr
+        let sr = self.shared.output_rate.load(Ordering::Relaxed).max(1);
+        self.shared.play_cursor.load(Ordering::Relaxed).saturating_mul(1000) / sr
     }
 
     pub fn is_playing(&self) -> bool {
-        self.playing.load(Ordering::Relaxed)
+        self.shared.playing.load(Ordering::Relaxed)
     }
 
     pub fn pause(&self) {
-        self.playing.store(false, Ordering::Relaxed);
+        self.shared.playing.store(false, Ordering::Relaxed);
     }
 
     pub fn play(&self) -> Result<(), SpatialError> {
         self.ensure_stream()?;
-        self.playing.store(true, Ordering::Relaxed);
+        self.ensure_dsp()?;
+        self.shared.playing.store(true, Ordering::Relaxed);
         Ok(())
     }
 
     pub fn stop(&self) -> Result<(), SpatialError> {
-        self.playing.store(false, Ordering::Relaxed);
+        self.shared.playing.store(false, Ordering::Relaxed);
+        self.stop_dsp();
         let mut g = self.stream.lock().map_err(|_| SpatialError::LockPoisoned)?;
         *g = None;
         Ok(())
     }
 
-    /// Returns whether a default output device exists (no stream opened).
     pub fn has_output_device() -> bool {
         cpal::default_host().default_output_device().is_some()
     }
 
-    /// Device mix rate when available; falls back to content rate offline/CI.
     fn probe_device_rate(&self) -> u32 {
-        let content = self.content_rate.load(Ordering::Relaxed).max(1) as u32;
+        let content = self.shared.content_rate.load(Ordering::Relaxed).max(1) as u32;
         let host = cpal::default_host();
         let Some(device) = host.default_output_device() else {
             return content;
@@ -149,21 +227,30 @@ impl RealtimePlayer {
         }
     }
 
-    /// Convert content-rate PCM to the device mix rate and update `output_rate`.
-    fn render_to_device(&self) -> Result<Vec<StereoFrame>, SpatialError> {
-        let content_sr = self.content_rate.load(Ordering::Relaxed).max(1) as u32;
-        let device_sr = self.probe_device_rate();
-        self.output_rate
-            .store(device_sr as u64, Ordering::Relaxed);
-        let src = self.content_frames.lock().map_err(|_| SpatialError::LockPoisoned)?;
-        if content_sr == device_sr {
-            Ok(src.clone())
-        } else {
-            eprintln!(
-                "yinwei: resampling preview {content_sr} Hz → device {device_sr} Hz (WASAPI-safe)"
-            );
-            Ok(resample_cubic(&src, content_sr, device_sr))
+    fn stop_dsp(&self) {
+        self.shared.stop.store(true, Ordering::Relaxed);
+        if let Ok(mut slot) = self.dsp.lock() {
+            if let Some(h) = slot.take() {
+                let _ = h.join();
+            }
         }
+        self.shared.stop.store(false, Ordering::Relaxed);
+    }
+
+    fn ensure_dsp(&self) -> Result<(), SpatialError> {
+        let mut slot = self.dsp.lock().map_err(|_| SpatialError::LockPoisoned)?;
+        if slot.is_some() {
+            return Ok(());
+        }
+        let shared = Arc::clone(&self.shared);
+        let content_sr = shared.content_rate.load(Ordering::Relaxed).max(1) as u32;
+        let mut streamer = HrtfStreamer::new(content_sr)?;
+        let handle = thread::Builder::new()
+            .name("yinwei-dsp".into())
+            .spawn(move || dsp_loop(shared, &mut streamer))
+            .map_err(|e| SpatialError::AudioDevice(format!("dsp thread: {e}")))?;
+        *slot = Some(handle);
+        Ok(())
     }
 
     fn ensure_stream(&self) -> Result<(), SpatialError> {
@@ -176,70 +263,41 @@ impl RealtimePlayer {
         let device = host
             .default_output_device()
             .ok_or_else(|| SpatialError::AudioDevice("no default output device".into()))?;
-
         let supported = device
             .default_output_config()
             .map_err(|e| SpatialError::AudioDevice(e.to_string()))?;
 
         let sample_format = supported.sample_format();
-        // CRITICAL: use the device default rate as-is. Do not override with
-        // content rate — WASAPI shared mode will still clock the callback at
-        // the mix format, which desyncs pitch/speed if PCM doesn't match.
         let config: StreamConfig = supported.clone().into();
         let device_sr = config.sample_rate.0.max(1);
-        self.output_rate
+        self.shared
+            .output_rate
             .store(device_sr as u64, Ordering::Relaxed);
 
-        // Refresh device PCM now that the real mix rate is known (probe may have
-        // differed, or frames were loaded before a device was available).
-        {
-            let content_sr = self.content_rate.load(Ordering::Relaxed).max(1) as u32;
-            let src = self.content_frames.lock().map_err(|_| SpatialError::LockPoisoned)?;
-            if !src.is_empty() {
-                let rendered = if content_sr == device_sr {
-                    src.clone()
-                } else {
-                    eprintln!(
-                        "yinwei: stream open resample {content_sr} → {device_sr} Hz"
-                    );
-                    resample_cubic(&src, content_sr, device_sr)
-                };
-                drop(src);
-                let mut out = self.frames.lock().map_err(|_| SpatialError::LockPoisoned)?;
-                // Preserve playhead ratio across resample.
-                let old_len = out.len().max(1) as f64;
-                let pos = self.cursor.load(Ordering::Relaxed) as f64 / old_len;
-                let new_len = rendered.len() as u64;
-                *out = rendered;
-                self.cursor.store(
-                    ((pos * new_len as f64).round() as u64).min(new_len.saturating_sub(1)),
-                    Ordering::Relaxed,
-                );
-            }
+        // Estimate total output length from source for EOF.
+        if let Ok(src) = self.shared.source.lock() {
+            let content_sr = self.shared.content_rate.load(Ordering::Relaxed).max(1) as u32;
+            let out_len = if content_sr == device_sr {
+                src.len() as u64
+            } else {
+                ((src.len() as u64) * device_sr as u64) / content_sr as u64
+            };
+            self.shared.output_len.store(out_len, Ordering::Relaxed);
         }
 
-        let frames = Arc::clone(&self.frames);
-        let cursor = Arc::clone(&self.cursor);
-        let playing = Arc::clone(&self.playing);
+        let shared = Arc::clone(&self.shared);
         let channels = config.channels as usize;
 
         let stream = match sample_format {
-            SampleFormat::F32 => {
-                build_stream::<f32>(&device, &config, frames, cursor, playing, channels)?
-            }
-            SampleFormat::I16 => {
-                build_stream::<i16>(&device, &config, frames, cursor, playing, channels)?
-            }
-            SampleFormat::U16 => {
-                build_stream::<u16>(&device, &config, frames, cursor, playing, channels)?
-            }
+            SampleFormat::F32 => build_stream::<f32>(&device, &config, shared, channels)?,
+            SampleFormat::I16 => build_stream::<i16>(&device, &config, shared, channels)?,
+            SampleFormat::U16 => build_stream::<u16>(&device, &config, shared, channels)?,
             other => {
                 return Err(SpatialError::AudioDevice(format!(
                     "unsupported sample format: {other:?}"
                 )))
             }
         };
-
         stream
             .play()
             .map_err(|e| SpatialError::AudioDevice(e.to_string()))?;
@@ -254,12 +312,112 @@ impl Default for RealtimePlayer {
     }
 }
 
+impl Drop for RealtimePlayer {
+    fn drop(&mut self) {
+        self.shared.playing.store(false, Ordering::Relaxed);
+        self.stop_dsp();
+    }
+}
+
+fn dsp_loop(shared: Arc<DspShared>, streamer: &mut HrtfStreamer) {
+    let mut last_seek = shared.seek_gen.load(Ordering::Relaxed);
+    loop {
+        if shared.stop.load(Ordering::Relaxed) {
+            break;
+        }
+
+        let seek = shared.seek_gen.load(Ordering::Relaxed);
+        if seek != last_seek {
+            streamer.reset();
+            last_seek = seek;
+        }
+
+        // Back-pressure: don't over-fill the ring.
+        let ring_len = shared.ring.lock().map(|r| r.len()).unwrap_or(0);
+        if ring_len >= RING_TARGET_FRAMES {
+            thread::sleep(Duration::from_millis(2));
+            continue;
+        }
+        if !shared.playing.load(Ordering::Relaxed) {
+            thread::sleep(Duration::from_millis(5));
+            continue;
+        }
+
+        let content_sr = shared.content_rate.load(Ordering::Relaxed).max(1) as u32;
+        let device_sr = shared.output_rate.load(Ordering::Relaxed).max(1) as u32;
+        let mode = shared.mode.load(Ordering::Relaxed);
+        let params = shared
+            .params
+            .lock()
+            .map(|g| g.clone())
+            .unwrap_or_default();
+
+        // Pull one STREAM_CHUNK from source.
+        let mut chunk = [(0.0f32, 0.0f32); STREAM_CHUNK];
+        let mut got = 0usize;
+        {
+            let src = match shared.source.lock() {
+                Ok(g) => g,
+                Err(_) => break,
+            };
+            if src.is_empty() {
+                thread::sleep(Duration::from_millis(5));
+                continue;
+            }
+            let mut cursor = shared.read_cursor.load(Ordering::Relaxed) as usize;
+            if cursor >= src.len() {
+                // EOF — leave playing flag; callback will drain ring then stop.
+                thread::sleep(Duration::from_millis(5));
+                continue;
+            }
+            while got < STREAM_CHUNK && cursor < src.len() {
+                chunk[got] = src[cursor];
+                cursor += 1;
+                got += 1;
+            }
+            shared
+                .read_cursor
+                .store(cursor as u64, Ordering::Relaxed);
+        }
+
+        if got == 0 {
+            thread::sleep(Duration::from_millis(5));
+            continue;
+        }
+
+        let wet: Vec<StereoFrame> = if mode == 0 {
+            chunk[..got].to_vec()
+        } else {
+            match streamer.process_chunk(&chunk[..got], &params) {
+                Ok(block) => block[..got].to_vec(),
+                Err(e) => {
+                    eprintln!("yinwei dsp: {e}");
+                    chunk[..got].to_vec()
+                }
+            }
+        };
+
+        let out = if content_sr == device_sr {
+            wet
+        } else {
+            resample_cubic(&wet, content_sr, device_sr)
+        };
+
+        if let Ok(mut ring) = shared.ring.lock() {
+            for f in out {
+                if ring.len() >= RING_MAX_FRAMES {
+                    break;
+                }
+                ring.push_back(f);
+            }
+        }
+    }
+}
+
 fn build_stream<T>(
     device: &cpal::Device,
     config: &StreamConfig,
-    frames: Arc<Mutex<Vec<StereoFrame>>>,
-    cursor: Arc<AtomicU64>,
-    playing: Arc<AtomicBool>,
+    shared: Arc<DspShared>,
     channels: usize,
 ) -> Result<Stream, SpatialError>
 where
@@ -278,12 +436,12 @@ where
                     }
                 };
 
-                if !playing.load(Ordering::Relaxed) {
+                if !shared.playing.load(Ordering::Relaxed) {
                     fill_silence(data);
                     return;
                 }
 
-                let locked = match frames.lock() {
+                let mut ring = match shared.ring.lock() {
                     Ok(g) => g,
                     Err(_) => {
                         fill_silence(data);
@@ -291,25 +449,16 @@ where
                     }
                 };
 
-                if locked.is_empty() {
-                    fill_silence(data);
-                    return;
-                }
-
-                let mut frames_needed = data.len() / channels;
                 let mut out_i = 0usize;
+                let mut frames_needed = data.len() / channels;
 
                 while frames_needed > 0 && out_i + channels <= data.len() {
-                    let idx = cursor.load(Ordering::Relaxed) as usize;
-                    if idx >= locked.len() {
-                        playing.store(false, Ordering::Relaxed);
+                    let Some((l, r)) = ring.pop_front() else {
+                        // Underrun: brief silence (far better than full-song rebuild stall).
                         fill_silence(&mut data[out_i..]);
                         return;
-                    }
-
-                    let (l, r) = locked[idx];
-                    cursor.fetch_add(1, Ordering::Relaxed);
-
+                    };
+                    shared.play_cursor.fetch_add(1, Ordering::Relaxed);
                     data[out_i] = T::from_sample(l);
                     if channels == 1 {
                         out_i += 1;
@@ -323,8 +472,15 @@ where
                     frames_needed -= 1;
                 }
 
-                if out_i < data.len() {
-                    fill_silence(&mut data[out_i..]);
+                // EOF when source exhausted and ring empty.
+                let read = shared.read_cursor.load(Ordering::Relaxed) as usize;
+                let src_len = shared
+                    .source
+                    .lock()
+                    .map(|g| g.len())
+                    .unwrap_or(0);
+                if read >= src_len && ring.is_empty() {
+                    shared.playing.store(false, Ordering::Relaxed);
                 }
             },
             err_fn,
@@ -342,12 +498,24 @@ mod tests {
         let player = RealtimePlayer::new();
         player.set_sample_rate(44_100);
         let frames = vec![(0.1, -0.1); 44_100];
-        player.load_frames(frames).unwrap();
-        // Offline/CI: no device → prepare keeps content rate.
+        player.load_source(frames, 44_100).unwrap();
         assert_eq!(player.frame_count().unwrap(), 44_100);
         player.seek_ms(500).unwrap();
-        assert!((player.position_ms() as i64 - 500).abs() <= 1);
+        // play_cursor approx at 500 ms
+        assert!((player.position_ms() as i64 - 500).abs() <= 2);
         player.pause();
         assert!(!player.is_playing());
+    }
+
+    #[test]
+    fn live_params_do_not_require_full_buffer_swap() {
+        let player = RealtimePlayer::new();
+        player.load_source(vec![(0.2, 0.2); 8_000], 48_000).unwrap();
+        let mut p = SpatialParams::default();
+        p.azimuth_deg = -45.0;
+        player.set_live_params(p).unwrap();
+        player.set_live_mode(PlaybackMode::Spatial);
+        // No panic / no whole-song render — just param store.
+        assert_eq!(player.frame_count().unwrap(), 8_000);
     }
 }

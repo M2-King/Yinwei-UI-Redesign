@@ -116,7 +116,15 @@ impl Engine {
         Ok(())
     }
 
+    /// Clone dry decoded PCM once for the streaming player (no HRTF).
+    pub fn dry_frames(&self) -> Result<(u32, Vec<StereoFrame>), SpatialError> {
+        let g = self.inner.lock().map_err(|_| SpatialError::LockPoisoned)?;
+        let decoded = g.decoded.as_ref().ok_or(SpatialError::NoTrackLoaded)?;
+        Ok((decoded.sample_rate, decoded.frames.clone()))
+    }
+
     pub fn params(&self) -> Result<SpatialParams, SpatialError> {
+
         let g = self.inner.lock().map_err(|_| SpatialError::LockPoisoned)?;
         Ok(g.params.clone())
     }

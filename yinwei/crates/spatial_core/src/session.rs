@@ -30,15 +30,22 @@ impl PlayerSession {
     pub fn open(&self, path: &str) -> Result<TrackInfo, SpatialError> {
         let _ = self.player.stop();
         let meta = self.engine.open(path)?;
-        self.player.set_sample_rate(meta.sample_rate);
-        self.preview_dirty.store(true, Ordering::Relaxed);
-        self.has_preview.store(false, Ordering::Relaxed);
+        let (sr, dry) = self.engine.dry_frames()?;
+        self.player.set_sample_rate(sr);
+        self.player.load_source(dry, sr)?;
+        self.player.set_live_params(self.engine.params()?)?;
+        self.player.set_live_mode(self.engine.playback_mode()?);
+        // Streaming path: source is loaded; no offline full-song preview needed to play.
+        self.preview_dirty.store(false, Ordering::Relaxed);
+        self.has_preview.store(true, Ordering::Relaxed);
         Ok(meta)
     }
 
     pub fn set_params(&self, params: SpatialParams) -> Result<(), SpatialError> {
-        self.engine.set_params(params)?;
-        self.preview_dirty.store(true, Ordering::Relaxed);
+        self.engine.set_params(params.clone())?;
+        // Live streaming: push params to the DSP worker — do NOT mark preview dirty
+        // (that would force a full-song HRTF re-render on next play).
+        self.player.set_live_params(params)?;
         Ok(())
     }
 
@@ -48,13 +55,13 @@ impl PlayerSession {
 
     pub fn apply_preset(&self, preset: PositionPreset) -> Result<SpatialParams, SpatialError> {
         let p = self.engine.apply_position_preset(preset)?;
-        self.preview_dirty.store(true, Ordering::Relaxed);
+        self.player.set_live_params(p.clone())?;
         Ok(p)
     }
 
     pub fn set_mode(&self, mode: PlaybackMode) -> Result<(), SpatialError> {
         self.engine.set_playback_mode(mode)?;
-        self.preview_dirty.store(true, Ordering::Relaxed);
+        self.player.set_live_mode(mode);
         Ok(())
     }
 
@@ -81,20 +88,21 @@ impl PlayerSession {
         Ok(())
     }
 
-    /// Apply params; if currently playing, rebuild preview so the new 音位 is audible
-    /// without requiring pause → play.
+    /// Apply params for live listening. Streaming DSP picks them up on the next
+    /// block — no full-song rebuild.
     pub fn set_params_live(&self, params: SpatialParams) -> Result<(), SpatialError> {
-        self.set_params(params)?;
-        if self.player.is_playing() {
-            self.rebuild_preview(None)?;
-        }
-        Ok(())
+        self.set_params(params)
     }
 
     pub fn play(&self) -> Result<(), SpatialError> {
-        if self.preview_dirty.load(Ordering::Relaxed) || !self.has_preview.load(Ordering::Relaxed)
-        {
-            self.rebuild_preview(None)?;
+        // Streaming: source was loaded in open(); skip full-song preview render.
+        if !self.has_preview.load(Ordering::Relaxed) {
+            let (sr, dry) = self.engine.dry_frames()?;
+            self.player.load_source(dry, sr)?;
+            self.player.set_live_params(self.engine.params()?)?;
+            self.player.set_live_mode(self.engine.playback_mode()?);
+            self.has_preview.store(true, Ordering::Relaxed);
+            self.preview_dirty.store(false, Ordering::Relaxed);
         }
         match self.player.play() {
             Ok(()) => {
@@ -191,11 +199,12 @@ mod tests {
         let s = PlayerSession::new();
         let meta = s.open(input.to_str().unwrap()).unwrap();
         assert!(meta.duration_ms >= 300);
-        assert!(s.is_preview_dirty());
+        // Streaming open loads dry source — no dirty offline preview.
+        assert!(!s.is_preview_dirty());
 
         s.apply_preset(PositionPreset::LeftRear).unwrap();
         s.set_mode(PlaybackMode::Spatial).unwrap();
-        s.rebuild_preview(None).unwrap();
+        // Live params/mode must not require a full-song rebuild.
         assert!(!s.is_preview_dirty());
 
         s.seek_ms(50).unwrap();

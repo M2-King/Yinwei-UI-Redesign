@@ -98,6 +98,17 @@ Fix: open cpal at the **device default** rate; cubic-resample content → device
 
 Status: `p2.4.6-wasapi-rate`.
 
+## P2.4.7 — Streaming realtime DSP (no full-song rebuild)
+
+Live Spatial / pose / mode changes no longer clone + HRTF the entire track.
+
+- `open()` loads **dry** PCM into the player once
+- A DSP worker processes 512-frame blocks with retained HRTF state
+- Param updates are smoothed and applied on the next block
+- Offline `render_frames` remains for Export WAV only
+
+Status: `p2.4.7-stream-dsp` / `ui-8`.
+
 ## Next
 
 **P2.5** — richer export file dialog / progress UX polish (open picker already minimal in P2.4).

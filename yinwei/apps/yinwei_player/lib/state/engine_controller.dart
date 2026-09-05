@@ -7,8 +7,8 @@ import 'package:yinwei_player/models/spatial_params.dart';
 
 /// Bumped when UI wiring changes — shown in status bar so Windows hosts
 /// can confirm they pulled the latest build.
-const String kYinweiUiBuild = 'ui-7';
-const String kYinweiBridgeBuild = 'p2.4.6-wasapi-rate';
+const String kYinweiUiBuild = 'ui-8';
+const String kYinweiBridgeBuild = 'p2.4.7-stream-dsp';
 
 /// App state for the locked Player UI (IMPLEMENTATION_P2 §5.1).
 class EngineController extends ChangeNotifier {
@@ -51,7 +51,7 @@ class EngineController extends ChangeNotifier {
       playing = false;
       _tick?.cancel();
       await _engine.setParams(params);
-      await _engine.rebuildPreview(onProgress: _onProgress);
+      // No full-song rebuild — native open() loads dry PCM for streaming DSP.
       _syncAzimuth();
     });
   }
@@ -60,8 +60,8 @@ class EngineController extends ChangeNotifier {
     params = next.copy();
     _syncAzimuth();
     notifyListeners(); // sync UI first — don't wait on engine
+    // Streaming DSP: params apply on the next audio block — no full-song rebuild.
     await _engine.setParams(params);
-    _scheduleLiveRebuild();
   }
 
   Future<void> applyPreset(PositionPreset preset) async {
@@ -70,14 +70,13 @@ class EngineController extends ChangeNotifier {
     _syncAzimuth();
     notifyListeners();
     await _engine.setParams(params);
-    _scheduleLiveRebuild();
   }
 
   Future<void> setMode(PlaybackMode next) async {
     mode = next;
     notifyListeners();
+    // Streaming DSP switches Original/Spatial without re-rendering the track.
     await _engine.setPlaybackMode(next);
-    _scheduleLiveRebuild();
   }
 
   Future<void> togglePlay() async {
@@ -91,13 +90,7 @@ class EngineController extends ChangeNotifier {
   Future<void> play() async {
     lastError = null;
     try {
-      final dirty = await _engine.isPreviewDirty();
-      if (dirty) {
-        busy = true;
-        notifyListeners();
-        await _engine.rebuildPreview(onProgress: _onProgress);
-        busy = false;
-      }
+      // Streaming path: open() already loaded dry PCM; play starts the DSP worker.
       try {
         await _engine.play();
       } catch (e) {
@@ -136,36 +129,10 @@ class EngineController extends ChangeNotifier {
     });
   }
 
-  /// While playing, debounce a preview rebuild so 音位/距离/模式 changes
-  /// become audible without pause → play.
+  /// Previously debounced a full-song HRTF rebuild (caused multi-second mutes).
+  /// Streaming DSP applies params live — kept as a no-op for call-site safety.
   void _scheduleLiveRebuild() {
     _liveRebuild?.cancel();
-    if (!playing) return;
-    final gen = ++_liveGen;
-    _liveRebuild = Timer(const Duration(milliseconds: 220), () async {
-      if (gen != _liveGen || !playing) return;
-      final dirty = await _engine.isPreviewDirty();
-      if (!dirty || !playing) return;
-      try {
-        busy = true;
-        notifyListeners();
-        await _engine.rebuildPreview(onProgress: _onProgress);
-        if (playing) {
-          try {
-            await _engine.play();
-          } catch (_) {
-            // Device errors already surfaced on first play.
-          }
-        }
-        _syncAzimuth();
-      } catch (e) {
-        lastError = e.toString();
-      } finally {
-        busy = false;
-        jobProgress = 0;
-        notifyListeners();
-      }
-    });
   }
 
   void _syncAzimuth() {
