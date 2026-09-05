@@ -153,8 +153,18 @@ class _PlayerScreenState extends State<PlayerScreen> {
     try {
       final result = await FilePicker.platform.pickFiles(
         type: FileType.custom,
-        allowedExtensions: const ['wav', 'mp3', 'flac', 'ogg', 'm4a', 'aac'],
-        dialogTitle: '打开本地音频',
+        allowedExtensions: const [
+          'wav',
+          'mp3',
+          'flac',
+          'ogg',
+          'm4a',
+          'aac',
+          'mp4',
+          'm4v',
+          'mov',
+        ],
+        dialogTitle: '打开音频或视频（自动提取音轨）',
       );
       if (result == null || result.files.isEmpty) return;
       final path = result.files.single.path;
@@ -164,12 +174,18 @@ class _PlayerScreenState extends State<PlayerScreen> {
       await _ctrl.openPath(path);
       if (!mounted) return;
       final label = _backend == EngineBackend.native ? '真引擎' : '演示引擎 Mock';
+      final name = path.split(RegExp(r'[\\/]')).last.toLowerCase();
+      final isVideo = name.endsWith('.mp4') ||
+          name.endsWith('.m4v') ||
+          name.endsWith('.mov');
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            _backend == EngineBackend.native
-                ? '已打开（$label）'
-                : '已打开（$label）— 左下角仍是 Mock：先跑 build_native_windows.ps1 再完全重启',
+            isVideo
+                ? '已从视频提取音轨（$label）'
+                : (_backend == EngineBackend.native
+                    ? '已打开（$label）'
+                    : '已打开（$label）— 左下角仍是 Mock：先跑 build_native_windows.ps1 再完全重启'),
           ),
           behavior: SnackBarBehavior.floating,
           duration: const Duration(seconds: 3),

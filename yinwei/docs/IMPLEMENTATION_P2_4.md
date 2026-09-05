@@ -49,6 +49,18 @@ If status shows Mock: DLL missing — re-run the build script, then restart the 
 | 6 | Io |
 | 7 | Other |
 
+## P2.4.2 — MP4 / MOV audio extract
+
+Open dialog accepts `mp4` / `m4v` / `mov`. Decoder selects the **audio** track inside the container (skips video), using Symphonia `isomp4` + AAC.
+
+Rebuild native DLL after pull:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File tools\build_native_windows.ps1
+```
+
+Status bar should show `p2.4.2-mp4`.
+
 ## Next
 
 **P2.5** — richer export file dialog / progress UX polish (open picker already minimal in P2.4).
@@ -66,4 +78,4 @@ Rebuild DLL after pull:
 powershell -ExecutionPolicy Bypass -File tools\build_native_windows.ps1
 ```
 
-Status bar bridge id should show `p2.4.1-live`.
+Status bar bridge id should show `p2.4.1-live` (or newer).

@@ -39,33 +39,37 @@ pub fn load_audio(path: &Path) -> Result<DecodedAudio, SpatialError> {
         .format(
             &hint,
             mss,
-            &FormatOptions::default(),
+            &FormatOptions {
+                enable_gapless: true,
+                ..Default::default()
+            },
             &MetadataOptions::default(),
         )
         .map_err(|e| SpatialError::Decode(e.to_string()))?;
 
     let mut format = probed.format;
-    let track = format
-        .tracks()
-        .iter()
-        .find(|t| t.codec_params.codec != CODEC_TYPE_NULL)
-        .ok_or_else(|| SpatialError::Decode("no audio track".into()))?
-        .clone();
 
+    // MP4/MOV/M4A often list a video track first — pick the first *audio* track.
+    let track = select_audio_track(format.as_ref())?;
     let track_id = track.id;
     let sample_rate = track
         .codec_params
         .sample_rate
-        .ok_or_else(|| SpatialError::Decode("missing sample rate".into()))?;
+        .ok_or_else(|| SpatialError::Decode("audio track missing sample rate".into()))?;
     let channels = track
         .codec_params
         .channels
         .map(|c| c.count())
-        .unwrap_or(2);
+        .unwrap_or(2)
+        .max(1);
 
     let mut decoder = symphonia::default::get_codecs()
         .make(&track.codec_params, &DecoderOptions::default())
-        .map_err(|e| SpatialError::Decode(e.to_string()))?;
+        .map_err(|e| {
+            SpatialError::Decode(format!(
+                "unsupported audio codec in container ({e}) — try WAV/MP3/AAC"
+            ))
+        })?;
 
     let mut mono_or_interleaved = Vec::new();
     let mut sample_buf: Option<SampleBuffer<f32>> = None;
@@ -86,6 +90,7 @@ pub fn load_audio(path: &Path) -> Result<DecodedAudio, SpatialError> {
             Err(e) => return Err(SpatialError::Decode(e.to_string())),
         };
 
+        // Skip video / other packets in the container.
         if packet.track_id() != track_id {
             continue;
         }
@@ -107,6 +112,12 @@ pub fn load_audio(path: &Path) -> Result<DecodedAudio, SpatialError> {
         }
     }
 
+    if mono_or_interleaved.is_empty() {
+        return Err(SpatialError::Decode(
+            "no audio samples decoded — file may be video-only or DRM-protected".into(),
+        ));
+    }
+
     let stereo = to_stereo(&mono_or_interleaved, channels);
     let frames = if sample_rate == TARGET_RATE {
         stereo
@@ -120,13 +131,76 @@ pub fn load_audio(path: &Path) -> Result<DecodedAudio, SpatialError> {
         .unwrap_or("Untitled")
         .to_string();
 
+    let (title, artist, album) = read_metadata(&mut format, &stem);
+
     Ok(DecodedAudio {
         sample_rate: TARGET_RATE,
         frames,
-        title: stem,
-        artist: String::new(),
-        album: String::new(),
+        title,
+        artist,
+        album,
     })
+}
+
+/// Prefer a real audio track inside containers (MP4/MOV/etc.).
+fn select_audio_track(
+    format: &dyn symphonia::core::formats::FormatReader,
+) -> Result<symphonia::core::formats::Track, SpatialError> {
+    // Prefer tracks that look like PCM/compressed audio (have sample_rate).
+    let audio = format.tracks().iter().find(|t| {
+        t.codec_params.codec != CODEC_TYPE_NULL
+            && t.codec_params.sample_rate.is_some()
+            && t.codec_params.channels.is_some()
+    });
+
+    if let Some(t) = audio {
+        return Ok(t.clone());
+    }
+
+    // Fallback: any non-null codec with a sample rate (some AAC omit channels early).
+    if let Some(t) = format.tracks().iter().find(|t| {
+        t.codec_params.codec != CODEC_TYPE_NULL && t.codec_params.sample_rate.is_some()
+    }) {
+        return Ok(t.clone());
+    }
+
+    Err(SpatialError::Decode(
+        "no audio track found — open a file that contains an audio stream (MP4/MOV with sound, or WAV/MP3)"
+            .into(),
+    ))
+}
+
+fn read_metadata(
+    format: &mut Box<dyn symphonia::core::formats::FormatReader>,
+    fallback_title: &str,
+) -> (String, String, String) {
+    let mut title = fallback_title.to_string();
+    let mut artist = String::new();
+    let mut album = String::new();
+
+    // Pull metadata revision if present.
+    format.metadata().skip_to_latest();
+    if let Some(meta) = format.metadata().current() {
+        for tag in meta.tags() {
+            let val = tag.value.to_string();
+            if val.is_empty() {
+                continue;
+            }
+            match tag.std_key {
+                Some(symphonia::core::meta::StandardTagKey::TrackTitle) => title = val,
+                Some(symphonia::core::meta::StandardTagKey::Artist)
+                | Some(symphonia::core::meta::StandardTagKey::AlbumArtist) => {
+                    if artist.is_empty() {
+                        artist = val;
+                    }
+                }
+                Some(symphonia::core::meta::StandardTagKey::Album) => album = val,
+                _ => {}
+            }
+        }
+    }
+
+    (title, artist, album)
 }
 
 fn to_stereo(samples: &[f32], channels: usize) -> Vec<StereoFrame> {
@@ -204,6 +278,7 @@ pub fn write_test_sine_wav(path: &Path, seconds: f32, hz: f32) -> Result<(), Spa
 #[cfg(test)]
 mod decode_tests {
     use super::*;
+    use std::path::Path;
 
     #[test]
     fn writes_and_loads_wav() {
@@ -212,5 +287,18 @@ mod decode_tests {
         let decoded = load_audio(&path).unwrap();
         assert!(decoded.frames.len() > 100);
         let _ = std::fs::remove_file(path);
+    }
+
+    #[test]
+    fn extracts_audio_from_mp4_container() {
+        let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("assets/test_clip.mp4");
+        assert!(path.exists(), "missing test fixture {:?}", path);
+        let decoded = load_audio(&path).expect("mp4 audio extract");
+        // ~0.4s @ 44.1k ≈ 17640 frames
+        assert!(
+            decoded.frames.len() > 8_000,
+            "got {} frames",
+            decoded.frames.len()
+        );
     }
 }
