@@ -27,8 +27,8 @@ use crate::resample::resample_cubic;
 struct SendStream(#[allow(dead_code)] Stream);
 unsafe impl Send for SendStream {}
 
-const RING_TARGET_FRAMES: usize = STREAM_CHUNK * 8; // ~85 ms @ 48 kHz × 8 ≈ 0.7 s
-const RING_MAX_FRAMES: usize = STREAM_CHUNK * 16;
+const RING_TARGET_FRAMES: usize = STREAM_CHUNK * 3; // ~3 blocks (~64 ms @ 48 kHz with STREAM_INTERP=4)
+const RING_MAX_FRAMES: usize = STREAM_CHUNK * 8;
 
 struct DspShared {
     source: Mutex<Vec<StereoFrame>>,
@@ -142,8 +142,29 @@ impl RealtimePlayer {
 
     pub fn set_live_params(&self, params: SpatialParams) -> Result<(), SpatialError> {
         params.validate()?;
-        let mut g = self.shared.params.lock().map_err(|_| SpatialError::LockPoisoned)?;
-        *g = params;
+        let changed;
+        {
+            let mut g = self
+                .shared
+                .params
+                .lock()
+                .map_err(|_| SpatialError::LockPoisoned)?;
+            // Flush only when pose / colouring actually moves — avoids clicks on no-ops.
+            changed = (g.azimuth_deg - params.azimuth_deg).abs() > 0.05
+                || (g.elevation_deg - params.elevation_deg).abs() > 0.05
+                || (g.distance_m - params.distance_m).abs() > 0.01
+                || (g.envelopment - params.envelopment).abs() > 0.01
+                || (g.reverb_mix - params.reverb_mix).abs() > 0.01
+                || g.motion != params.motion;
+            *g = params;
+        }
+        if changed {
+            // Drop buffered wet audio so the new pose is heard within ~1 chunk
+            // (otherwise UI moves while the ring still plays the old position).
+            if let Ok(mut ring) = self.shared.ring.lock() {
+                ring.clear();
+            }
+        }
         Ok(())
     }
 

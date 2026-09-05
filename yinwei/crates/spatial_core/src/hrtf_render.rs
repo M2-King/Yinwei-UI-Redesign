@@ -19,9 +19,9 @@ const BLOCK: usize = 512;
 const INTERP_STEPS: usize = 8;
 const CHUNK: usize = BLOCK * INTERP_STEPS; // 4096
 
-/// Realtime streamer uses 1 interp step × 512 for ~10 ms blocks @ 48 kHz.
+/// Realtime streamer: 4 interp steps × 512 ≈ 21 ms @ 48 kHz (was 1 — too zipper-y).
 pub const STREAM_BLOCK: usize = 512;
-pub const STREAM_INTERP: usize = 1;
+pub const STREAM_INTERP: usize = 4;
 pub const STREAM_CHUNK: usize = STREAM_BLOCK * STREAM_INTERP;
 
 pub(crate) fn normalize(v: Vec3) -> Vec3 {
@@ -51,15 +51,15 @@ pub(crate) fn distance_gain(distance: f32) -> f32 {
 /// One-pole coefficient for air absorption (higher = brighter).
 pub(crate) fn air_absorption_coeff(distance: f32) -> f32 {
     let t = ((distance - 0.5) / 9.5).clamp(0.0, 1.0);
-    // Mild high-shelf loss with distance. The previous linear curve was too dark
-    // near-field and read as "phone / call quality".
-    0.995 - 0.18 * t * t
+    // Mild high-shelf loss with distance — keep near-field bright.
+    0.997 - 0.12 * t * t
 }
 
 /// Wet mix grows with distance so "far" feels more room / less dry proximity.
 pub(crate) fn distance_reverb_mix(base: f32, distance: f32) -> f32 {
     let t = ((distance - 0.5) / 9.5).clamp(0.0, 1.0);
-    (base * (0.3 + 1.05 * t) + 0.1 * t).clamp(0.0, 0.72)
+    // Keep far-field reverb gentle — heavy wet mix was reading as "damaged" audio.
+    (base * (0.25 + 0.7 * t) + 0.05 * t).clamp(0.0, 0.55)
 }
 
 pub(crate) struct OnePoleLp {
@@ -373,9 +373,22 @@ impl HrtfStreamer {
     ) -> Result<[StereoFrame; STREAM_CHUNK], SpatialError> {
         params.validate()?;
 
-        // Smooth toward target (~15% per ~10 ms block ≈ 60 ms time constant).
+        // Smooth toward target (~18% per block). Azimuth uses shortest-path wrap
+        // so 170° → −170° doesn't spin the long way through the front.
         const A: f32 = 0.18;
-        self.smooth_az += (params.azimuth_deg - self.smooth_az) * A;
+        let mut daz = params.azimuth_deg - self.smooth_az;
+        while daz > 180.0 {
+            daz -= 360.0;
+        }
+        while daz < -180.0 {
+            daz += 360.0;
+        }
+        self.smooth_az += daz * A;
+        if self.smooth_az > 180.0 {
+            self.smooth_az -= 360.0;
+        } else if self.smooth_az <= -180.0 {
+            self.smooth_az += 360.0;
+        }
         self.smooth_el += (params.elevation_deg - self.smooth_el) * A;
         self.smooth_dist += (params.distance_m - self.smooth_dist) * A;
         self.smooth_env += (params.envelopment - self.smooth_env) * A;

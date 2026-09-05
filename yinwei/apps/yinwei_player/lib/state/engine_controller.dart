@@ -7,8 +7,8 @@ import 'package:yinwei_player/models/spatial_params.dart';
 
 /// Bumped when UI wiring changes — shown in status bar so Windows hosts
 /// can confirm they pulled the latest build.
-const String kYinweiUiBuild = 'ui-10';
-const String kYinweiBridgeBuild = 'p2.4.7-stream-dsp';
+const String kYinweiUiBuild = 'ui-11';
+const String kYinweiBridgeBuild = 'p2.4.8-live-fix';
 
 /// App state for the locked Player UI (IMPLEMENTATION_P2 §5.1).
 class EngineController extends ChangeNotifier {
@@ -35,6 +35,7 @@ class EngineController extends ChangeNotifier {
   Timer? _tick;
   Timer? _liveRebuild;
   int _liveGen = 0;
+  int _paramsGen = 0;
 
   double get playhead {
     final total = track.duration.inMilliseconds;
@@ -60,8 +61,10 @@ class EngineController extends ChangeNotifier {
     params = next.copy();
     _syncAzimuth();
     notifyListeners(); // sync UI first — don't wait on engine
-    // Streaming DSP: params apply on the next audio block — no full-song rebuild.
+    // Coalesce rapid drag updates so an older FFI write can't overwrite a newer pose.
+    final gen = ++_paramsGen;
     await _engine.setParams(params);
+    if (gen != _paramsGen) return;
   }
 
   Future<void> applyPreset(PositionPreset preset) async {
@@ -69,7 +72,9 @@ class EngineController extends ChangeNotifier {
     params = next;
     _syncAzimuth();
     notifyListeners();
+    final gen = ++_paramsGen;
     await _engine.setParams(params);
+    if (gen != _paramsGen) return;
   }
 
   Future<void> setMode(PlaybackMode next) async {

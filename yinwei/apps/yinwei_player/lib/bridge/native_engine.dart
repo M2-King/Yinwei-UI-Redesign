@@ -7,6 +7,11 @@ import 'package:yinwei_player/bridge/yinwei_bindings.dart';
 import 'package:yinwei_player/models/spatial_params.dart';
 
 /// Real engine via `spatial_core` C ABI / `dart:ffi` (P2.4).
+///
+/// Heavy open/export may run in a background isolate, but that isolate **must**
+/// load the same absolute DLL path as the main isolate. Otherwise Windows can
+/// map two copies of `spatial_core.dll` → two GLOBAL sessions → live setParams
+/// never reaches the playing audio (pause→play / dead drag symptoms).
 class NativeEngine implements EngineApi {
   NativeEngine(this._b);
 
@@ -15,6 +20,14 @@ class NativeEngine implements EngineApi {
   static NativeEngine? tryCreate() {
     final b = YinweiBindings.tryLoad();
     return b == null ? null : NativeEngine(b);
+  }
+
+  String get _libPath {
+    final p = YinweiBindings.resolvedLibraryPath;
+    if (p == null || p.isEmpty) {
+      throw StateError('Native library path not resolved');
+    }
+    return p;
   }
 
   void _check(int code, {bool allowAudioDevice = false}) {
@@ -43,9 +56,9 @@ class NativeEngine implements EngineApi {
 
   @override
   Future<TrackMeta> open(String path) async {
+    final libPath = _libPath;
     final code = await Isolate.run(() {
-      final b = YinweiBindings.tryLoad();
-      if (b == null) return 7;
+      final b = YinweiBindings.loadFromPath(libPath);
       final p = path.toNativeUtf8();
       try {
         return b.yinweiOpen(p);
@@ -93,9 +106,9 @@ class NativeEngine implements EngineApi {
   @override
   Future<void> rebuildPreview({void Function(double progress)? onProgress}) async {
     onProgress?.call(0.05);
+    final libPath = _libPath;
     final code = await Isolate.run(() {
-      final b = YinweiBindings.tryLoad();
-      if (b == null) return 7;
+      final b = YinweiBindings.loadFromPath(libPath);
       return b.yinweiRebuildPreview();
     });
     onProgress?.call(1.0);
@@ -104,12 +117,8 @@ class NativeEngine implements EngineApi {
 
   @override
   Future<void> play() async {
-    final code = await Isolate.run(() {
-      final b = YinweiBindings.tryLoad();
-      if (b == null) return 7;
-      return b.yinweiPlay();
-    });
-    _check(code, allowAudioDevice: true);
+    // Stay on the main isolate binding — never reopen the DLL here.
+    _check(_b.yinweiPlay(), allowAudioDevice: true);
   }
 
   @override
@@ -143,9 +152,9 @@ class NativeEngine implements EngineApi {
     void Function(double progress)? onProgress,
   }) async {
     onProgress?.call(0.05);
+    final libPath = _libPath;
     final code = await Isolate.run(() {
-      final b = YinweiBindings.tryLoad();
-      if (b == null) return 7;
+      final b = YinweiBindings.loadFromPath(libPath);
       final p = outPath.toNativeUtf8();
       try {
         return b.yinweiExportWav(p);

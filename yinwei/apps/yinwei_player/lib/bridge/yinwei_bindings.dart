@@ -4,9 +4,16 @@ import 'dart:io';
 import 'package:ffi/ffi.dart';
 
 /// Low-level bindings to `spatial_core` C ABI (P2.4).
+///
+/// [resolvedLibraryPath] is the absolute path of the DLL that was loaded.
+/// Background isolates **must** call [loadFromPath] with that same path so
+/// Windows does not map a second (often stale) copy of the library — that
+/// creates a second GLOBAL session and live setParams/setMode never reach
+/// the playing audio thread.
 class YinweiBindings {
   YinweiBindings._(this._lib)
-      : yinweiLastError = _lib.lookupFunction<_ErrNative, _ErrDart>('yinwei_last_error'),
+      : yinweiLastError =
+            _lib.lookupFunction<_ErrNative, _ErrDart>('yinwei_last_error'),
         yinweiOpen = _lib.lookupFunction<_OpenNative, _OpenDart>('yinwei_open'),
         yinweiTrackTitle =
             _lib.lookupFunction<_ErrNative, _ErrDart>('yinwei_track_title'),
@@ -14,35 +21,41 @@ class YinweiBindings {
             _lib.lookupFunction<_ErrNative, _ErrDart>('yinwei_track_artist'),
         yinweiTrackAlbum =
             _lib.lookupFunction<_ErrNative, _ErrDart>('yinwei_track_album'),
-        yinweiTrackPath = _lib.lookupFunction<_ErrNative, _ErrDart>('yinwei_track_path'),
+        yinweiTrackPath =
+            _lib.lookupFunction<_ErrNative, _ErrDart>('yinwei_track_path'),
         yinweiTrackDurationMs =
             _lib.lookupFunction<_U64Native, _U64Dart>('yinwei_track_duration_ms'),
         yinweiTrackSampleRate =
             _lib.lookupFunction<_U32Native, _U32Dart>('yinwei_track_sample_rate'),
-        yinweiSetParams =
-            _lib.lookupFunction<_SetParamsNative, _SetParamsDart>('yinwei_set_params'),
-        yinweiGetParams =
-            _lib.lookupFunction<_GetParamsNative, _GetParamsDart>('yinwei_get_params'),
-        yinweiApplyPreset =
-            _lib.lookupFunction<_ApplyPresetNative, _ApplyPresetDart>('yinwei_apply_preset'),
-        yinweiSetMode = _lib.lookupFunction<_I32InNative, _I32InDart>('yinwei_set_mode'),
+        yinweiSetParams = _lib
+            .lookupFunction<_SetParamsNative, _SetParamsDart>('yinwei_set_params'),
+        yinweiGetParams = _lib
+            .lookupFunction<_GetParamsNative, _GetParamsDart>('yinwei_get_params'),
+        yinweiApplyPreset = _lib.lookupFunction<_ApplyPresetNative, _ApplyPresetDart>(
+            'yinwei_apply_preset'),
+        yinweiSetMode =
+            _lib.lookupFunction<_I32InNative, _I32InDart>('yinwei_set_mode'),
         yinweiRebuildPreview =
             _lib.lookupFunction<_VoidNative, _VoidDart>('yinwei_rebuild_preview'),
         yinweiPlay = _lib.lookupFunction<_VoidNative, _VoidDart>('yinwei_play'),
         yinweiPause = _lib.lookupFunction<_VoidNative, _VoidDart>('yinwei_pause'),
-        yinweiSeekMs = _lib.lookupFunction<_SeekNative, _SeekDart>('yinwei_seek_ms'),
+        yinweiSeekMs =
+            _lib.lookupFunction<_SeekNative, _SeekDart>('yinwei_seek_ms'),
         yinweiPositionMs =
             _lib.lookupFunction<_U64Native, _U64Dart>('yinwei_position_ms'),
         yinweiIsPlaying =
             _lib.lookupFunction<_VoidNative, _VoidDart>('yinwei_is_playing'),
-        yinweiCurrentAzimuthDeg =
-            _lib.lookupFunction<_F32Native, _F32Dart>('yinwei_current_azimuth_deg'),
+        yinweiCurrentAzimuthDeg = _lib
+            .lookupFunction<_F32Native, _F32Dart>('yinwei_current_azimuth_deg'),
         yinweiExportWav =
             _lib.lookupFunction<_OpenNative, _OpenDart>('yinwei_export_wav'),
-        yinweiDispose = _lib.lookupFunction<_VoidNative, _VoidDart>('yinwei_dispose'),
+        yinweiDispose =
+            _lib.lookupFunction<_VoidNative, _VoidDart>('yinwei_dispose'),
         yinweiIsPreviewDirty =
             _lib.lookupFunction<_VoidNative, _VoidDart>('yinwei_is_preview_dirty');
 
+  // Kept so the DynamicLibrary mapping stays alive for the process lifetime.
+  // ignore: unused_field
   final DynamicLibrary _lib;
 
   final _ErrDart yinweiLastError;
@@ -71,12 +84,16 @@ class YinweiBindings {
   static YinweiBindings? _instance;
   static String? loadError;
 
-  /// Try load `spatial_core` shared library. Returns null if unavailable.
+  /// Absolute path of the loaded native library (pass into isolates).
+  static String? resolvedLibraryPath;
+
+  /// Try load `spatial_core`. Returns null if unavailable.
   static YinweiBindings? tryLoad() {
     if (_instance != null) return _instance;
     try {
-      final lib = _openLib();
-      _instance = YinweiBindings._(lib);
+      final opened = _openLib();
+      resolvedLibraryPath = opened.path;
+      _instance = YinweiBindings._(opened.lib);
       loadError = null;
       return _instance;
     } catch (e) {
@@ -85,30 +102,38 @@ class YinweiBindings {
     }
   }
 
-  static DynamicLibrary _openLib() {
+  /// Load a specific absolute library path (for background isolates).
+  static YinweiBindings loadFromPath(String absolutePath) {
+    final lib = DynamicLibrary.open(absolutePath);
+    resolvedLibraryPath = absolutePath;
+    final b = YinweiBindings._(lib);
+    _instance = b;
+    loadError = null;
+    return b;
+  }
+
+  static ({DynamicLibrary lib, String path}) _openLib() {
     final errors = <String>[];
     if (Platform.isWindows) {
+      final exeDir = File(Platform.resolvedExecutable).parent.path;
+      final cwd = Directory.current.path;
+      // Prefer the DLL next to the running exe (fresh build) BEFORE bare /
+      // cwd names — those often resolve to a stale copy.
       final candidates = <String>[
+        '$exeDir\\spatial_core.dll',
+        '$exeDir\\libspatial_core.dll',
+        '$cwd\\build\\windows\\x64\\runner\\Debug\\spatial_core.dll',
+        '$cwd\\build\\windows\\x64\\runner\\Release\\spatial_core.dll',
+        '$cwd\\windows\\runner\\spatial_core.dll',
+        '$cwd\\spatial_core.dll',
         'spatial_core.dll',
         'libspatial_core.dll',
       ];
-      final exe = Platform.resolvedExecutable;
-      final dir = File(exe).parent.path;
-      candidates.addAll([
-        '$dir\\spatial_core.dll',
-        '$dir\\libspatial_core.dll',
-      ]);
-      // Common flutter run output folders relative to cwd.
-      final cwd = Directory.current.path;
-      candidates.addAll([
-        '$cwd\\spatial_core.dll',
-        '$cwd\\windows\\runner\\spatial_core.dll',
-        '$cwd\\build\\windows\\x64\\runner\\Debug\\spatial_core.dll',
-        '$cwd\\build\\windows\\x64\\runner\\Release\\spatial_core.dll',
-      ]);
       for (final name in candidates) {
         try {
-          return DynamicLibrary.open(name);
+          final abs = File(name).absolute.path;
+          final lib = DynamicLibrary.open(abs);
+          return (lib: lib, path: abs);
         } catch (e) {
           errors.add('$name → $e');
         }
@@ -116,10 +141,12 @@ class YinweiBindings {
       throw StateError('spatial_core.dll load failed:\n${errors.join('\n')}');
     }
     if (Platform.isLinux) {
-      return DynamicLibrary.open('libspatial_core.so');
+      const name = 'libspatial_core.so';
+      return (lib: DynamicLibrary.open(name), path: name);
     }
     if (Platform.isMacOS) {
-      return DynamicLibrary.open('libspatial_core.dylib');
+      const name = 'libspatial_core.dylib';
+      return (lib: DynamicLibrary.open(name), path: name);
     }
     throw UnsupportedError('Unsupported platform ${Platform.operatingSystem}');
   }
