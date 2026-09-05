@@ -83,6 +83,13 @@ Earlier Envelopment only scaled Mid/Side **Side** (L−R). Mono / hard-centered 
 
 Now: Mid highs also bleed into ±110° ambient HRTF paths, and Mid focus is slightly reduced as envelopment rises. Status: `p2.4.4-envelopment`.
 
+## P2.4.5 — Drag-drop + correct native sample rate
+
+1. **Drag & drop** audio/video onto the player window (`desktop_drop`).
+2. **Speed / "phone" tone**: decode no longer forces 44.1 kHz; playback opens the cpal stream at the **content** rate (do not overwrite with the device default). Orbit Mid HRTF is rendered once (was double-processed → metallic noise). Air absorption softened near-field.
+
+Status: `p2.4.5-drop-rate` / `ui-7`.
+
 ## Next
 
 **P2.5** — richer export file dialog / progress UX polish (open picker already minimal in P2.4).

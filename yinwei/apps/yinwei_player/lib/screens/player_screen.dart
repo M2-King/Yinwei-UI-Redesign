@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:desktop_drop/desktop_drop.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
@@ -24,6 +25,11 @@ class PlayerScreen extends StatefulWidget {
 class _PlayerScreenState extends State<PlayerScreen> {
   late final EngineController _ctrl;
   late final EngineBackend _backend;
+  bool _dragging = false;
+
+  static const _mediaExts = {
+    'wav', 'mp3', 'flac', 'ogg', 'm4a', 'aac', 'mp4', 'm4v', 'mov',
+  };
 
   @override
   void initState() {
@@ -55,7 +61,25 @@ class _PlayerScreenState extends State<PlayerScreen> {
   @override
   Widget build(BuildContext context) {
     final c = _ctrl;
-    return Scaffold(
+    return DropTarget(
+      onDragEntered: (_) => setState(() => _dragging = true),
+      onDragExited: (_) => setState(() => _dragging = false),
+      onDragDone: (detail) async {
+        setState(() => _dragging = false);
+        final path = _firstSupportedDrop(detail);
+        if (path == null) {
+          if (!mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('请拖入音频或视频文件（wav/mp3/flac/ogg/m4a/aac/mp4/m4v/mov）'),
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+          return;
+        }
+        await _openMediaPath(path);
+      },
+      child: Scaffold(
       body: Stack(
         children: [
           Column(
@@ -144,26 +168,52 @@ class _PlayerScreenState extends State<PlayerScreen> {
                 minHeight: 3,
               ),
             ),
+          if (_dragging)
+            Positioned.fill(
+              child: IgnorePointer(
+                child: ColoredBox(
+                  color: YinweiColors.accent.withOpacity(0.12),
+                  child: Center(
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 18),
+                      decoration: BoxDecoration(
+                        color: YinweiColors.panel,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: YinweiColors.accent, width: 1.5),
+                      ),
+                      child: Text(
+                        '拖放以打开音频 / 视频',
+                        style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                              color: YinweiColors.accent,
+                              fontWeight: FontWeight.w600,
+                            ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
         ],
       ),
+    ),
     );
+  }
+
+  String? _firstSupportedDrop(DropDoneDetails detail) {
+    for (final f in detail.files) {
+      final path = f.path;
+      if (path.isEmpty) continue;
+      final ext = path.split('.').last.toLowerCase();
+      if (_mediaExts.contains(ext)) return path;
+    }
+    return null;
   }
 
   Future<void> _onOpen() async {
     try {
       final result = await FilePicker.platform.pickFiles(
         type: FileType.custom,
-        allowedExtensions: const [
-          'wav',
-          'mp3',
-          'flac',
-          'ogg',
-          'm4a',
-          'aac',
-          'mp4',
-          'm4v',
-          'mov',
-        ],
+        allowedExtensions: _mediaExts.toList()..sort(),
         dialogTitle: '打开音频或视频（自动提取音轨）',
       );
       if (result == null || result.files.isEmpty) return;
@@ -171,6 +221,17 @@ class _PlayerScreenState extends State<PlayerScreen> {
       if (path == null || path.isEmpty) {
         throw StateError('无法读取文件路径');
       }
+      await _openMediaPath(path);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('$e'), behavior: SnackBarBehavior.floating),
+      );
+    }
+  }
+
+  Future<void> _openMediaPath(String path) async {
+    try {
       await _ctrl.openPath(path);
       if (!mounted) return;
       final label = _backend == EngineBackend.native ? '真引擎' : '演示引擎 Mock';
@@ -250,7 +311,7 @@ class _TitleBar extends StatelessWidget {
             const Spacer(),
             IconButton(
               onPressed: onOpen,
-              tooltip: 'Open local file',
+              tooltip: '打开文件（也可拖放音频/视频到窗口）',
               icon: const Icon(Icons.folder_open_rounded, color: YinweiColors.accent),
             ),
           ],

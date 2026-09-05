@@ -12,6 +12,7 @@ use symphonia::core::probe::Hint;
 
 use crate::error::SpatialError;
 
+/// Default rate for synthetic test fixtures only (decode keeps native rate).
 const TARGET_RATE: u32 = 44_100;
 
 /// Interleaved stereo frames as (left, right).
@@ -134,11 +135,9 @@ pub fn load_audio(path: &Path) -> Result<DecodedAudio, SpatialError> {
     let channels = src_channels.max(1);
 
     let stereo = to_stereo(&interleaved, channels);
-    let frames = if sample_rate == TARGET_RATE {
-        stereo
-    } else {
-        resample_linear(&stereo, sample_rate, TARGET_RATE)
-    };
+    // Keep the file's native rate. Forcing 44.1 kHz then playing on a typical
+    // Windows 48 kHz device made everything ~9% fast and dull/"phone-like".
+    let frames = stereo;
 
     let stem = path
         .file_stem()
@@ -149,7 +148,7 @@ pub fn load_audio(path: &Path) -> Result<DecodedAudio, SpatialError> {
     let (title, artist, album) = read_metadata(&mut format, &stem);
 
     Ok(DecodedAudio {
-        sample_rate: TARGET_RATE,
+        sample_rate,
         frames,
         title,
         artist,
@@ -233,6 +232,7 @@ fn to_stereo(samples: &[f32], channels: usize) -> Vec<StereoFrame> {
 }
 
 /// Lightweight linear resampler (good enough for MVP; rubato later).
+#[allow(dead_code)]
 fn resample_linear(input: &[StereoFrame], from: u32, to: u32) -> Vec<StereoFrame> {
     if input.is_empty() || from == to {
         return input.to_vec();
@@ -326,6 +326,7 @@ mod decode_tests {
             return;
         }
         let d = load_audio(&path).expect("decode 48k mp4");
+        assert_eq!(d.sample_rate, 48_000, "must keep native 48 kHz (no force-to-44.1)");
         let secs = d.frames.len() as f64 / d.sample_rate as f64;
         assert!(
             (0.90..=1.15).contains(&secs),

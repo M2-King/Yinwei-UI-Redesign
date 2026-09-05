@@ -37,7 +37,14 @@ impl RealtimePlayer {
     }
 
     pub fn set_sample_rate(&self, sr: u32) {
-        self.sample_rate.store(sr as u64, Ordering::Relaxed);
+        let prev = self.sample_rate.swap(sr as u64, Ordering::Relaxed);
+        // Recreate the device stream when content rate changes (e.g. 48k MP4
+        // after a 44.1k WAV), otherwise we keep playing at the old rate.
+        if prev != sr as u64 {
+            if let Ok(mut g) = self.stream.lock() {
+                *g = None;
+            }
+        }
     }
 
     pub fn load_frames(&self, frames: Vec<StereoFrame>) -> Result<(), SpatialError> {
@@ -123,24 +130,11 @@ impl RealtimePlayer {
 
         let sample_format = supported.sample_format();
         let mut config: StreamConfig = supported.clone().into();
-        // Keep content PCM rate when the device allows it. Blindly adopting the
-        // device default (often 48 kHz) while buffers are 44.1 kHz pitches up
-        // every file by ~9%.
+        // Always open the stream at the *content* PCM rate. Never rewrite
+        // sample_rate to the device default while buffers stay at content rate
+        // (that was the "too fast + phone quality" bug on 48 kHz Windows hosts).
         let content_sr = self.sample_rate.load(Ordering::Relaxed).max(1) as u32;
-        if let Ok(ranges) = device.supported_output_configs() {
-            for range in ranges {
-                if range.channels() == config.channels
-                    && range.sample_format() == sample_format
-                    && range.min_sample_rate().0 <= content_sr
-                    && range.max_sample_rate().0 >= content_sr
-                {
-                    config.sample_rate = cpal::SampleRate(content_sr);
-                    break;
-                }
-            }
-        }
-        self.sample_rate
-            .store(config.sample_rate.0 as u64, Ordering::Relaxed);
+        config.sample_rate = cpal::SampleRate(content_sr);
 
         let frames = Arc::clone(&self.frames);
         let cursor = Arc::clone(&self.cursor);

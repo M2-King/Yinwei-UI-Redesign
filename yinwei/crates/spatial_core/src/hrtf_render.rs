@@ -46,7 +46,9 @@ fn distance_gain(distance: f32) -> f32 {
 /// One-pole coefficient for air absorption (higher = brighter).
 fn air_absorption_coeff(distance: f32) -> f32 {
     let t = ((distance - 0.5) / 9.5).clamp(0.0, 1.0);
-    0.96 - 0.42 * t
+    // Mild high-shelf loss with distance. The previous linear curve was too dark
+    // near-field and read as "phone / call quality".
+    0.995 - 0.18 * t * t
 }
 
 /// Wet mix grows with distance so "far" feels more room / less dry proximity.
@@ -175,12 +177,22 @@ impl HrtfRenderer {
                 side_high[i] = (h_s + h_m * 0.55) * env;
             }
 
+            // Single Mid HRTF pass. Orbit used to render Mid twice (fixed then
+            // orbiting) which desynced HRIR history → metallic / electronic noise.
+            let mid_render_pos = if params.motion == MotionMode::Orbit {
+                spherical_to_vec(
+                    params.azimuth_deg + orbit_offset,
+                    params.elevation_deg,
+                )
+            } else {
+                new_mid_pos
+            };
             let mut mid_out = vec![(0.0f32, 0.0f32); CHUNK];
             {
                 let ctx = HrtfContext {
                     source: &mid_high,
                     output: &mut mid_out,
-                    new_sample_vector: normalize(new_mid_pos),
+                    new_sample_vector: normalize(mid_render_pos),
                     prev_sample_vector: normalize(prev_mid_pos),
                     prev_left_samples: &mut prev_mid_l,
                     prev_right_samples: &mut prev_mid_r,
@@ -189,6 +201,7 @@ impl HrtfRenderer {
                 };
                 self.processor.process_samples(ctx);
             }
+            prev_mid_pos = mid_render_pos;
 
             let mut side_out = vec![(0.0f32, 0.0f32); CHUNK];
             if env > 0.01 {
@@ -243,37 +256,6 @@ impl HrtfRenderer {
                 prev_side2_pos = side2_pos;
             }
 
-            // In Fixed mode, Mid should sit at the selected 音位 — already mid_az.
-            // Optionally orbit Mid itself when Orbit mode:
-            if params.motion == MotionMode::Orbit {
-                // Re-render Mid with orbiting azimuth for stronger 8D motion of core content.
-                let moving_mid = spherical_to_vec(
-                    params.azimuth_deg + orbit_offset,
-                    params.elevation_deg,
-                );
-                let mut mid_orbit_out = vec![(0.0f32, 0.0f32); CHUNK];
-                let mut hist_l = prev_mid_l.clone();
-                let mut hist_r = prev_mid_r.clone();
-                {
-                    let ctx = HrtfContext {
-                        source: &mid_high,
-                        output: &mut mid_orbit_out,
-                        new_sample_vector: normalize(moving_mid),
-                        prev_sample_vector: normalize(prev_mid_pos),
-                        prev_left_samples: &mut hist_l,
-                        prev_right_samples: &mut hist_r,
-                        new_distance_gain: new_g,
-                        prev_distance_gain: prev_g,
-                    };
-                    self.processor.process_samples(ctx);
-                }
-                mid_out = mid_orbit_out;
-                prev_mid_l = hist_l;
-                prev_mid_r = hist_r;
-                prev_mid_pos = moving_mid;
-            } else {
-                prev_mid_pos = new_mid_pos;
-            }
 
             for i in 0..len {
                 let t = i as f32 / len.max(1) as f32;
