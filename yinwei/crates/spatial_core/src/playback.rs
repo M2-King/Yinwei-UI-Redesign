@@ -1,7 +1,11 @@
 //! Realtime output via cpal (P1).
 //!
-//! Environments without an audio device (CI/cloud) get `SpatialError::AudioDevice`
-//! from `play()` — unit tests still cover buffer load/seek without opening a stream.
+//! Windows WASAPI shared mode often *ignores* a requested content sample rate and
+//! still runs the callback at the device mix rate (commonly 48 kHz). Feeding
+//! 44.1 kHz PCM into that callback makes playback ~9% fast and thin/"phone-like".
+//!
+//! Fix: always open the stream at the **device default** rate, and cubic-resample
+//! content PCM to that rate before queuing frames.
 
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
@@ -11,6 +15,7 @@ use cpal::{FromSample, Sample, SampleFormat, Stream, StreamConfig};
 
 use crate::decode::StereoFrame;
 use crate::error::SpatialError;
+use crate::resample::resample_cubic;
 
 /// cpal::Stream is !Send on some hosts; we only move it between mutex guards.
 struct SendStream(#[allow(dead_code)] Stream);
@@ -18,29 +23,37 @@ unsafe impl Send for SendStream {}
 
 /// Holds playable PCM and an optional live cpal stream.
 pub struct RealtimePlayer {
+    /// Source PCM at `content_rate` (pre-device resample).
+    content_frames: Mutex<Vec<StereoFrame>>,
+    /// PCM currently fed to the device (already at `output_rate`).
     frames: Arc<Mutex<Vec<StereoFrame>>>,
     cursor: Arc<AtomicU64>,
     playing: Arc<AtomicBool>,
-    sample_rate: Arc<AtomicU64>,
+    /// Sample rate of `frames` / the open stream (device rate after prepare).
+    output_rate: Arc<AtomicU64>,
+    /// Native rate of the last content buffer before device resample.
+    content_rate: Arc<AtomicU64>,
     stream: Mutex<Option<SendStream>>,
 }
 
 impl RealtimePlayer {
     pub fn new() -> Self {
         Self {
+            content_frames: Mutex::new(Vec::new()),
             frames: Arc::new(Mutex::new(Vec::new())),
             cursor: Arc::new(AtomicU64::new(0)),
             playing: Arc::new(AtomicBool::new(false)),
-            sample_rate: Arc::new(AtomicU64::new(44_100)),
+            output_rate: Arc::new(AtomicU64::new(44_100)),
+            content_rate: Arc::new(AtomicU64::new(44_100)),
             stream: Mutex::new(None),
         }
     }
 
+    /// Announce the sample rate of upcoming content PCM (before load/swap).
     pub fn set_sample_rate(&self, sr: u32) {
-        let prev = self.sample_rate.swap(sr as u64, Ordering::Relaxed);
-        // Recreate the device stream when content rate changes (e.g. 48k MP4
-        // after a 44.1k WAV), otherwise we keep playing at the old rate.
+        let prev = self.content_rate.swap(sr as u64, Ordering::Relaxed);
         if prev != sr as u64 {
+            // Drop stream so the next play re-prepares at device rate.
             if let Ok(mut g) = self.stream.lock() {
                 *g = None;
             }
@@ -48,8 +61,13 @@ impl RealtimePlayer {
     }
 
     pub fn load_frames(&self, frames: Vec<StereoFrame>) -> Result<(), SpatialError> {
+        {
+            let mut src = self.content_frames.lock().map_err(|_| SpatialError::LockPoisoned)?;
+            *src = frames;
+        }
+        let prepared = self.render_to_device()?;
         let mut g = self.frames.lock().map_err(|_| SpatialError::LockPoisoned)?;
-        *g = frames;
+        *g = prepared;
         self.cursor.store(0, Ordering::Relaxed);
         Ok(())
     }
@@ -60,11 +78,16 @@ impl RealtimePlayer {
         frames: Vec<StereoFrame>,
         keep_ms: u64,
     ) -> Result<(), SpatialError> {
-        let sr = self.sample_rate.load(Ordering::Relaxed).max(1);
+        {
+            let mut src = self.content_frames.lock().map_err(|_| SpatialError::LockPoisoned)?;
+            *src = frames;
+        }
+        let prepared = self.render_to_device()?;
+        let sr = self.output_rate.load(Ordering::Relaxed).max(1);
         let frame = keep_ms.saturating_mul(sr) / 1000;
         let mut g = self.frames.lock().map_err(|_| SpatialError::LockPoisoned)?;
-        let len = frames.len() as u64;
-        *g = frames;
+        let len = prepared.len() as u64;
+        *g = prepared;
         self.cursor.store(frame.min(len), Ordering::Relaxed);
         Ok(())
     }
@@ -75,7 +98,7 @@ impl RealtimePlayer {
     }
 
     pub fn seek_ms(&self, ms: u64) -> Result<(), SpatialError> {
-        let sr = self.sample_rate.load(Ordering::Relaxed).max(1);
+        let sr = self.output_rate.load(Ordering::Relaxed).max(1);
         let frame = ms.saturating_mul(sr) / 1000;
         let len = self.frame_count()? as u64;
         self.cursor.store(frame.min(len), Ordering::Relaxed);
@@ -83,7 +106,7 @@ impl RealtimePlayer {
     }
 
     pub fn position_ms(&self) -> u64 {
-        let sr = self.sample_rate.load(Ordering::Relaxed).max(1);
+        let sr = self.output_rate.load(Ordering::Relaxed).max(1);
         self.cursor.load(Ordering::Relaxed).saturating_mul(1000) / sr
     }
 
@@ -113,6 +136,36 @@ impl RealtimePlayer {
         cpal::default_host().default_output_device().is_some()
     }
 
+    /// Device mix rate when available; falls back to content rate offline/CI.
+    fn probe_device_rate(&self) -> u32 {
+        let content = self.content_rate.load(Ordering::Relaxed).max(1) as u32;
+        let host = cpal::default_host();
+        let Some(device) = host.default_output_device() else {
+            return content;
+        };
+        match device.default_output_config() {
+            Ok(cfg) => cfg.sample_rate().0.max(1),
+            Err(_) => content,
+        }
+    }
+
+    /// Convert content-rate PCM to the device mix rate and update `output_rate`.
+    fn render_to_device(&self) -> Result<Vec<StereoFrame>, SpatialError> {
+        let content_sr = self.content_rate.load(Ordering::Relaxed).max(1) as u32;
+        let device_sr = self.probe_device_rate();
+        self.output_rate
+            .store(device_sr as u64, Ordering::Relaxed);
+        let src = self.content_frames.lock().map_err(|_| SpatialError::LockPoisoned)?;
+        if content_sr == device_sr {
+            Ok(src.clone())
+        } else {
+            eprintln!(
+                "yinwei: resampling preview {content_sr} Hz → device {device_sr} Hz (WASAPI-safe)"
+            );
+            Ok(resample_cubic(&src, content_sr, device_sr))
+        }
+    }
+
     fn ensure_stream(&self) -> Result<(), SpatialError> {
         let mut slot = self.stream.lock().map_err(|_| SpatialError::LockPoisoned)?;
         if slot.is_some() {
@@ -129,12 +182,41 @@ impl RealtimePlayer {
             .map_err(|e| SpatialError::AudioDevice(e.to_string()))?;
 
         let sample_format = supported.sample_format();
-        let mut config: StreamConfig = supported.clone().into();
-        // Always open the stream at the *content* PCM rate. Never rewrite
-        // sample_rate to the device default while buffers stay at content rate
-        // (that was the "too fast + phone quality" bug on 48 kHz Windows hosts).
-        let content_sr = self.sample_rate.load(Ordering::Relaxed).max(1) as u32;
-        config.sample_rate = cpal::SampleRate(content_sr);
+        // CRITICAL: use the device default rate as-is. Do not override with
+        // content rate — WASAPI shared mode will still clock the callback at
+        // the mix format, which desyncs pitch/speed if PCM doesn't match.
+        let config: StreamConfig = supported.clone().into();
+        let device_sr = config.sample_rate.0.max(1);
+        self.output_rate
+            .store(device_sr as u64, Ordering::Relaxed);
+
+        // Refresh device PCM now that the real mix rate is known (probe may have
+        // differed, or frames were loaded before a device was available).
+        {
+            let content_sr = self.content_rate.load(Ordering::Relaxed).max(1) as u32;
+            let src = self.content_frames.lock().map_err(|_| SpatialError::LockPoisoned)?;
+            if !src.is_empty() {
+                let rendered = if content_sr == device_sr {
+                    src.clone()
+                } else {
+                    eprintln!(
+                        "yinwei: stream open resample {content_sr} → {device_sr} Hz"
+                    );
+                    resample_cubic(&src, content_sr, device_sr)
+                };
+                drop(src);
+                let mut out = self.frames.lock().map_err(|_| SpatialError::LockPoisoned)?;
+                // Preserve playhead ratio across resample.
+                let old_len = out.len().max(1) as f64;
+                let pos = self.cursor.load(Ordering::Relaxed) as f64 / old_len;
+                let new_len = rendered.len() as u64;
+                *out = rendered;
+                self.cursor.store(
+                    ((pos * new_len as f64).round() as u64).min(new_len.saturating_sub(1)),
+                    Ordering::Relaxed,
+                );
+            }
+        }
 
         let frames = Arc::clone(&self.frames);
         let cursor = Arc::clone(&self.cursor);
@@ -261,6 +343,7 @@ mod tests {
         player.set_sample_rate(44_100);
         let frames = vec![(0.1, -0.1); 44_100];
         player.load_frames(frames).unwrap();
+        // Offline/CI: no device → prepare keeps content rate.
         assert_eq!(player.frame_count().unwrap(), 44_100);
         player.seek_ms(500).unwrap();
         assert!((player.position_ms() as i64 - 500).abs() <= 1);

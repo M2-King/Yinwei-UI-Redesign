@@ -102,20 +102,25 @@ pub fn load_audio(path: &Path) -> Result<DecodedAudio, SpatialError> {
                 src_rate = Some(spec.rate);
                 src_channels = spec.channels.count().max(1);
 
-                // SampleBuffer::capacity() is in *samples*, AudioBuffer::capacity() is in *frames*.
-                // Comparing them directly prevented growth → truncated AAC packets → chipmunk/fast audio.
-                let need_samples = decoded.capacity() * src_channels;
+                // SampleBuffer::capacity() is *samples*; AudioBuffer::capacity()/frames() are *frames*.
+                // Size by max(frames, capacity) so AAC packets never truncate.
+                let n_frames = decoded.frames().max(1);
+                let need_frames = decoded.capacity().max(n_frames);
+                let need_samples = need_frames * src_channels;
                 let recreate = sample_buf
                     .as_ref()
                     .map(|b| b.capacity() < need_samples)
                     .unwrap_or(true);
                 if recreate {
-                    sample_buf = Some(SampleBuffer::new(decoded.capacity() as u64, spec));
+                    sample_buf = Some(SampleBuffer::new(need_frames as u64, spec));
                 }
 
                 if let Some(buf) = sample_buf.as_mut() {
                     buf.copy_interleaved_ref(decoded);
-                    interleaved.extend_from_slice(buf.samples());
+                    // Only take exactly frames*channels samples (never stale capacity padding).
+                    let n = n_frames * src_channels;
+                    let s = buf.samples();
+                    interleaved.extend_from_slice(&s[..n.min(s.len())]);
                 }
             }
             Err(SymphoniaError::DecodeError(_)) => continue,

@@ -90,6 +90,14 @@ Now: Mid highs also bleed into ±110° ambient HRTF paths, and Mid focus is slig
 
 Status: `p2.4.5-drop-rate` / `ui-7`.
 
+## P2.4.6 — WASAPI device-rate playback
+
+Root cause of remaining "fast + phone quality": Windows shared-mode WASAPI often **ignores** a requested 44.1 kHz stream rate and still clocks the callback at the device mix rate (usually 48 kHz). Feeding native-rate PCM 1:1 into that callback speeds audio up and sounds thin.
+
+Fix: open cpal at the **device default** rate; cubic-resample content → device rate before queueing. Decode still keeps native rate for HRTF.
+
+Status: `p2.4.6-wasapi-rate`.
+
 ## Next
 
 **P2.5** — richer export file dialog / progress UX polish (open picker already minimal in P2.4).

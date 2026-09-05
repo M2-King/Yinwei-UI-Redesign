@@ -8,6 +8,7 @@ mod mid_side;
 mod params;
 mod presets;
 mod reverb;
+mod resample;
 
 #[cfg(feature = "realtime")]
 mod playback;
