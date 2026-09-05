@@ -77,6 +77,12 @@ Extractor is still **Symphonia** (`isomp4` + AAC), not FFmpeg. Video-only chipmu
 
 Rebuild DLL after pull. Status bar: `p2.4.3-mp4-fix`.
 
+## P2.4.4 — Envelopment audible on mono
+
+Earlier Envelopment only scaled Mid/Side **Side** (L−R). Mono / hard-centered tracks → Side≈0 → slider did nothing.
+
+Now: Mid highs also bleed into ±110° ambient HRTF paths, and Mid focus is slightly reduced as envelopment rises. Status: `p2.4.4-envelopment`.
+
 ## Next
 
 **P2.5** — richer export file dialog / progress UX polish (open picker already minimal in P2.4).

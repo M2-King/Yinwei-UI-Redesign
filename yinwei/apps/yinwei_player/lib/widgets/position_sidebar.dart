@@ -121,7 +121,7 @@ class PositionSidebar extends StatelessWidget {
                     ),
                   ),
                   _LabeledSlider(
-                    label: 'Envelopment',
+                    label: 'Envelopment (surround wrap)',
                     valueLabel: '${(params.envelopment * 100).round()}%',
                     value: params.envelopment,
                     min: 0,

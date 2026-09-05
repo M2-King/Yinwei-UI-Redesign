@@ -71,7 +71,7 @@ Same state fields and engine mapping as desktop (§2.1–2.2). Mobile difference
 | Distance | 2.10 m | `distanceM` 0.5…10 | distance gain |
 | Fixed Position \| Orbit | Fixed | `MotionMode` | freeze vs animate |
 | Orbit Speed | 0.40 Hz | `orbitHz` | RPM = Hz × 60 |
-| Envelopment | 60% | `envelopment` 0…1 | Side ambient amount |
+| Envelopment | 60% | `envelopment` 0…1 | Surround wrap: Side + Mid bleed to ±110° HRTF |
 | Reverb | 20% | `reverbMix` 0…1 | Artezon reverb mix |
 | Export WAV | primary | — | offline render + save |
 | Save Preset | secondary | local JSON | UI only (MVP) |

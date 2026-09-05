@@ -114,10 +114,14 @@ impl HrtfRenderer {
         let mut prev_mid_r = Vec::new();
         let mut prev_side_l = Vec::new();
         let mut prev_side_r = Vec::new();
+        let mut prev_side2_l = Vec::new();
+        let mut prev_side2_r = Vec::new();
 
         let mut prev_mid_pos = spherical_to_vec(params.azimuth_deg, params.elevation_deg);
         let mut prev_side_pos =
             spherical_to_vec(params.azimuth_deg + 110.0, params.elevation_deg * 0.5);
+        let mut prev_side2_pos =
+            spherical_to_vec(params.azimuth_deg - 110.0, params.elevation_deg * 0.5);
         let mut prev_dist = params.distance_m;
         let mut phase = 0.0f32;
         let mut air_lp = OnePoleLp::new();
@@ -160,12 +164,15 @@ impl HrtfRenderer {
             let mut mid_high = vec![0.0f32; CHUNK];
             let mut side_high = vec![0.0f32; CHUNK];
 
+            let env = params.envelopment.clamp(0.0, 1.0);
+            // Envelopment = surround wrap. Pure Side (L−R) is silent on mono /
+            // hard-centered mixes, so also bleed Mid highs into the ambient path.
             for i in 0..len {
                 let (b_m, h_m) = self.crossover_mid.process(mid[start + i]);
                 let (b_s, h_s) = self.crossover_side.process(side[start + i]);
                 bass[i] = b_m + b_s * 0.35;
-                mid_high[i] = h_m;
-                side_high[i] = h_s * params.envelopment;
+                mid_high[i] = h_m * (1.0 - 0.28 * env);
+                side_high[i] = (h_s + h_m * 0.55) * env;
             }
 
             let mut mid_out = vec![(0.0f32, 0.0f32); CHUNK];
@@ -184,25 +191,56 @@ impl HrtfRenderer {
             }
 
             let mut side_out = vec![(0.0f32, 0.0f32); CHUNK];
-            if params.envelopment > 0.01 {
-                // Fixed mode: also nudge Mid source with orbit_offset=0 side placement
+            if env > 0.01 {
+                // Place ambient at ±110° around the focus so envelopment widens
+                // the image instead of only boosting a silent Side channel.
+                let el = params.elevation_deg * 0.4;
                 let side_pos = if params.motion == MotionMode::Fixed {
-                    spherical_to_vec(params.azimuth_deg + 110.0, params.elevation_deg * 0.4)
+                    spherical_to_vec(params.azimuth_deg + 110.0, el)
                 } else {
                     new_side_pos
                 };
-                let ctx = HrtfContext {
-                    source: &side_high,
-                    output: &mut side_out,
-                    new_sample_vector: normalize(side_pos),
-                    prev_sample_vector: normalize(prev_side_pos),
-                    prev_left_samples: &mut prev_side_l,
-                    prev_right_samples: &mut prev_side_r,
-                    new_distance_gain: new_g * 0.85,
-                    prev_distance_gain: prev_g * 0.85,
+                let side2_pos = if params.motion == MotionMode::Fixed {
+                    spherical_to_vec(params.azimuth_deg - 110.0, el)
+                } else {
+                    spherical_to_vec(params.azimuth_deg - 120.0 + orbit_offset, params.elevation_deg * 0.5)
                 };
-                self.processor.process_samples(ctx);
+
+                let mut side_a = vec![(0.0f32, 0.0f32); CHUNK];
+                let mut side_b = vec![(0.0f32, 0.0f32); CHUNK];
+                {
+                    let ctx = HrtfContext {
+                        source: &side_high,
+                        output: &mut side_a,
+                        new_sample_vector: normalize(side_pos),
+                        prev_sample_vector: normalize(prev_side_pos),
+                        prev_left_samples: &mut prev_side_l,
+                        prev_right_samples: &mut prev_side_r,
+                        new_distance_gain: new_g * 0.8,
+                        prev_distance_gain: prev_g * 0.8,
+                    };
+                    self.processor.process_samples(ctx);
+                }
+                {
+                    let ctx = HrtfContext {
+                        source: &side_high,
+                        output: &mut side_b,
+                        new_sample_vector: normalize(side2_pos),
+                        prev_sample_vector: normalize(prev_side2_pos),
+                        prev_left_samples: &mut prev_side2_l,
+                        prev_right_samples: &mut prev_side2_r,
+                        new_distance_gain: new_g * 0.7,
+                        prev_distance_gain: prev_g * 0.7,
+                    };
+                    self.processor.process_samples(ctx);
+                }
+                for i in 0..CHUNK {
+                    let (a_l, a_r) = side_a[i];
+                    let (b_l, b_r) = side_b[i];
+                    side_out[i] = (a_l + b_l * 0.85, a_r + b_r * 0.85);
+                }
                 prev_side_pos = side_pos;
+                prev_side2_pos = side2_pos;
             }
 
             // In Fixed mode, Mid should sit at the selected 音位 — already mid_az.
@@ -281,5 +319,36 @@ mod distance_tests {
     fn farther_has_more_reverb_and_darker_air() {
         assert!(air_absorption_coeff(0.5) > air_absorption_coeff(8.0));
         assert!(distance_reverb_mix(0.2, 8.0) > distance_reverb_mix(0.2, 0.5));
+    }
+
+    #[test]
+    fn envelopment_changes_mono_render() {
+        // Mono has Side=0; envelopment must still alter the binaural image.
+        let sr = 44_100u32;
+        let mut frames = Vec::with_capacity(sr as usize / 5);
+        for i in 0..(sr / 5) {
+            let t = i as f32 / sr as f32;
+            let s = (t * 440.0 * std::f32::consts::TAU).sin() * 0.3;
+            frames.push((s, s));
+        }
+        let mut dry_params = SpatialParams::default();
+        dry_params.envelopment = 0.0;
+        dry_params.reverb_mix = 0.0;
+        dry_params.motion = MotionMode::Fixed;
+        let mut wet_params = dry_params.clone();
+        wet_params.envelopment = 1.0;
+
+        let mut r0 = HrtfRenderer::new(sr).unwrap();
+        let mut r1 = HrtfRenderer::new(sr).unwrap();
+        let out0 = r0.render(&frames, &dry_params, None).unwrap();
+        let out1 = r1.render(&frames, &wet_params, None).unwrap();
+        let mut diff = 0.0f32;
+        for i in 0..out0.len() {
+            diff += (out0[i].0 - out1[i].0).abs() + (out0[i].1 - out1[i].1).abs();
+        }
+        assert!(
+            diff > 50.0,
+            "envelopment 0 vs 1 should differ on mono; sum abs diff={diff}"
+        );
     }
 }

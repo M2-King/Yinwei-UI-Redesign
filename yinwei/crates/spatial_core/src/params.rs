@@ -29,7 +29,7 @@ pub struct SpatialParams {
     pub motion: MotionMode,
     /// Orbit rate in Hz (mockup: 0.40 Hz). RPM = hz * 60.
     pub orbit_hz: f32,
-    /// Side / ambient amount 0…1 (mockup: 60%).
+    /// Surround wrap 0…1 (mockup: 60%). Side + Mid bleed into offset HRTFs.
     pub envelopment: f32,
     /// Reverb wet mix 0…1 (mockup: 20%).
     pub reverb_mix: f32,
