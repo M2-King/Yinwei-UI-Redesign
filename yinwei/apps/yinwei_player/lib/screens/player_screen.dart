@@ -92,7 +92,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
                     Expanded(
                       flex: 5,
                       child: Padding(
-                        padding: const EdgeInsets.fromLTRB(16, 8, 8, 16),
+                        padding: const EdgeInsets.fromLTRB(28, 12, 12, 20),
                         child: OrbitVisualizer(
                           playhead: c.playhead,
                           azimuthDeg: c.azimuthDeg,
