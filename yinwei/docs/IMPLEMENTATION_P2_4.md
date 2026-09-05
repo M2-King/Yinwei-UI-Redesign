@@ -28,6 +28,12 @@ flutter pub get
 flutter run -d windows
 ```
 
+If you see **No Windows desktop project configured**, pull latest (repo now includes `windows/`), or run once:
+
+```powershell
+flutter create --platforms=windows .
+```
+
 **Pass criteria**
 
 1. Status bar left: green dot + `Native · spatial_core` (not Mock)
