@@ -22,7 +22,7 @@ class PositionSidebar extends StatelessWidget {
     final orbitOn = params.motion == MotionMode.orbit;
 
     return Container(
-      width: 300,
+      width: 288,
       clipBehavior: Clip.hardEdge,
       decoration: const BoxDecoration(
         color: YinweiColors.panel,
@@ -33,12 +33,18 @@ class PositionSidebar extends StatelessWidget {
         children: [
           Expanded(
             child: SingleChildScrollView(
-              padding: const EdgeInsets.fromLTRB(16, 20, 16, 12),
+              padding: const EdgeInsets.fromLTRB(18, 22, 18, 12),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  Text('POSITION', style: Theme.of(context).textTheme.labelSmall),
-                  const SizedBox(height: 12),
+                  Text(
+                    'POSITION',
+                    style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                          letterSpacing: 1.1,
+                          color: YinweiColors.textSecondary,
+                        ),
+                  ),
+                  const SizedBox(height: 14),
                   _PresetGrid(
                     selected: params.selectedPreset,
                     onSelect: (p) {
@@ -46,7 +52,7 @@ class PositionSidebar extends StatelessWidget {
                       onChanged(next);
                     },
                   ),
-                  const SizedBox(height: 22),
+                  const SizedBox(height: 26),
                   _LabeledSlider(
                     label: 'Azimuth',
                     valueLabel: '${params.azimuthDeg.round()}°',
@@ -86,14 +92,14 @@ class PositionSidebar extends StatelessWidget {
                       onChanged(next);
                     },
                   ),
-                  const SizedBox(height: 8),
+                  const SizedBox(height: 10),
                   CupertinoSlidingSegmentedControl<MotionMode>(
                     groupValue: params.motion,
                     backgroundColor: YinweiColors.panelElevated,
-                    thumbColor: YinweiColors.accent,
+                    thumbColor: const Color(0xFF2C2C2E),
                     children: {
                       MotionMode.fixed:
-                          _segLabel('Fixed Position', params.motion == MotionMode.fixed),
+                          _segLabel('Fixed', params.motion == MotionMode.fixed),
                       MotionMode.orbit: _segLabel('Orbit', orbitOn),
                     },
                     onValueChanged: (v) {
@@ -102,9 +108,9 @@ class PositionSidebar extends StatelessWidget {
                       onChanged(next);
                     },
                   ),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 18),
                   Opacity(
-                    opacity: orbitOn ? 1 : 0.4,
+                    opacity: orbitOn ? 1 : 0.35,
                     child: IgnorePointer(
                       ignoring: !orbitOn,
                       child: _LabeledSlider(
@@ -121,7 +127,7 @@ class PositionSidebar extends StatelessWidget {
                     ),
                   ),
                   _LabeledSlider(
-                    label: 'Envelopment (surround wrap)',
+                    label: 'Envelopment',
                     valueLabel: '${(params.envelopment * 100).round()}%',
                     value: params.envelopment,
                     min: 0,
@@ -147,7 +153,7 @@ class PositionSidebar extends StatelessWidget {
             ),
           ),
           Padding(
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+            padding: const EdgeInsets.fromLTRB(18, 8, 18, 18),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
@@ -156,25 +162,26 @@ class PositionSidebar extends StatelessWidget {
                   style: FilledButton.styleFrom(
                     backgroundColor: YinweiColors.accent,
                     foregroundColor: Colors.white,
-                    minimumSize: const Size.fromHeight(44),
+                    minimumSize: const Size.fromHeight(42),
+                    elevation: 0,
                     shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
+                      borderRadius: BorderRadius.circular(10),
                     ),
                   ),
                   child: const Text(
                     'Export WAV',
-                    style: TextStyle(fontWeight: FontWeight.w600),
+                    style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
                   ),
                 ),
-                const SizedBox(height: 10),
+                const SizedBox(height: 8),
                 OutlinedButton(
                   onPressed: onSavePreset,
                   style: OutlinedButton.styleFrom(
-                    foregroundColor: YinweiColors.textPrimary,
+                    foregroundColor: YinweiColors.textSecondary,
                     side: const BorderSide(color: YinweiColors.hairline),
-                    minimumSize: const Size.fromHeight(44),
+                    minimumSize: const Size.fromHeight(42),
                     shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
+                      borderRadius: BorderRadius.circular(10),
                     ),
                   ),
                   child: const Text('Save Preset'),
@@ -189,13 +196,13 @@ class PositionSidebar extends StatelessWidget {
 
   Widget _segLabel(String text, bool selected) {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
       child: Text(
         text,
         style: TextStyle(
           fontSize: 12,
           fontWeight: FontWeight.w500,
-          color: selected ? Colors.white : YinweiColors.textSecondary,
+          color: selected ? YinweiColors.textPrimary : YinweiColors.textSecondary,
         ),
       ),
     );
@@ -243,19 +250,29 @@ class _PresetChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: selected ? YinweiColors.accent : YinweiColors.panelElevated,
-      borderRadius: BorderRadius.circular(10),
+      color: selected ? YinweiColors.accent.withOpacity(0.22) : YinweiColors.panelElevated,
+      borderRadius: BorderRadius.circular(8),
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(10),
-        child: Center(
-          child: Text(
-            label,
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              fontSize: 11,
-              fontWeight: FontWeight.w500,
-              color: selected ? Colors.white : YinweiColors.textSecondary,
+        borderRadius: BorderRadius.circular(8),
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(
+              color: selected
+                  ? YinweiColors.accent.withOpacity(0.55)
+                  : Colors.transparent,
+            ),
+          ),
+          child: Center(
+            child: Text(
+              label,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w500,
+                color: selected ? YinweiColors.textPrimary : YinweiColors.textSecondary,
+              ),
             ),
           ),
         ),

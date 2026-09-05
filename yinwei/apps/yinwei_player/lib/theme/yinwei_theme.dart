@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 
-/// Apple-dark tokens locked to the approved UI mockup.
+/// Apple-dark tokens — calm instrument, not neon HUD.
 abstract final class YinweiColors {
   static const background = Color(0xFF0B0B0D);
-  static const panel = Color(0xFF141416);
-  static const panelElevated = Color(0xFF1C1C1E);
-  static const hairline = Color(0x1FFFFFFF);
+  static const panel = Color(0xFF121214);
+  static const panelElevated = Color(0xFF1A1A1C);
+  static const hairline = Color(0x18FFFFFF);
   static const accent = Color(0xFF0A84FF);
   static const textPrimary = Color(0xFFF5F5F7);
   static const textSecondary = Color(0xFF8E8E93);
@@ -57,10 +57,11 @@ abstract final class YinweiTheme {
       ),
       sliderTheme: SliderThemeData(
         activeTrackColor: YinweiColors.accent,
-        inactiveTrackColor: YinweiColors.hairline,
-        thumbColor: Colors.white,
-        overlayColor: YinweiColors.accent.withOpacity(0.15),
-        trackHeight: 3,
+        inactiveTrackColor: const Color(0x22FFFFFF),
+        thumbColor: const Color(0xFFF5F5F7),
+        overlayColor: YinweiColors.accent.withOpacity(0.12),
+        trackHeight: 2.5,
+        thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 7),
       ),
       dividerColor: YinweiColors.hairline,
     );

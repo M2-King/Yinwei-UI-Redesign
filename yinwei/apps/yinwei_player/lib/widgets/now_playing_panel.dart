@@ -31,11 +31,11 @@ class NowPlayingPanel extends StatelessWidget {
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
         Container(
-          width: 220,
-          height: 220,
+          width: 200,
+          height: 200,
           decoration: BoxDecoration(
             color: YinweiColors.panelElevated,
-            borderRadius: BorderRadius.circular(14),
+            borderRadius: BorderRadius.circular(12),
             border: Border.all(color: YinweiColors.hairline),
             image: track.coverPath != null
                 ? DecorationImage(
@@ -46,54 +46,58 @@ class NowPlayingPanel extends StatelessWidget {
           ),
           child: track.coverPath == null
               ? const Icon(CupertinoIcons.music_note_2,
-                  size: 64, color: YinweiColors.textSecondary)
+                  size: 52, color: YinweiColors.textSecondary)
               : null,
         ),
-        const SizedBox(height: 28),
-        Text(track.title, style: theme.textTheme.headlineMedium),
+        const SizedBox(height: 26),
+        Text(
+          track.title,
+          style: theme.textTheme.headlineMedium?.copyWith(letterSpacing: -0.4),
+          textAlign: TextAlign.center,
+        ),
         const SizedBox(height: 6),
         Text(track.artist, style: theme.textTheme.bodySmall),
         if (track.album.isNotEmpty) ...[
           const SizedBox(height: 2),
           Text(track.album, style: theme.textTheme.labelSmall),
         ],
-        const SizedBox(height: 28),
+        const SizedBox(height: 26),
         _Scrubber(
           position: position,
           duration: track.duration,
           onSeek: onSeek,
         ),
-        const SizedBox(height: 18),
+        const SizedBox(height: 16),
         Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             IconButton(
               onPressed: () {},
-              icon: const Icon(CupertinoIcons.backward_fill, size: 22),
-              color: YinweiColors.textPrimary,
+              icon: const Icon(CupertinoIcons.backward_fill, size: 20),
+              color: YinweiColors.textSecondary,
             ),
-            const SizedBox(width: 12),
+            const SizedBox(width: 10),
             IconButton.filled(
               style: IconButton.styleFrom(
                 backgroundColor: YinweiColors.panelElevated,
                 foregroundColor: YinweiColors.textPrimary,
-                minimumSize: const Size(56, 56),
+                minimumSize: const Size(52, 52),
               ),
               onPressed: onPlayPause,
               icon: Icon(
                 isPlaying ? CupertinoIcons.pause_fill : CupertinoIcons.play_fill,
-                size: 26,
+                size: 24,
               ),
             ),
-            const SizedBox(width: 12),
+            const SizedBox(width: 10),
             IconButton(
               onPressed: () {},
-              icon: const Icon(CupertinoIcons.forward_fill, size: 22),
-              color: YinweiColors.textPrimary,
+              icon: const Icon(CupertinoIcons.forward_fill, size: 20),
+              color: YinweiColors.textSecondary,
             ),
           ],
         ),
-        const SizedBox(height: 22),
+        const SizedBox(height: 20),
         _ModeSegmented(
           mode: playbackMode,
           onChanged: onModeChanged,
@@ -161,7 +165,7 @@ class _ModeSegmented extends StatelessWidget {
     return CupertinoSlidingSegmentedControl<PlaybackMode>(
       groupValue: mode,
       backgroundColor: YinweiColors.panelElevated,
-      thumbColor: YinweiColors.accent,
+      thumbColor: const Color(0xFF2C2C2E),
       children: {
         PlaybackMode.original: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
@@ -169,7 +173,7 @@ class _ModeSegmented extends StatelessWidget {
             'Original',
             style: TextStyle(
               color: mode == PlaybackMode.original
-                  ? Colors.white
+                  ? YinweiColors.textPrimary
                   : YinweiColors.textSecondary,
               fontWeight: FontWeight.w500,
               fontSize: 13,
@@ -182,7 +186,7 @@ class _ModeSegmented extends StatelessWidget {
             'Spatial',
             style: TextStyle(
               color: mode == PlaybackMode.spatial
-                  ? Colors.white
+                  ? YinweiColors.textPrimary
                   : YinweiColors.textSecondary,
               fontWeight: FontWeight.w500,
               fontSize: 13,

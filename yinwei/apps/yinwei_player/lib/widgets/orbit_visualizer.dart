@@ -5,10 +5,9 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:yinwei_player/theme/yinwei_theme.dart';
 
-/// Consumer Atmos-style spatial field (dome + glow orb).
+/// Spatial field — dark Apple instrument, not a white card / neon HUD.
 ///
-/// Interaction (B): drag orb → azimuth/elevation, scroll → distance,
-/// Free / Top view toggle.
+/// Drag → azimuth/elevation, scroll → distance, Free / Top view toggle.
 enum FieldViewMode { free, top }
 
 class OrbitVisualizer extends StatefulWidget {
@@ -53,7 +52,7 @@ class _OrbitVisualizerState extends State<OrbitVisualizer> {
             old.elevationDeg != widget.elevationDeg)) {
       if (_orbScreen != null) {
         _trail.add(_orbScreen!);
-        if (_trail.length > 18) _trail.removeAt(0);
+        if (_trail.length > 14) _trail.removeAt(0);
       }
     } else if (!widget.orbiting && _trail.isNotEmpty) {
       _trail.clear();
@@ -80,7 +79,7 @@ class _OrbitVisualizerState extends State<OrbitVisualizer> {
                     behavior: HitTestBehavior.opaque,
                     onPanUpdate: _onPanUpdate,
                     child: CustomPaint(
-                      painter: _AtmosFieldPainter(
+                      painter: _FieldPainter(
                         playhead: widget.playhead.clamp(0.0, 1.0),
                         azimuthDeg: widget.azimuthDeg,
                         elevationDeg: widget.elevationDeg,
@@ -98,29 +97,14 @@ class _OrbitVisualizerState extends State<OrbitVisualizer> {
               ),
             ),
             Positioned(
-              left: 0,
-              top: 0,
+              left: 4,
+              top: 2,
               child: _ViewToggle(
                 mode: _view,
                 onChanged: (m) => setState(() {
                   _view = m;
                   _trail.clear();
                 }),
-              ),
-            ),
-            Positioned(
-              left: 0,
-              bottom: 0,
-              right: 0,
-              child: Text(
-                _view == FieldViewMode.top
-                    ? '拖动定位 · 滚轮距离 · 俯视'
-                    : '拖动定位 · 滚轮距离 · 自由视角',
-                textAlign: TextAlign.center,
-                style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                      color: YinweiColors.textSecondary.withOpacity(0.7),
-                      fontSize: 10,
-                    ),
               ),
             ),
           ],
@@ -169,44 +153,54 @@ class _ViewToggle extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Material(
-      color: YinweiColors.panelElevated.withOpacity(0.85),
-      borderRadius: BorderRadius.circular(8),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          _chip('Free', mode == FieldViewMode.free, () => onChanged(FieldViewMode.free)),
-          _chip('Top', mode == FieldViewMode.top, () => onChanged(FieldViewMode.top)),
-        ],
-      ),
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        _item('Free', mode == FieldViewMode.free, () => onChanged(FieldViewMode.free)),
+        const SizedBox(width: 18),
+        _item('Top', mode == FieldViewMode.top, () => onChanged(FieldViewMode.top)),
+      ],
     );
   }
 
-  Widget _chip(String label, bool on, VoidCallback tap) {
-    return InkWell(
+  Widget _item(String label, bool on, VoidCallback tap) {
+    return GestureDetector(
       onTap: tap,
-      borderRadius: BorderRadius.circular(8),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-        decoration: BoxDecoration(
-          color: on ? YinweiColors.accent.withOpacity(0.35) : Colors.transparent,
-          borderRadius: BorderRadius.circular(8),
-        ),
-        child: Text(
-          label,
-          style: TextStyle(
-            fontSize: 11,
-            fontWeight: FontWeight.w500,
-            color: on ? Colors.white : YinweiColors.textSecondary,
-          ),
+      behavior: HitTestBehavior.opaque,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 2),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: on ? FontWeight.w500 : FontWeight.w400,
+                letterSpacing: 0.2,
+                color: on ? YinweiColors.textPrimary : YinweiColors.textSecondary,
+              ),
+            ),
+            const SizedBox(height: 5),
+            AnimatedContainer(
+              duration: const Duration(milliseconds: 180),
+              curve: Curves.easeOut,
+              height: 1.5,
+              width: on ? 22 : 0,
+              decoration: BoxDecoration(
+                color: YinweiColors.accent.withOpacity(on ? 0.9 : 0),
+                borderRadius: BorderRadius.circular(1),
+              ),
+            ),
+          ],
         ),
       ),
     );
   }
 }
 
-class _AtmosFieldPainter extends CustomPainter {
-  _AtmosFieldPainter({
+class _FieldPainter extends CustomPainter {
+  _FieldPainter({
     required this.playhead,
     required this.azimuthDeg,
     required this.elevationDeg,
@@ -233,13 +227,17 @@ class _AtmosFieldPainter extends CustomPainter {
   static const double _freePitch = 0.38;
   static const double _freeYaw = -0.28;
 
+  // Cool graphite lines — sit in dark UI without going neon.
+  static const _line = Color(0xFF6E727A);
+  static const _lineSoft = Color(0xFF3A3D44);
+
   @override
   void paint(Canvas canvas, Size size) {
     final origin = Offset(size.width / 2, size.height / 2 + size.height * 0.02);
     final R = size.shortestSide * 0.38;
 
     _drawAmbience(canvas, size, origin, R);
-    _drawDome(canvas, origin, R);
+    _drawField(canvas, origin, R);
     _drawPlayheadRim(canvas, origin, R);
     _drawListener(canvas, origin, R);
 
@@ -247,8 +245,8 @@ class _AtmosFieldPainter extends CustomPainter {
       final t = (i + 1) / (trail.length + 1);
       canvas.drawCircle(
         trail[i],
-        3.0 * t,
-        Paint()..color = YinweiColors.accent.withOpacity(0.12 * t),
+        2.2 * t,
+        Paint()..color = YinweiColors.accent.withOpacity(0.08 * t),
       );
     }
 
@@ -258,45 +256,40 @@ class _AtmosFieldPainter extends CustomPainter {
   }
 
   void _drawAmbience(Canvas canvas, Size size, Offset origin, double R) {
+    // Seamless dark — never a light plate.
     canvas.drawRect(
       Offset.zero & size,
       Paint()
         ..shader = ui.Gradient.radial(
           origin,
-          R * 1.6,
+          R * 1.75,
           [
-            const Color(0xFF12141A),
+            const Color(0xFF121214),
             YinweiColors.background,
           ],
         ),
     );
-    // Soft bloom behind field.
+
+    final env = envelopment.clamp(0.0, 1.0);
+    final bloom = (active ? 0.055 : 0.025) + env * 0.045;
     canvas.drawCircle(
       origin,
-      R * 1.15,
+      R * (1.05 + env * 0.12),
       Paint()
         ..shader = ui.Gradient.radial(
           origin,
-          R * 1.15,
+          R * 1.2,
           [
-            YinweiColors.accent.withOpacity(active ? 0.07 : 0.03),
+            YinweiColors.accent.withOpacity(bloom),
             Colors.transparent,
           ],
         ),
     );
   }
 
-  void _drawDome(Canvas canvas, Offset origin, double R) {
+  void _drawField(Canvas canvas, Offset origin, double R) {
     if (view == FieldViewMode.top) {
-      // Soft circular room, front marker at top.
-      canvas.drawCircle(
-        origin,
-        R,
-        Paint()
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 1.4
-          ..color = const Color(0xFF3A5A80).withOpacity(0.55),
-      );
+      // Soft fill.
       canvas.drawCircle(
         origin,
         R,
@@ -305,29 +298,33 @@ class _AtmosFieldPainter extends CustomPainter {
             origin,
             R,
             [
-              Colors.white.withOpacity(0.03),
+              Colors.white.withOpacity(0.035),
               Colors.transparent,
             ],
           ),
       );
-      // Front cue.
-      final front = Offset(origin.dx, origin.dy - R);
-      canvas.drawCircle(front, 2.5, Paint()..color = Colors.white.withOpacity(0.35));
-      // Crosshair faint.
-      canvas.drawLine(
-        Offset(origin.dx - R * 0.12, origin.dy),
-        Offset(origin.dx + R * 0.12, origin.dy),
-        Paint()..color = Colors.white.withOpacity(0.08),
+      // Hairline ring.
+      canvas.drawCircle(
+        origin,
+        R,
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 1
+          ..color = _line.withOpacity(0.45),
       );
+      // Front marker.
       canvas.drawLine(
-        Offset(origin.dx, origin.dy - R * 0.12),
-        Offset(origin.dx, origin.dy + R * 0.12),
-        Paint()..color = Colors.white.withOpacity(0.08),
+        Offset(origin.dx, origin.dy - R + 1),
+        Offset(origin.dx, origin.dy - R + 10),
+        Paint()
+          ..strokeWidth = 1.2
+          ..strokeCap = StrokeCap.round
+          ..color = Colors.white.withOpacity(0.35),
       );
       return;
     }
 
-    // Free: soft hemisphere rim + floor ellipse (no wire meridians).
+    // Free: floor ellipse + soft dome silhouette.
     final floor = Rect.fromCenter(
       center: Offset(origin.dx, origin.dy + R * 0.42),
       width: R * 1.7,
@@ -336,35 +333,38 @@ class _AtmosFieldPainter extends CustomPainter {
     canvas.drawOval(
       floor,
       Paint()
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 1.2
-        ..color = const Color(0xFF3A5A80).withOpacity(0.4),
+        ..shader = ui.Gradient.radial(
+          Offset(origin.dx, origin.dy + R * 0.42),
+          R * 0.95,
+          [
+            Colors.white.withOpacity(0.04 + envelopment * 0.03),
+            Colors.transparent,
+          ],
+        ),
     );
     canvas.drawOval(
       floor,
       Paint()
-        ..shader = ui.Gradient.radial(
-          Offset(origin.dx, origin.dy + R * 0.42),
-          R,
-          [Colors.white.withOpacity(0.04), Colors.transparent],
-        ),
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1
+        ..color = _line.withOpacity(0.38),
     );
 
-    // Dome arc (upper hemisphere silhouette).
-    final domeRect = Rect.fromCircle(center: origin, radius: R * 1.02);
-    canvas.drawArc(
-      domeRect,
-      math.pi * 1.05,
-      math.pi * 0.9,
-      false,
+    // One soft mid ring — depth without CAD mesh.
+    canvas.drawOval(
+      Rect.fromCenter(
+        center: Offset(origin.dx, origin.dy + R * 0.42),
+        width: R * 1.7 * 0.55,
+        height: R * 0.55 * 0.55,
+      ),
       Paint()
         ..style = PaintingStyle.stroke
-        ..strokeWidth = 1.5
-        ..strokeCap = StrokeCap.round
-        ..color = const Color(0xFF4A6A90).withOpacity(0.45),
+        ..strokeWidth = 0.8
+        ..color = _lineSoft.withOpacity(0.4),
     );
 
-    // Soft dome fill.
+    final domeRect = Rect.fromCircle(center: origin, radius: R * 1.02);
+    // Soft dome volume (fill first), then a single hairline arc.
     canvas.drawArc(
       domeRect,
       math.pi,
@@ -373,12 +373,23 @@ class _AtmosFieldPainter extends CustomPainter {
       Paint()
         ..shader = ui.Gradient.linear(
           Offset(origin.dx, origin.dy - R),
-          Offset(origin.dx, origin.dy + R * 0.2),
+          Offset(origin.dx, origin.dy + R * 0.15),
           [
-            Colors.white.withOpacity(0.04),
+            Colors.white.withOpacity(0.045 + envelopment * 0.03),
             Colors.transparent,
           ],
         ),
+    );
+    canvas.drawArc(
+      domeRect,
+      math.pi * 1.08,
+      math.pi * 0.84,
+      false,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1
+        ..strokeCap = StrokeCap.round
+        ..color = _line.withOpacity(0.28),
     );
   }
 
@@ -398,30 +409,27 @@ class _AtmosFieldPainter extends CustomPainter {
       false,
       Paint()
         ..style = PaintingStyle.stroke
-        ..strokeWidth = 2
+        ..strokeWidth = 1.5
         ..strokeCap = StrokeCap.round
-        ..color = YinweiColors.accent.withOpacity(0.35),
+        ..color = YinweiColors.accent.withOpacity(0.28),
     );
   }
 
   void _drawListener(Canvas canvas, Offset origin, double R) {
-    final s = R * 0.07;
-    // Minimal head + shoulders (Person mode lite).
-    final head = Path()
-      ..addOval(Rect.fromCenter(center: origin.translate(0, -s * 0.35), width: s * 1.1, height: s * 1.25));
-    canvas.drawPath(
-      head,
-      Paint()..color = Colors.white.withOpacity(0.55),
+    // Precision reference: ring + core — no cartoon figure.
+    final r = R * 0.045;
+    canvas.drawCircle(
+      origin,
+      r * 2.1,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1
+        ..color = Colors.white.withOpacity(0.28),
     );
-    // Ears.
-    canvas.drawCircle(origin.translate(-s * 0.7, -s * 0.3), s * 0.22,
-        Paint()..color = Colors.white.withOpacity(0.4));
-    canvas.drawCircle(origin.translate(s * 0.7, -s * 0.3), s * 0.22,
-        Paint()..color = Colors.white.withOpacity(0.4));
-    // Shoulders.
-    canvas.drawOval(
-      Rect.fromCenter(center: origin.translate(0, s * 0.85), width: s * 2.2, height: s * 0.7),
-      Paint()..color = Colors.white.withOpacity(0.28),
+    canvas.drawCircle(
+      origin,
+      r * 0.55,
+      Paint()..color = Colors.white.withOpacity(0.72),
     );
   }
 
@@ -432,10 +440,8 @@ class _AtmosFieldPainter extends CustomPainter {
     final rad = 0.28 + distNorm * 0.72;
 
     if (view == FieldViewMode.top) {
-      // Top-down: front = -Y screen.
       final x = rad * math.sin(az) * R;
       final y = -rad * math.cos(az) * R;
-      // Elevation lifts toward center slightly + scales orb later.
       final lift = (el / 90.0).clamp(-1.0, 1.0) * R * 0.08;
       return (
         pos: Offset(origin.dx + x, origin.dy + y + lift),
@@ -469,65 +475,56 @@ class _AtmosFieldPainter extends CustomPainter {
   }
 
   void _drawSource(Canvas canvas, ({Offset pos, double near, double radNorm}) orb) {
-    final base = 10.0 + orb.near * 8 + envelopment * 4;
-    final glow = base * (1.6 + envelopment * 1.2);
+    final core = 5.5 + orb.near * 3.5 + envelopment * 1.5;
+    final a = active ? 1.0 : 0.45;
 
-    // Object-size outline (Atmos Music Panner).
+    // One soft bloom — restrained, not neon stack.
     canvas.drawCircle(
       orb.pos,
-      glow * (0.9 + envelopment * 0.8),
-      Paint()
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 1.2
-        ..color = Colors.white.withOpacity(0.18 + envelopment * 0.25),
-    );
-
-    // Soft bloom layers.
-    for (final layer in [
-      (glow * 2.2, 0.04),
-      (glow * 1.5, 0.08),
-      (glow * 1.05, 0.14),
-    ]) {
-      canvas.drawCircle(
-        orb.pos,
-        layer.$1,
-        Paint()
-          ..color = YinweiColors.accent
-              .withOpacity((active ? layer.$2 : layer.$2 * 0.4) * (0.7 + orb.near * 0.3)),
-      );
-    }
-
-    // Core orb.
-    canvas.drawCircle(
-      orb.pos,
-      base,
+      core * (2.4 + envelopment * 0.6),
       Paint()
         ..shader = ui.Gradient.radial(
-          orb.pos.translate(-base * 0.3, -base * 0.35),
-          base * 1.2,
+          orb.pos,
+          core * 2.6,
           [
-            Colors.white.withOpacity(active ? 0.95 : 0.5),
-            YinweiColors.accent.withOpacity(active ? 0.95 : 0.45),
-            YinweiColors.accent.withOpacity(active ? 0.55 : 0.25),
+            YinweiColors.accent.withOpacity(0.18 * a),
+            YinweiColors.accent.withOpacity(0.04 * a),
+            Colors.transparent,
           ],
           const [0.0, 0.45, 1.0],
+        ),
+    );
+
+    canvas.drawCircle(
+      orb.pos,
+      core,
+      Paint()
+        ..shader = ui.Gradient.radial(
+          orb.pos.translate(-core * 0.28, -core * 0.32),
+          core * 1.15,
+          [
+            Colors.white.withOpacity(0.92 * a),
+            YinweiColors.accent.withOpacity(0.95 * a),
+            const Color(0xFF0060DF).withOpacity(0.85 * a),
+          ],
+          const [0.0, 0.4, 1.0],
         ),
     );
 
     if (orbiting) {
       canvas.drawCircle(
         orb.pos,
-        base + 5,
+        core + 4,
         Paint()
           ..style = PaintingStyle.stroke
-          ..strokeWidth = 1.4
-          ..color = YinweiColors.accent.withOpacity(0.55),
+          ..strokeWidth = 1
+          ..color = YinweiColors.accent.withOpacity(0.4 * a),
       );
     }
   }
 
   @override
-  bool shouldRepaint(covariant _AtmosFieldPainter old) =>
+  bool shouldRepaint(covariant _FieldPainter old) =>
       old.playhead != playhead ||
       old.azimuthDeg != azimuthDeg ||
       old.elevationDeg != elevationDeg ||
