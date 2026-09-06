@@ -19,9 +19,10 @@ const BLOCK: usize = 512;
 const INTERP_STEPS: usize = 8;
 const CHUNK: usize = BLOCK * INTERP_STEPS; // 4096
 
-/// Realtime streamer: 4 interp steps × 512 ≈ 21 ms @ 48 kHz (was 1 — too zipper-y).
+/// Realtime streamer: 2 interp steps × 512 ≈ 21 ms @ 48 kHz.
+/// (1 was zipper-y; 4 made each DSP block too heavy after pose changes.)
 pub const STREAM_BLOCK: usize = 512;
-pub const STREAM_INTERP: usize = 4;
+pub const STREAM_INTERP: usize = 2;
 pub const STREAM_CHUNK: usize = STREAM_BLOCK * STREAM_INTERP;
 
 pub(crate) fn normalize(v: Vec3) -> Vec3 {
@@ -373,9 +374,9 @@ impl HrtfStreamer {
     ) -> Result<[StereoFrame; STREAM_CHUNK], SpatialError> {
         params.validate()?;
 
-        // Smooth toward target (~18% per block). Azimuth uses shortest-path wrap
+        // Smooth toward target (~28% per block ≈ 50–60 ms). Shortest-path wrap
         // so 170° → −170° doesn't spin the long way through the front.
-        const A: f32 = 0.18;
+        const A: f32 = 0.28;
         let mut daz = params.azimuth_deg - self.smooth_az;
         while daz > 180.0 {
             daz -= 360.0;

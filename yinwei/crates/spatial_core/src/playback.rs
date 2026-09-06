@@ -142,15 +142,27 @@ impl RealtimePlayer {
 
     pub fn set_live_params(&self, params: SpatialParams) -> Result<(), SpatialError> {
         params.validate()?;
-        let changed;
+        let (big_jump, changed);
         {
             let mut g = self
                 .shared
                 .params
                 .lock()
                 .map_err(|_| SpatialError::LockPoisoned)?;
-            // Flush only when pose / colouring actually moves — avoids clicks on no-ops.
-            changed = (g.azimuth_deg - params.azimuth_deg).abs() > 0.05
+            let daz = {
+                let mut d = params.azimuth_deg - g.azimuth_deg;
+                while d > 180.0 {
+                    d -= 360.0;
+                }
+                while d < -180.0 {
+                    d += 360.0;
+                }
+                d.abs()
+            };
+            big_jump = daz > 45.0
+                || (g.elevation_deg - params.elevation_deg).abs() > 30.0
+                || (g.distance_m - params.distance_m).abs() > 1.5;
+            changed = daz > 0.05
                 || (g.elevation_deg - params.elevation_deg).abs() > 0.05
                 || (g.distance_m - params.distance_m).abs() > 0.01
                 || (g.envelopment - params.envelopment).abs() > 0.01
@@ -158,13 +170,19 @@ impl RealtimePlayer {
                 || g.motion != params.motion;
             *g = params;
         }
-        if changed {
-            // Drop buffered wet audio so the new pose is heard within ~1 chunk
-            // (otherwise UI moves while the ring still plays the old position).
+        if changed && big_jump {
+            // Preset / large leaps only: trim *future* buffered frames (pop back)
+            // so the new pose lands sooner — but keep a small cushion at the front
+            // so the device callback never underruns (full clear caused ~1s stalls).
             if let Ok(mut ring) = self.shared.ring.lock() {
-                ring.clear();
+                let keep = (STREAM_CHUNK / 4).max(256);
+                while ring.len() > keep {
+                    ring.pop_back();
+                }
             }
         }
+        // Continuous drag: do not touch the ring. HrtfStreamer pose smoothing
+        // blends the move across the next blocks with no audible gap.
         Ok(())
     }
 
