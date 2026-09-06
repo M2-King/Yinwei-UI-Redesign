@@ -19,10 +19,10 @@ const BLOCK: usize = 512;
 const INTERP_STEPS: usize = 8;
 const CHUNK: usize = BLOCK * INTERP_STEPS; // 4096
 
-/// Realtime streamer: 2 interp steps × 512 ≈ 21 ms @ 48 kHz.
-/// (1 was zipper-y; 4 made each DSP block too heavy after pose changes.)
+/// Realtime streamer: 1 × 512 ≈ 10.7 ms @ 48 kHz — lighter blocks refill the
+/// ring faster under UI load (pose clicks) so we don't underrun.
 pub const STREAM_BLOCK: usize = 512;
-pub const STREAM_INTERP: usize = 2;
+pub const STREAM_INTERP: usize = 1;
 pub const STREAM_CHUNK: usize = STREAM_BLOCK * STREAM_INTERP;
 
 pub(crate) fn normalize(v: Vec3) -> Vec3 {
@@ -374,9 +374,7 @@ impl HrtfStreamer {
     ) -> Result<[StereoFrame; STREAM_CHUNK], SpatialError> {
         params.validate()?;
 
-        // Smooth toward target (~28% per block ≈ 50–60 ms). Shortest-path wrap
-        // so 170° → −170° doesn't spin the long way through the front.
-        const A: f32 = 0.28;
+        // Shortest-path delta toward the UI target.
         let mut daz = params.azimuth_deg - self.smooth_az;
         while daz > 180.0 {
             daz -= 360.0;
@@ -384,16 +382,38 @@ impl HrtfStreamer {
         while daz < -180.0 {
             daz += 360.0;
         }
-        self.smooth_az += daz * A;
-        if self.smooth_az > 180.0 {
-            self.smooth_az -= 360.0;
-        } else if self.smooth_az <= -180.0 {
-            self.smooth_az += 360.0;
+        let del = params.elevation_deg - self.smooth_el;
+        let ddist = params.distance_m - self.smooth_dist;
+
+        // Large leaps (presets / big drag jumps): snap pose + HRTF prev vectors.
+        // Avoids a full-sphere interpolation sweep in one block (CPU spike / click)
+        // and does not require draining the audio ring.
+        if daz.abs() > 35.0 || del.abs() > 25.0 || ddist.abs() > 1.5 {
+            self.smooth_az = params.azimuth_deg;
+            self.smooth_el = params.elevation_deg;
+            self.smooth_dist = params.distance_m;
+            self.smooth_env = params.envelopment;
+            self.smooth_rev = params.reverb_mix;
+            self.prev_mid_pos = spherical_to_vec(self.smooth_az, self.smooth_el);
+            self.prev_side_pos =
+                spherical_to_vec(self.smooth_az + 110.0, self.smooth_el * 0.5);
+            self.prev_side2_pos =
+                spherical_to_vec(self.smooth_az - 110.0, self.smooth_el * 0.5);
+            self.prev_dist = self.smooth_dist;
+        } else {
+            // Continuous drag: gentle chase (~35% / block).
+            const A: f32 = 0.35;
+            self.smooth_az += daz * A;
+            if self.smooth_az > 180.0 {
+                self.smooth_az -= 360.0;
+            } else if self.smooth_az <= -180.0 {
+                self.smooth_az += 360.0;
+            }
+            self.smooth_el += del * A;
+            self.smooth_dist += ddist * A;
+            self.smooth_env += (params.envelopment - self.smooth_env) * A;
+            self.smooth_rev += (params.reverb_mix - self.smooth_rev) * A;
         }
-        self.smooth_el += (params.elevation_deg - self.smooth_el) * A;
-        self.smooth_dist += (params.distance_m - self.smooth_dist) * A;
-        self.smooth_env += (params.envelopment - self.smooth_env) * A;
-        self.smooth_rev += (params.reverb_mix - self.smooth_rev) * A;
 
         let mut padded = [(0.0f32, 0.0f32); STREAM_CHUNK];
         let n = input.len().min(STREAM_CHUNK);
@@ -456,20 +476,16 @@ impl HrtfStreamer {
         self.prev_mid_pos = mid_render_pos;
 
         let mut side_out = [(0.0f32, 0.0f32); STREAM_CHUNK];
-        if env > 0.01 {
+        // Skip ambient HRTFs when envelopment is negligible — halves/thirds DSP
+        // cost on the hot path (big help when the UI thread is also busy).
+        if env > 0.05 {
             let el = self.smooth_el * 0.4;
             let side_pos = if params.motion == MotionMode::Fixed {
                 spherical_to_vec(self.smooth_az + 110.0, el)
             } else {
                 new_side_pos
             };
-            let side2_pos = if params.motion == MotionMode::Fixed {
-                spherical_to_vec(self.smooth_az - 110.0, el)
-            } else {
-                spherical_to_vec(self.smooth_az - 120.0 + orbit_offset, self.smooth_el * 0.5)
-            };
             let mut side_a = [(0.0f32, 0.0f32); STREAM_CHUNK];
-            let mut side_b = [(0.0f32, 0.0f32); STREAM_CHUNK];
             {
                 let ctx = HrtfContext {
                     source: &side_high,
@@ -483,26 +499,40 @@ impl HrtfStreamer {
                 };
                 self.processor.process_samples(ctx);
             }
-            {
-                let ctx = HrtfContext {
-                    source: &side_high,
-                    output: &mut side_b,
-                    new_sample_vector: normalize(side2_pos),
-                    prev_sample_vector: normalize(self.prev_side2_pos),
-                    prev_left_samples: &mut self.prev_side2_l,
-                    prev_right_samples: &mut self.prev_side2_r,
-                    new_distance_gain: new_g * 0.7,
-                    prev_distance_gain: prev_g * 0.7,
-                };
-                self.processor.process_samples(ctx);
-            }
-            for i in 0..STREAM_CHUNK {
-                let (a_l, a_r) = side_a[i];
-                let (b_l, b_r) = side_b[i];
-                side_out[i] = (a_l + b_l * 0.85, a_r + b_r * 0.85);
-            }
             self.prev_side_pos = side_pos;
-            self.prev_side2_pos = side2_pos;
+
+            if env > 0.35 {
+                let side2_pos = if params.motion == MotionMode::Fixed {
+                    spherical_to_vec(self.smooth_az - 110.0, el)
+                } else {
+                    spherical_to_vec(
+                        self.smooth_az - 120.0 + orbit_offset,
+                        self.smooth_el * 0.5,
+                    )
+                };
+                let mut side_b = [(0.0f32, 0.0f32); STREAM_CHUNK];
+                {
+                    let ctx = HrtfContext {
+                        source: &side_high,
+                        output: &mut side_b,
+                        new_sample_vector: normalize(side2_pos),
+                        prev_sample_vector: normalize(self.prev_side2_pos),
+                        prev_left_samples: &mut self.prev_side2_l,
+                        prev_right_samples: &mut self.prev_side2_r,
+                        new_distance_gain: new_g * 0.7,
+                        prev_distance_gain: prev_g * 0.7,
+                    };
+                    self.processor.process_samples(ctx);
+                }
+                for i in 0..STREAM_CHUNK {
+                    let (a_l, a_r) = side_a[i];
+                    let (b_l, b_r) = side_b[i];
+                    side_out[i] = (a_l + b_l * 0.85, a_r + b_r * 0.85);
+                }
+                self.prev_side2_pos = side2_pos;
+            } else {
+                side_out = side_a;
+            }
         }
 
         let mut output = [(0.0f32, 0.0f32); STREAM_CHUNK];

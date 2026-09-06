@@ -136,6 +136,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
                     PositionSidebar(
                       params: c.params,
                       onChanged: (p) => c.setParams(p),
+                      onPresetSelected: (p) => c.applyPreset(p),
                       onExport: _onExport,
                       onSavePreset: () {
                         ScaffoldMessenger.of(context).showSnackBar(

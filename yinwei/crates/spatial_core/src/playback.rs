@@ -27,8 +27,8 @@ use crate::resample::resample_cubic;
 struct SendStream(#[allow(dead_code)] Stream);
 unsafe impl Send for SendStream {}
 
-const RING_TARGET_FRAMES: usize = STREAM_CHUNK * 3; // ~3 blocks (~64 ms @ 48 kHz with STREAM_INTERP=4)
-const RING_MAX_FRAMES: usize = STREAM_CHUNK * 8;
+const RING_TARGET_FRAMES: usize = STREAM_CHUNK * 10; // ~100–200 ms cushion so pose/UI spikes don't underrun
+const RING_MAX_FRAMES: usize = STREAM_CHUNK * 20;
 
 struct DspShared {
     source: Mutex<Vec<StereoFrame>>,
@@ -142,47 +142,15 @@ impl RealtimePlayer {
 
     pub fn set_live_params(&self, params: SpatialParams) -> Result<(), SpatialError> {
         params.validate()?;
-        let (big_jump, changed);
-        {
-            let mut g = self
-                .shared
-                .params
-                .lock()
-                .map_err(|_| SpatialError::LockPoisoned)?;
-            let daz = {
-                let mut d = params.azimuth_deg - g.azimuth_deg;
-                while d > 180.0 {
-                    d -= 360.0;
-                }
-                while d < -180.0 {
-                    d += 360.0;
-                }
-                d.abs()
-            };
-            big_jump = daz > 45.0
-                || (g.elevation_deg - params.elevation_deg).abs() > 30.0
-                || (g.distance_m - params.distance_m).abs() > 1.5;
-            changed = daz > 0.05
-                || (g.elevation_deg - params.elevation_deg).abs() > 0.05
-                || (g.distance_m - params.distance_m).abs() > 0.01
-                || (g.envelopment - params.envelopment).abs() > 0.01
-                || (g.reverb_mix - params.reverb_mix).abs() > 0.01
-                || g.motion != params.motion;
-            *g = params;
-        }
-        if changed && big_jump {
-            // Preset / large leaps only: trim *future* buffered frames (pop back)
-            // so the new pose lands sooner — but keep a small cushion at the front
-            // so the device callback never underruns (full clear caused ~1s stalls).
-            if let Ok(mut ring) = self.shared.ring.lock() {
-                let keep = (STREAM_CHUNK / 4).max(256);
-                while ring.len() > keep {
-                    ring.pop_back();
-                }
-            }
-        }
-        // Continuous drag: do not touch the ring. HrtfStreamer pose smoothing
-        // blends the move across the next blocks with no audible gap.
+        let mut g = self
+            .shared
+            .params
+            .lock()
+            .map_err(|_| SpatialError::LockPoisoned)?;
+        *g = params;
+        // Never touch the ring here. Clearing/trimming caused device underruns
+        // (the "卡一下" on every preset / drag). Pose changes are applied by the
+        // DSP worker on the next chunk; HrtfStreamer snaps on large jumps.
         Ok(())
     }
 
@@ -193,11 +161,10 @@ impl RealtimePlayer {
         };
         let prev = self.shared.mode.swap(v, Ordering::Relaxed);
         if prev != v {
-            // Mode flip: flush ring so we don't mix dry/wet briefly.
+            // Soft switch: do NOT clear the ring (that underruns and "卡一下").
+            // DSP picks up the new mode on the next chunk; at most one block of
+            // dry/wet blend is far less audible than a stall.
             self.shared.seek_gen.fetch_add(1, Ordering::Relaxed);
-            if let Ok(mut ring) = self.shared.ring.lock() {
-                ring.clear();
-            }
         }
     }
 

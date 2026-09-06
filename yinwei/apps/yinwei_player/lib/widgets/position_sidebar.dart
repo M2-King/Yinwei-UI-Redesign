@@ -10,12 +10,15 @@ class PositionSidebar extends StatelessWidget {
     required this.onChanged,
     required this.onExport,
     required this.onSavePreset,
+    this.onPresetSelected,
   });
 
   final SpatialParams params;
   final ValueChanged<SpatialParams> onChanged;
   final VoidCallback onExport;
   final VoidCallback onSavePreset;
+  /// Prefer this for grid taps so the engine can apply presets without drag throttle.
+  final ValueChanged<PositionPreset>? onPresetSelected;
 
   @override
   Widget build(BuildContext context) {
@@ -48,8 +51,12 @@ class PositionSidebar extends StatelessWidget {
                   _PresetGrid(
                     selected: params.selectedPreset,
                     onSelect: (p) {
-                      final next = params.copy()..applyPreset(p);
-                      onChanged(next);
+                      if (onPresetSelected != null) {
+                        onPresetSelected!(p);
+                      } else {
+                        final next = params.copy()..applyPreset(p);
+                        onChanged(next);
+                      }
                     },
                   ),
                   const SizedBox(height: 26),

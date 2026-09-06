@@ -7,8 +7,8 @@ import 'package:yinwei_player/models/spatial_params.dart';
 
 /// Bumped when UI wiring changes — shown in status bar so Windows hosts
 /// can confirm they pulled the latest build.
-const String kYinweiUiBuild = 'ui-12';
-const String kYinweiBridgeBuild = 'p2.4.9-pose-smooth';
+const String kYinweiUiBuild = 'ui-13';
+const String kYinweiBridgeBuild = 'p2.4.10-no-ring-flush';
 
 /// App state for the locked Player UI (IMPLEMENTATION_P2 §5.1).
 class EngineController extends ChangeNotifier {
@@ -34,8 +34,10 @@ class EngineController extends ChangeNotifier {
 
   Timer? _tick;
   Timer? _liveRebuild;
+  Timer? _paramsThrottle;
   int _liveGen = 0;
   int _paramsGen = 0;
+  SpatialParams? _pendingParams;
 
   double get playhead {
     final total = track.duration.inMilliseconds;
@@ -60,11 +62,21 @@ class EngineController extends ChangeNotifier {
   Future<void> setParams(SpatialParams next) async {
     params = next.copy();
     _syncAzimuth();
-    notifyListeners(); // sync UI first — don't wait on engine
-    // Coalesce rapid drag updates so an older FFI write can't overwrite a newer pose.
-    final gen = ++_paramsGen;
-    await _engine.setParams(params);
-    if (gen != _paramsGen) return;
+    notifyListeners(); // UI follows every frame
+    // Throttle native writes during drag/slider floods so FFI + DSP mutex
+    // contention doesn't hitch the audio callback.
+    _pendingParams = params.copy();
+    _paramsThrottle ??= Timer(const Duration(milliseconds: 32), () {
+      _paramsThrottle = null;
+      final pending = _pendingParams;
+      if (pending == null) return;
+      _pendingParams = null;
+      final gen = ++_paramsGen;
+      unawaited(() async {
+        await _engine.setParams(pending);
+        if (gen != _paramsGen) return;
+      }());
+    });
   }
 
   Future<void> applyPreset(PositionPreset preset) async {
@@ -72,6 +84,11 @@ class EngineController extends ChangeNotifier {
     params = next;
     _syncAzimuth();
     notifyListeners();
+    // Presets apply immediately (no throttle); native snaps HRTF pose without
+    // flushing the ring, so this should not stall playback.
+    _paramsThrottle?.cancel();
+    _paramsThrottle = null;
+    _pendingParams = null;
     final gen = ++_paramsGen;
     await _engine.setParams(params);
     if (gen != _paramsGen) return;
@@ -182,6 +199,7 @@ class EngineController extends ChangeNotifier {
 
   @override
   void dispose() {
+    _paramsThrottle?.cancel();
     _liveRebuild?.cancel();
     _tick?.cancel();
     _engine.dispose();
