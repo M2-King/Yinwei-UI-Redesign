@@ -49,6 +49,12 @@ impl PlayerSession {
         Ok(())
     }
 
+    pub fn set_eq(&self, gains: [f32; crate::eq::EQ_BANDS]) -> Result<(), SpatialError> {
+        self.engine.set_eq(gains)?;
+        self.player.set_eq(gains)?;
+        Ok(())
+    }
+
     pub fn params(&self) -> Result<SpatialParams, SpatialError> {
         self.engine.params()
     }
@@ -101,6 +107,7 @@ impl PlayerSession {
             self.player.load_source(dry, sr)?;
             self.player.set_live_params(self.engine.params()?)?;
             self.player.set_live_mode(self.engine.playback_mode()?);
+            let _ = self.player.set_eq(self.engine.eq_gains()?);
             self.has_preview.store(true, Ordering::Relaxed);
             self.preview_dirty.store(false, Ordering::Relaxed);
         }
@@ -142,7 +149,17 @@ impl PlayerSession {
     }
 
     pub fn current_azimuth_deg(&self) -> Result<f32, SpatialError> {
+        if let Some(az) = self.player.live_azimuth_deg() {
+            return Ok(az);
+        }
         self.engine.current_azimuth_deg()
+    }
+
+    pub fn current_elevation_deg(&self) -> Result<f32, SpatialError> {
+        if let Some(el) = self.player.live_elevation_deg() {
+            return Ok(el);
+        }
+        Ok(self.engine.params()?.elevation_deg)
     }
 
     pub fn export_wav(

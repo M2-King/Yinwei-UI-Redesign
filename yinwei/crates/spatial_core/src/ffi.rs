@@ -288,6 +288,22 @@ pub unsafe extern "C" fn yinwei_set_params(p: *const YinweiParamsC) -> i32 {
 }
 
 #[no_mangle]
+pub extern "C" fn yinwei_set_eq(
+    bass: f32,
+    f120: f32,
+    f400: f32,
+    f1k: f32,
+    f35: f32,
+    f10k: f32,
+) -> i32 {
+    let gains = [bass, f120, f400, f1k, f35, f10k];
+    match global_session().and_then(|s| s.set_eq(gains)) {
+        Ok(()) => OK,
+        Err(e) => map_err(e),
+    }
+}
+
+#[no_mangle]
 pub unsafe extern "C" fn yinwei_get_params(out: *mut YinweiParamsC) -> i32 {
     if out.is_null() {
         set_err("null out");
@@ -392,6 +408,13 @@ pub extern "C" fn yinwei_current_azimuth_deg() -> f32 {
 }
 
 #[no_mangle]
+pub extern "C" fn yinwei_current_elevation_deg() -> f32 {
+    global_session()
+        .and_then(|s| s.current_elevation_deg())
+        .unwrap_or(0.0)
+}
+
+#[no_mangle]
 pub extern "C" fn yinwei_export_wav(path: *const c_char) -> i32 {
     let path = match cstr_to_str(path) {
         Ok(s) => s,
@@ -405,6 +428,17 @@ pub extern "C" fn yinwei_export_wav(path: *const c_char) -> i32 {
 
 #[no_mangle]
 pub extern "C" fn yinwei_dispose() -> i32 {
+    #[cfg(windows)]
+    {
+        use crate::live_transfer::global_live;
+        if let Ok(g) = global_live() {
+            let eng = g.clone();
+            drop(g);
+            if let Some(eng) = eng {
+                eng.stop();
+            }
+        }
+    }
     match global_session().and_then(|s| s.dispose()) {
         Ok(()) => {
             if let Ok(mut t) = LAST_TRACK.lock() {
@@ -421,6 +455,367 @@ pub extern "C" fn yinwei_is_preview_dirty() -> i32 {
     global_session()
         .map(|s| if s.is_preview_dirty() { 1 } else { 0 })
         .unwrap_or(1)
+}
+
+/// Start WASAPI process-loopback → HRTF live transfer.
+/// `process_id` must be >0. pid 0 (whole-device loopback) is rejected.
+#[no_mangle]
+pub extern "C" fn yinwei_live_start(process_id: u32) -> i32 {
+    #[cfg(windows)]
+    {
+        use crate::live_transfer::{ensure_live, live_engine};
+        if let Err(e) = ensure_live() {
+            return map_err(e);
+        }
+        let _ = global_session().map(|s| {
+            s.pause();
+        });
+        // Clone the engine Arc so the process-wide LIVE mutex is not held
+        // during the energy wait (UI isolate / routing FFI must stay free).
+        match live_engine().and_then(|eng| {
+            // Keep live Spatial defaults — do NOT copy file-session Original mode.
+            eng.set_mode(PlaybackMode::Spatial);
+            eng.start(process_id)
+        }) {
+            Ok(()) => OK,
+            Err(e) => map_err(e),
+        }
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = process_id;
+        set_err("live transfer is Windows-only");
+        E_OTHER
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn yinwei_live_stop() -> i32 {
+    #[cfg(windows)]
+    {
+        use crate::live_transfer::global_live;
+        match global_live() {
+            Ok(g) => {
+                let eng = g.clone();
+                drop(g);
+                if let Some(eng) = eng {
+                    eng.stop();
+                }
+                OK
+            }
+            Err(e) => map_err(e),
+        }
+    }
+    #[cfg(not(windows))]
+    {
+        OK
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn yinwei_live_is_running() -> i32 {
+    #[cfg(windows)]
+    {
+        use crate::live_transfer::global_live;
+        global_live()
+            .ok()
+            .and_then(|g| g.as_ref().map(|e| if e.is_running() { 1 } else { 0 }))
+            .unwrap_or(0)
+    }
+    #[cfg(not(windows))]
+    {
+        0
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn yinwei_live_set_mode(mode: i32) -> i32 {
+    #[cfg(windows)]
+    {
+        use crate::live_transfer::global_live;
+        let m = match mode {
+            0 => PlaybackMode::Original,
+            1 => PlaybackMode::Spatial,
+            _ => {
+                set_err("mode must be 0|1");
+                return E_PARAM;
+            }
+        };
+        match global_live() {
+            Ok(mut g) => {
+                if let Some(eng) = g.as_mut() {
+                    eng.set_mode(m);
+                }
+                OK
+            }
+            Err(e) => map_err(e),
+        }
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = mode;
+        OK
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn yinwei_live_azimuth_deg() -> f32 {
+    #[cfg(windows)]
+    {
+        use crate::live_transfer::global_live;
+        global_live()
+            .ok()
+            .and_then(|g| g.as_ref().map(|e| e.current_azimuth_deg()))
+            .unwrap_or(0.0)
+    }
+    #[cfg(not(windows))]
+    {
+        0.0
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn yinwei_live_elevation_deg() -> f32 {
+    #[cfg(windows)]
+    {
+        use crate::live_transfer::global_live;
+        global_live()
+            .ok()
+            .and_then(|g| g.as_ref().map(|e| e.current_elevation_deg()))
+            .unwrap_or(0.0)
+    }
+    #[cfg(not(windows))]
+    {
+        0.0
+    }
+}
+
+/// Frames captured since last start (for health checks).
+#[no_mangle]
+pub extern "C" fn yinwei_live_captured_frames() -> u64 {
+    #[cfg(windows)]
+    {
+        use crate::live_transfer::global_live;
+        global_live()
+            .ok()
+            .and_then(|g| g.as_ref().map(|e| e.frames_captured()))
+            .unwrap_or(0)
+    }
+    #[cfg(not(windows))]
+    {
+        0
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn yinwei_live_set_params(
+    azimuth_deg: f32,
+    elevation_deg: f32,
+    distance_m: f32,
+    motion: i32,
+    orbit_hz: f32,
+    envelopment: f32,
+    reverb_mix: f32,
+    selected_preset: i32,
+) -> i32 {
+    #[cfg(windows)]
+    {
+        use crate::live_transfer::{ensure_live, global_live};
+        if let Err(e) = ensure_live() {
+            return map_err(e);
+        }
+        let motion = match motion {
+            0 => MotionMode::Fixed,
+            1 => MotionMode::Orbit,
+            _ => {
+                set_err("motion must be 0|1");
+                return E_PARAM;
+            }
+        };
+        let params = SpatialParams {
+            azimuth_deg,
+            elevation_deg,
+            distance_m,
+            motion,
+            orbit_hz,
+            envelopment,
+            reverb_mix,
+            selected_preset: preset_from_i32(selected_preset),
+        };
+        match global_live().and_then(|mut g| {
+            if let Some(eng) = g.as_mut() {
+                eng.set_params(params)?;
+            }
+            Ok(())
+        }) {
+            Ok(()) => OK,
+            Err(e) => map_err(e),
+        }
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = (
+            azimuth_deg,
+            elevation_deg,
+            distance_m,
+            motion,
+            orbit_hz,
+            envelopment,
+            reverb_mix,
+            selected_preset,
+        );
+        OK
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn yinwei_live_set_eq(
+    bass: f32,
+    f120: f32,
+    f400: f32,
+    f1k: f32,
+    f35: f32,
+    f10k: f32,
+) -> i32 {
+    let gains = [bass, f120, f400, f1k, f35, f10k];
+    #[cfg(windows)]
+    {
+        use crate::live_transfer::{ensure_live, global_live};
+        if let Err(e) = ensure_live() {
+            return map_err(e);
+        }
+        match global_live().and_then(|mut g| {
+            if let Some(eng) = g.as_mut() {
+                eng.set_eq(gains)?;
+            }
+            Ok(())
+        }) {
+            Ok(()) => OK,
+            Err(e) => map_err(e),
+        }
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = gains;
+        OK
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn yinwei_live_energy_frames() -> u64 {
+    #[cfg(windows)]
+    {
+        use crate::live_transfer::global_live;
+        global_live()
+            .ok()
+            .and_then(|g| g.as_ref().map(|e| e.frames_with_energy()))
+            .unwrap_or(0)
+    }
+    #[cfg(not(windows))]
+    {
+        0
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn yinwei_live_last_energy_ms() -> u64 {
+    #[cfg(windows)]
+    {
+        use crate::live_transfer::global_live;
+        global_live()
+            .ok()
+            .and_then(|g| g.as_ref().map(|e| e.last_energy_ms()))
+            .unwrap_or(0)
+    }
+    #[cfg(not(windows))]
+    {
+        0
+    }
+}
+
+/// Newline-separated output device names (wet cpal path). Empty name = default.
+#[no_mangle]
+pub extern "C" fn yinwei_live_list_output_devices(out: *mut c_char, cap: usize) -> i32 {
+    #[cfg(windows)]
+    {
+        use crate::live_transfer::list_output_device_names;
+        let joined = list_output_device_names().join("\n");
+        write_cstr(&joined, out, cap)
+    }
+    #[cfg(not(windows))]
+    {
+        write_cstr("", out, cap)
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn yinwei_live_set_output_device(name: *const c_char) -> i32 {
+    #[cfg(windows)]
+    {
+        use crate::live_transfer::{ensure_live, global_live};
+        let s = match cstr_to_str(name) {
+            Ok(s) => s,
+            Err(c) => return c,
+        };
+        if let Err(e) = ensure_live() {
+            return map_err(e);
+        }
+        match global_live() {
+            Ok(mut g) => {
+                if let Some(eng) = g.as_mut() {
+                    eng.set_output_device_name(s);
+                }
+                OK
+            }
+            Err(e) => map_err(e),
+        }
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = name;
+        OK
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn yinwei_live_output_device(out: *mut c_char, cap: usize) -> i32 {
+    #[cfg(windows)]
+    {
+        use crate::live_transfer::global_live;
+        let name = global_live()
+            .ok()
+            .and_then(|g| g.as_ref().map(|e| e.output_device_name()))
+            .unwrap_or_default();
+        write_cstr(&name, out, cap)
+    }
+    #[cfg(not(windows))]
+    {
+        write_cstr("", out, cap)
+    }
+}
+
+/// 1 = hold wet silent (pin-before-wet); 0 = play. Survives live_start restart.
+#[no_mangle]
+pub extern "C" fn yinwei_live_set_output_hold(hold: i32) -> i32 {
+    #[cfg(windows)]
+    {
+        use crate::live_transfer::{ensure_live, live_engine};
+        if let Err(e) = ensure_live() {
+            return map_err(e);
+        }
+        match live_engine() {
+            Ok(eng) => {
+                eng.set_output_hold(hold != 0);
+                OK
+            }
+            Err(e) => map_err(e),
+        }
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = hold;
+        OK
+    }
 }
 
 #[cfg(test)]

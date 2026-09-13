@@ -34,6 +34,48 @@ enum PositionPreset {
   ];
 }
 
+/// Headphone-app EQ sequences: 6 gains in dB.
+/// Order: Clear Bass, 120, 400, 1k, 3.5k, 10k.
+enum EqSequence {
+  flat('原声', '平直', [0, 0, 0, 0, 0, 0]),
+  vocal('人声', '口齿', [-1, -2, -1.5, 2.5, 3.5, 1.5]),
+  bass('低音', 'Kick', [5, 4, 1.5, 0, -1, -1.5]),
+  clear('通透', '去闷', [-1, -2, -3, 0.5, 3, 4]),
+  mellow('沉稳', '柔和', [2, 1.5, 0.5, -0.5, -1.5, -3.5]),
+  bright('亮片', '空气', [0, -1, -1.5, 1, 4, 5]);
+
+  const EqSequence(this.label, this.hint, this.gains);
+  final String label;
+  final String hint;
+  final List<double> gains;
+
+  static const mixerOrder = [
+    flat,
+    vocal,
+    bass,
+    clear,
+    mellow,
+    bright,
+  ];
+
+  static const bandLabels = ['Bass', '120', '400', '1k', '3.5k', '10k'];
+
+  bool matches(List<double> db) {
+    if (db.length != 6) return false;
+    for (var i = 0; i < 6; i++) {
+      if ((db[i] - gains[i]).abs() > 0.15) return false;
+    }
+    return true;
+  }
+
+  static EqSequence? matching(List<double> db) {
+    for (final s in mixerOrder) {
+      if (s.matches(db)) return s;
+    }
+    return null;
+  }
+}
+
 class SpatialParams {
   SpatialParams({
     this.azimuthDeg = 90,
@@ -44,7 +86,9 @@ class SpatialParams {
     this.envelopment = 0.6,
     this.reverbMix = 0.2,
     this.selectedPreset = PositionPreset.right,
-  });
+    List<double>? eqDb,
+    this.selectedEq = EqSequence.flat,
+  }) : eqDb = List<double>.from(eqDb ?? EqSequence.flat.gains);
 
   double azimuthDeg;
   double elevationDeg;
@@ -54,6 +98,8 @@ class SpatialParams {
   double envelopment;
   double reverbMix;
   PositionPreset? selectedPreset;
+  List<double> eqDb;
+  EqSequence? selectedEq;
 
   SpatialParams copy() => SpatialParams(
         azimuthDeg: azimuthDeg,
@@ -64,6 +110,8 @@ class SpatialParams {
         envelopment: envelopment,
         reverbMix: reverbMix,
         selectedPreset: selectedPreset,
+        eqDb: eqDb,
+        selectedEq: selectedEq,
       );
 
   void applyPreset(PositionPreset preset) {
@@ -71,6 +119,18 @@ class SpatialParams {
     azimuthDeg = preset.azimuth;
     elevationDeg = preset.elevation;
     distanceM = preset.distance;
+  }
+
+  void applyEq(EqSequence seq) {
+    selectedEq = seq;
+    eqDb = List<double>.from(seq.gains);
+  }
+
+  void setEqBand(int index, double db) {
+    if (index < 0 || index >= 6) return;
+    eqDb = List<double>.from(eqDb);
+    eqDb[index] = db.clamp(-12, 12);
+    selectedEq = EqSequence.matching(eqDb);
   }
 
   /// Effective azimuth for the orbit visualizer.

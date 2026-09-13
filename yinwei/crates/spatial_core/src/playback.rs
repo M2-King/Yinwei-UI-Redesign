@@ -9,7 +9,7 @@
 //! Content → device conversion uses cubic resampling per produced chunk.
 
 use std::collections::VecDeque;
-use std::sync::atomic::{AtomicBool, AtomicU64, AtomicU8, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, AtomicU8, Ordering};
 use std::sync::{Arc, Mutex};
 use std::thread::{self, JoinHandle};
 use std::time::Duration;
@@ -44,9 +44,15 @@ struct DspShared {
     /// 0 = Original, 1 = Spatial
     mode: AtomicU8,
     params: Mutex<SpatialParams>,
+    eq_db: Mutex<[f32; crate::eq::EQ_BANDS]>,
     ring: Mutex<VecDeque<StereoFrame>>,
     stop: AtomicBool,
     seek_gen: AtomicU64,
+    /// Live smoothed mid azimuth / elevation (f32 bits) for the visualizer.
+    live_az_bits: AtomicU32,
+    live_el_bits: AtomicU32,
+    /// 1 once the DSP worker has published a Spatial pose this session.
+    live_pose_valid: AtomicBool,
 }
 
 /// Holds dry source PCM and streams Spatial/Original DSP in a worker thread.
@@ -69,9 +75,13 @@ impl RealtimePlayer {
                 playing: AtomicBool::new(false),
                 mode: AtomicU8::new(1),
                 params: Mutex::new(SpatialParams::default()),
+                eq_db: Mutex::new([0.0; crate::eq::EQ_BANDS]),
                 ring: Mutex::new(VecDeque::with_capacity(RING_MAX_FRAMES)),
                 stop: AtomicBool::new(false),
                 seek_gen: AtomicU64::new(0),
+                live_az_bits: AtomicU32::new(90.0f32.to_bits()),
+                live_el_bits: AtomicU32::new(0.0f32.to_bits()),
+                live_pose_valid: AtomicBool::new(false),
             }),
             stream: Mutex::new(None),
             dsp: Mutex::new(None),
@@ -147,11 +157,60 @@ impl RealtimePlayer {
             .params
             .lock()
             .map_err(|_| SpatialError::LockPoisoned)?;
-        *g = params;
+        *g = params.clone();
+        // While Spatial DSP is running, live_* is owned by the streamer (slew).
+        // When idle / not yet valid, seed so the visualizer matches the target.
+        let dsp_owns_pose = self.shared.playing.load(Ordering::Relaxed)
+            && self.shared.live_pose_valid.load(Ordering::Relaxed)
+            && self.shared.mode.load(Ordering::Relaxed) == 1;
+        if !dsp_owns_pose {
+            self.shared
+                .live_az_bits
+                .store(params.azimuth_deg.to_bits(), Ordering::Relaxed);
+            self.shared
+                .live_el_bits
+                .store(params.elevation_deg.to_bits(), Ordering::Relaxed);
+        }
         // Never touch the ring here. Clearing/trimming caused device underruns
         // (the "卡一下" on every preset / drag). Pose changes are applied by the
-        // DSP worker on the next chunk; HrtfStreamer snaps on large jumps.
+        // DSP worker on the next chunk; HrtfStreamer slews large jumps.
         Ok(())
+    }
+
+    pub fn set_eq(&self, gains: [f32; crate::eq::EQ_BANDS]) -> Result<(), SpatialError> {
+        let mut g = self
+            .shared
+            .eq_db
+            .lock()
+            .map_err(|_| SpatialError::LockPoisoned)?;
+        *g = crate::eq::clamp_eq_gains(gains);
+        Ok(())
+    }
+
+    /// Effective mid azimuth from the live streamer (includes orbit). `None` if
+    /// Spatial DSP has not published yet / mode is Original.
+    pub fn live_azimuth_deg(&self) -> Option<f32> {
+        if self.shared.mode.load(Ordering::Relaxed) != 1 {
+            return None;
+        }
+        if !self.shared.live_pose_valid.load(Ordering::Relaxed) {
+            return None;
+        }
+        Some(f32::from_bits(
+            self.shared.live_az_bits.load(Ordering::Relaxed),
+        ))
+    }
+
+    pub fn live_elevation_deg(&self) -> Option<f32> {
+        if self.shared.mode.load(Ordering::Relaxed) != 1 {
+            return None;
+        }
+        if !self.shared.live_pose_valid.load(Ordering::Relaxed) {
+            return None;
+        }
+        Some(f32::from_bits(
+            self.shared.live_el_bits.load(Ordering::Relaxed),
+        ))
     }
 
     pub fn set_live_mode(&self, mode: PlaybackMode) {
@@ -241,6 +300,7 @@ impl RealtimePlayer {
             }
         }
         self.shared.stop.store(false, Ordering::Relaxed);
+        self.shared.live_pose_valid.store(false, Ordering::Relaxed);
     }
 
     fn ensure_dsp(&self) -> Result<(), SpatialError> {
@@ -251,6 +311,17 @@ impl RealtimePlayer {
         let shared = Arc::clone(&self.shared);
         let content_sr = shared.content_rate.load(Ordering::Relaxed).max(1) as u32;
         let mut streamer = HrtfStreamer::new(content_sr)?;
+        // Snap to current target so the first play does not slew from defaults.
+        if let Ok(p) = shared.params.lock() {
+            streamer.snap_to_params(&p);
+            shared
+                .live_az_bits
+                .store(streamer.effective_mid_azimuth_deg(&p).to_bits(), Ordering::Relaxed);
+            shared
+                .live_el_bits
+                .store(streamer.smooth_elevation_deg().to_bits(), Ordering::Relaxed);
+            shared.live_pose_valid.store(true, Ordering::Relaxed);
+        }
         let handle = thread::Builder::new()
             .name("yinwei-dsp".into())
             .spawn(move || dsp_loop(shared, &mut streamer))
@@ -326,6 +397,7 @@ impl Drop for RealtimePlayer {
 }
 
 fn dsp_loop(shared: Arc<DspShared>, streamer: &mut HrtfStreamer) {
+    let mut eq = crate::eq::GraphicEq::new(48_000);
     let mut last_seek = shared.seek_gen.load(Ordering::Relaxed);
     loop {
         if shared.stop.load(Ordering::Relaxed) {
@@ -395,13 +467,33 @@ fn dsp_loop(shared: Arc<DspShared>, streamer: &mut HrtfStreamer) {
             chunk[..got].to_vec()
         } else {
             match streamer.process_chunk(&chunk[..got], &params) {
-                Ok(block) => block[..got].to_vec(),
+                Ok(block) => {
+                    shared.live_az_bits.store(
+                        streamer.effective_mid_azimuth_deg(&params).to_bits(),
+                        Ordering::Relaxed,
+                    );
+                    shared.live_el_bits.store(
+                        streamer.smooth_elevation_deg().to_bits(),
+                        Ordering::Relaxed,
+                    );
+                    shared.live_pose_valid.store(true, Ordering::Relaxed);
+                    block[..got].to_vec()
+                }
                 Err(e) => {
                     eprintln!("yinwei dsp: {e}");
                     chunk[..got].to_vec()
                 }
             }
         };
+
+        let eq_db = shared
+            .eq_db
+            .lock()
+            .map(|g| *g)
+            .unwrap_or([0.0; crate::eq::EQ_BANDS]);
+        eq.set_gains(content_sr, eq_db);
+        let mut wet = wet;
+        eq.process_frames(&mut wet);
 
         let out = if content_sr == device_sr {
             wet

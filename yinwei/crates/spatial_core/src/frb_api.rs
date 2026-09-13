@@ -53,6 +53,10 @@ pub fn api_current_azimuth_deg() -> Result<f32, SpatialError> {
     global_session()?.current_azimuth_deg()
 }
 
+pub fn api_current_elevation_deg() -> Result<f32, SpatialError> {
+    global_session()?.current_elevation_deg()
+}
+
 pub fn api_export_wav(path: String) -> Result<(), SpatialError> {
     global_session()?.export_wav(&path, None)
 }

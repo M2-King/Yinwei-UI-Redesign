@@ -2,6 +2,9 @@
 
 #include <optional>
 
+#include <flutter/method_channel.h>
+#include <flutter/standard_method_codec.h>
+
 #include "flutter/generated_plugin_registrant.h"
 
 FlutterWindow::FlutterWindow(const flutter::DartProject& project)
@@ -25,6 +28,7 @@ bool FlutterWindow::OnCreate() {
     return false;
   }
   RegisterPlugins(flutter_controller_->engine());
+  RegisterWindowChromeChannel();
   SetChildContent(flutter_controller_->view()->GetNativeWindow());
 
   flutter_controller_->engine()->SetNextFrameCallback([&]() {
@@ -39,7 +43,51 @@ bool FlutterWindow::OnCreate() {
   return true;
 }
 
+void FlutterWindow::RegisterWindowChromeChannel() {
+  window_chrome_channel_ =
+      std::make_unique<flutter::MethodChannel<flutter::EncodableValue>>(
+          flutter_controller_->engine()->messenger(), "yinwei/window_chrome",
+          &flutter::StandardMethodCodec::GetInstance());
+
+  window_chrome_channel_->SetMethodCallHandler(
+      [this](const flutter::MethodCall<flutter::EncodableValue>& call,
+             std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>>
+                 result) {
+        if (call.method_name() == "setToolWindow") {
+          bool enable = false;
+          if (const auto* value = std::get_if<bool>(call.arguments())) {
+            enable = *value;
+          }
+          SetToolWindowStyle(enable);
+          result->Success();
+          return;
+        }
+        result->NotImplemented();
+      });
+}
+
+void FlutterWindow::SetToolWindowStyle(bool enable) {
+  HWND hwnd = GetHandle();
+  if (!hwnd) {
+    return;
+  }
+  LONG_PTR ex = GetWindowLongPtr(hwnd, GWL_EXSTYLE);
+  if (enable) {
+    ex |= WS_EX_TOOLWINDOW;
+    ex &= ~WS_EX_APPWINDOW;
+  } else {
+    ex &= ~WS_EX_TOOLWINDOW;
+    ex |= WS_EX_APPWINDOW;
+  }
+  SetWindowLongPtr(hwnd, GWL_EXSTYLE, ex);
+  // Force taskbar / Alt+Tab membership refresh.
+  SetWindowPos(hwnd, nullptr, 0, 0, 0, 0,
+               SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_FRAMECHANGED |
+                   SWP_NOACTIVATE);
+}
+
 void FlutterWindow::OnDestroy() {
+  window_chrome_channel_.reset();
   if (flutter_controller_) {
     flutter_controller_ = nullptr;
   }

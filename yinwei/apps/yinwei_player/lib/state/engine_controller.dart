@@ -7,8 +7,8 @@ import 'package:yinwei_player/models/spatial_params.dart';
 
 /// Bumped when UI wiring changes — shown in status bar so Windows hosts
 /// can confirm they pulled the latest build.
-const String kYinweiUiBuild = 'ui-13';
-const String kYinweiBridgeBuild = 'p2.4.10-no-ring-flush';
+const String kYinweiUiBuild = 'ui-26-live-nowplaying';
+const String kYinweiBridgeBuild = 'p2.4.23-live-latency';
 
 /// App state for the locked Player UI (IMPLEMENTATION_P2 §5.1).
 class EngineController extends ChangeNotifier {
@@ -27,6 +27,7 @@ class EngineController extends ChangeNotifier {
   bool playing = false;
   Duration position = const Duration(minutes: 1, seconds: 42);
   double azimuthDeg = 90;
+  double elevationDeg = -10;
   double jobProgress = 0;
   bool busy = false;
   String? lastError;
@@ -82,10 +83,28 @@ class EngineController extends ChangeNotifier {
   Future<void> applyPreset(PositionPreset preset) async {
     final next = params.copy()..applyPreset(preset);
     params = next;
-    _syncAzimuth();
+    // Keep target in params; live az/el follow DSP slew while playing Spatial.
+    if (!playing || mode != PlaybackMode.spatial) {
+      _syncAzimuth();
+    }
     notifyListeners();
-    // Presets apply immediately (no throttle); native snaps HRTF pose without
+    // Presets apply immediately (no throttle); native slews HRTF pose without
     // flushing the ring, so this should not stall playback.
+    _paramsThrottle?.cancel();
+    _paramsThrottle = null;
+    _pendingParams = null;
+    final gen = ++_paramsGen;
+    await _engine.setParams(params);
+    if (gen != _paramsGen) return;
+  }
+
+  Future<void> applyEq(EqSequence seq) async {
+    final next = params.copy()..applyEq(seq);
+    params = next;
+    if (!playing || mode != PlaybackMode.spatial) {
+      _syncAzimuth();
+    }
+    notifyListeners();
     _paramsThrottle?.cancel();
     _paramsThrottle = null;
     _pendingParams = null;
@@ -159,6 +178,16 @@ class EngineController extends ChangeNotifier {
 
   void _syncAzimuth() {
     azimuthDeg = params.visualAzimuthDeg(position);
+    elevationDeg = params.elevationDeg;
+  }
+
+  Future<void> _syncLivePose() async {
+    if (playing && mode == PlaybackMode.spatial) {
+      azimuthDeg = await _engine.currentAzimuthDeg();
+      elevationDeg = await _engine.currentElevationDeg();
+    } else {
+      _syncAzimuth();
+    }
   }
 
   void _onProgress(double p) {
@@ -173,7 +202,7 @@ class EngineController extends ChangeNotifier {
       final pos = await _engine.position();
       final still = await _engine.isPlaying();
       position = pos;
-      _syncAzimuth();
+      await _syncLivePose();
       playing = still;
       if (!playing) _tick?.cancel();
       notifyListeners();

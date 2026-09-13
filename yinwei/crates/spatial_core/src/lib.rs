@@ -2,6 +2,7 @@
 
 mod crossover;
 mod decode;
+mod eq;
 mod error;
 mod hrtf_render;
 mod mid_side;
@@ -18,6 +19,8 @@ mod session;
 mod frb_api;
 #[cfg(feature = "realtime")]
 mod ffi;
+#[cfg(all(feature = "realtime", windows))]
+mod live_transfer;
 
 pub use decode::{save_wav, write_test_sine_wav, DecodedAudio, StereoFrame};
 pub use error::SpatialError;
@@ -32,9 +35,9 @@ pub use presets::{apply_preset, PositionPreset, PRESET_TABLE};
 pub use session::{global_session, PlayerSession};
 #[cfg(feature = "realtime")]
 pub use frb_api::{
-    api_apply_preset, api_current_azimuth_deg, api_dispose, api_export_wav, api_is_playing,
-    api_is_preview_dirty, api_open, api_pause, api_play, api_position_ms, api_rebuild_preview,
-    api_seek_ms, api_set_mode, api_set_params, new_session,
+    api_apply_preset, api_current_azimuth_deg, api_current_elevation_deg, api_dispose,
+    api_export_wav, api_is_playing, api_is_preview_dirty, api_open, api_pause, api_play,
+    api_position_ms, api_rebuild_preview, api_seek_ms, api_set_mode, api_set_params, new_session,
 };
 
 use std::path::{Path, PathBuf};
@@ -51,6 +54,7 @@ struct EngineInner {
     mode: PlaybackMode,
     orbit_phase: f32,
     renderer: Option<HrtfRenderer>,
+    eq_db: [f32; crate::eq::EQ_BANDS],
 }
 
 pub struct Engine {
@@ -70,6 +74,7 @@ impl Engine {
                 mode: PlaybackMode::Spatial,
                 orbit_phase: 0.0,
                 renderer: None,
+                eq_db: [0.0; crate::eq::EQ_BANDS],
             }),
             playing: AtomicBool::new(false),
             position_ms: AtomicU64::new(0),
@@ -114,6 +119,17 @@ impl Engine {
         let mut g = self.inner.lock().map_err(|_| SpatialError::LockPoisoned)?;
         g.params = params;
         Ok(())
+    }
+
+    pub fn set_eq(&self, gains: [f32; crate::eq::EQ_BANDS]) -> Result<(), SpatialError> {
+        let mut g = self.inner.lock().map_err(|_| SpatialError::LockPoisoned)?;
+        g.eq_db = crate::eq::clamp_eq_gains(gains);
+        Ok(())
+    }
+
+    pub fn eq_gains(&self) -> Result<[f32; crate::eq::EQ_BANDS], SpatialError> {
+        let g = self.inner.lock().map_err(|_| SpatialError::LockPoisoned)?;
+        Ok(g.eq_db)
     }
 
     /// Clone dry decoded PCM once for the streaming player (no HRTF).
@@ -210,11 +226,12 @@ impl Engine {
         let decoded = g.decoded.as_ref().ok_or(SpatialError::NoTrackLoaded)?;
         let params = g.params.clone();
         let mode = g.mode;
+        let eq_db = g.eq_db;
         let sample_rate = decoded.sample_rate;
         let source_frames = decoded.frames.clone();
         params.validate()?;
 
-        let frames = match mode {
+        let mut frames = match mode {
             PlaybackMode::Original => {
                 if let Some(cb) = on_progress.as_mut() {
                     cb(1.0);
@@ -229,6 +246,9 @@ impl Engine {
                 renderer.render(&source_frames, &params, on_progress)?
             }
         };
+        let mut eq = crate::eq::GraphicEq::new(sample_rate);
+        eq.set_gains(sample_rate, eq_db);
+        eq.process_frames(&mut frames);
         Ok((sample_rate, frames))
     }
 

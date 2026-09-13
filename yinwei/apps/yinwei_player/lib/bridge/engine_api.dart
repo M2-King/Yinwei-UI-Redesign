@@ -26,6 +26,8 @@ abstract class EngineApi {
 
   Future<double> currentAzimuthDeg();
 
+  Future<double> currentElevationDeg();
+
   Future<void> exportWav(
     String outPath, {
     void Function(double progress)? onProgress,

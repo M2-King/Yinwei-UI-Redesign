@@ -82,6 +82,11 @@ class NativeEngine implements EngineApi {
     try {
       _writeParams(ptr.ref, params);
       _check(_b.yinweiSetParams(ptr));
+      try {
+        _check(_b.setEq(params.eqDb));
+      } catch (_) {
+        // Older DLL without yinwei_set_eq.
+      }
     } finally {
       calloc.free(ptr);
     }
@@ -144,6 +149,11 @@ class NativeEngine implements EngineApi {
   @override
   Future<double> currentAzimuthDeg() async {
     return _b.yinweiCurrentAzimuthDeg();
+  }
+
+  @override
+  Future<double> currentElevationDeg() async {
+    return _b.yinweiCurrentElevationDeg();
   }
 
   @override

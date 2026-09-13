@@ -10,6 +10,9 @@ abstract final class YinweiColors {
   static const textPrimary = Color(0xFFF5F5F7);
   static const textSecondary = Color(0xFF8E8E93);
   static const success = Color(0xFF30D158);
+  static const islandPill = Color(0xF0141416);
+  static const islandBorder = Color(0x28FFFFFF);
+  static const islandRadius = 22.0;
 }
 
 abstract final class YinweiTheme {

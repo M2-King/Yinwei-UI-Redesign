@@ -19,7 +19,7 @@ class NowPlayingPanel extends StatelessWidget {
   final Duration position;
   final bool isPlaying;
   final PlaybackMode playbackMode;
-  final ValueChanged<Duration> onSeek;
+  final ValueChanged<Duration>? onSeek;
   final VoidCallback onPlayPause;
   final ValueChanged<PlaybackMode> onModeChanged;
 
@@ -139,7 +139,7 @@ class _Scrubber extends StatelessWidget {
 
   final Duration position;
   final Duration duration;
-  final ValueChanged<Duration> onSeek;
+  final ValueChanged<Duration>? onSeek;
 
   @override
   Widget build(BuildContext context) {
@@ -154,7 +154,9 @@ class _Scrubber extends StatelessWidget {
         Slider(
           value: value,
           max: maxMs,
-          onChanged: (v) => onSeek(Duration(milliseconds: v.round())),
+          onChanged: onSeek == null
+              ? null
+              : (v) => onSeek!(Duration(milliseconds: v.round())),
         ),
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 8),

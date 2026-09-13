@@ -10,6 +10,7 @@ class PositionSidebar extends StatelessWidget {
     required this.onChanged,
     required this.onExport,
     required this.onSavePreset,
+    required this.onOpenEq,
     this.onPresetSelected,
   });
 
@@ -17,6 +18,7 @@ class PositionSidebar extends StatelessWidget {
   final ValueChanged<SpatialParams> onChanged;
   final VoidCallback onExport;
   final VoidCallback onSavePreset;
+  final VoidCallback onOpenEq;
   /// Prefer this for grid taps so the engine can apply presets without drag throttle.
   final ValueChanged<PositionPreset>? onPresetSelected;
 
@@ -59,9 +61,10 @@ class PositionSidebar extends StatelessWidget {
                       }
                     },
                   ),
-                  const SizedBox(height: 26),
+                  const SizedBox(height: 22),
                   _LabeledSlider(
                     label: 'Azimuth',
+                    hint: '方位',
                     valueLabel: '${params.azimuthDeg.round()}°',
                     value: params.azimuthDeg,
                     min: -180,
@@ -75,6 +78,7 @@ class PositionSidebar extends StatelessWidget {
                   ),
                   _LabeledSlider(
                     label: 'Elevation',
+                    hint: '高度',
                     valueLabel: '${params.elevationDeg.round()}°',
                     value: params.elevationDeg,
                     min: -90,
@@ -88,6 +92,7 @@ class PositionSidebar extends StatelessWidget {
                   ),
                   _LabeledSlider(
                     label: 'Distance',
+                    hint: '远近 · 人声',
                     valueLabel: '${params.distanceM.toStringAsFixed(2)} m',
                     value: params.distanceM,
                     min: 0.5,
@@ -122,6 +127,7 @@ class PositionSidebar extends StatelessWidget {
                       ignoring: !orbitOn,
                       child: _LabeledSlider(
                         label: 'Orbit Speed',
+                        hint: '绕转',
                         valueLabel: '${params.orbitHz.toStringAsFixed(2)} Hz',
                         value: params.orbitHz,
                         min: 0.05,
@@ -135,6 +141,7 @@ class PositionSidebar extends StatelessWidget {
                   ),
                   _LabeledSlider(
                     label: 'Envelopment',
+                    hint: '包围 · 高了发闷',
                     valueLabel: '${(params.envelopment * 100).round()}%',
                     value: params.envelopment,
                     min: 0,
@@ -146,6 +153,7 @@ class PositionSidebar extends StatelessWidget {
                   ),
                   _LabeledSlider(
                     label: 'Reverb',
+                    hint: '混响',
                     valueLabel: '${(params.reverbMix * 100).round()}%',
                     value: params.reverbMix,
                     min: 0,
@@ -164,6 +172,34 @@ class PositionSidebar extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
+                OutlinedButton(
+                  onPressed: onOpenEq,
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: YinweiColors.textPrimary,
+                    side: const BorderSide(color: YinweiColors.accent),
+                    minimumSize: const Size.fromHeight(46),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                  ),
+                  child: Column(
+                    children: [
+                      const Text(
+                        'EQ 调音台',
+                        style: TextStyle(
+                            fontWeight: FontWeight.w600, fontSize: 14),
+                      ),
+                      Text(
+                        params.selectedEq?.label ?? '自定义',
+                        style: const TextStyle(
+                          fontSize: 11,
+                          color: YinweiColors.textSecondary,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 8),
                 FilledButton(
                   onPressed: onExport,
                   style: FilledButton.styleFrom(
@@ -296,9 +332,11 @@ class _LabeledSlider extends StatelessWidget {
     required this.min,
     required this.max,
     required this.onChanged,
+    this.hint,
   });
 
   final String label;
+  final String? hint;
   final String valueLabel;
   final double value;
   final double min;
@@ -314,7 +352,17 @@ class _LabeledSlider extends StatelessWidget {
           Row(
             children: [
               Text(label, style: Theme.of(context).textTheme.bodySmall),
-              const Spacer(),
+              if (hint != null) ...[
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    hint!,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.labelSmall,
+                  ),
+                ),
+              ] else
+                const Spacer(),
               Text(valueLabel, style: Theme.of(context).textTheme.labelSmall),
             ],
           ),

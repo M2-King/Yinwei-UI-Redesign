@@ -114,6 +114,9 @@ class MockEngine implements EngineApi {
   }
 
   @override
+  Future<double> currentElevationDeg() async => _params.elevationDeg;
+
+  @override
   Future<void> exportWav(
     String outPath, {
     void Function(double progress)? onProgress,
