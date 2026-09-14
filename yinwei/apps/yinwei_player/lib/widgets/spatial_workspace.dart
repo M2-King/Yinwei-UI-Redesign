@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 import 'package:yinwei_player/models/spatial_math.dart';
+import 'package:yinwei_player/models/spatial_params.dart';
 import 'package:yinwei_player/theme/yinwei_theme.dart';
 import 'package:yinwei_player/widgets/orbit_visualizer.dart';
 import 'package:yinwei_player/widgets/spatial_workspace_html.dart';
@@ -15,8 +16,8 @@ import 'package:yinwei_player/widgets/spatial_workspace_html.dart';
 /// Windows: local Three.js scene in WebView2 (true XYZ meshes).
 /// Tests / non-Windows: existing [OrbitVisualizer] so CI and audio wiring stay intact.
 ///
-/// Audio: only Source az/el/dist is posted to Dart. The 8 ITU speakers are
-/// visual layout anchors and never touch Point HRTF / FFI / Export.
+/// Audio: Point mode posts Source az/el/dist to Dart. Discrete 2.0 speakers
+/// use [OrbitVisualizer] so extra points / matrix stay on the native HRTF path.
 class SpatialWorkspace extends StatefulWidget {
   const SpatialWorkspace({
     super.key,
@@ -28,8 +29,13 @@ class SpatialWorkspace extends StatefulWidget {
     this.active = true,
     this.orbiting = false,
     this.playing = false,
+    this.arraySpeakers,
+    this.selectedSpeakerIndex = 0,
     this.onPoseChanged,
     this.onDistanceChanged,
+    this.onSpeakerSelected,
+    this.onSpeakerPoseChanged,
+    this.onSpeakerDistanceChanged,
     this.forceFallback = false,
   });
 
@@ -41,8 +47,14 @@ class SpatialWorkspace extends StatefulWidget {
   final bool active;
   final bool orbiting;
   final bool playing;
+  final List<ArraySpeaker>? arraySpeakers;
+  final int selectedSpeakerIndex;
   final void Function(double azimuthDeg, double elevationDeg)? onPoseChanged;
   final ValueChanged<double>? onDistanceChanged;
+  final ValueChanged<int>? onSpeakerSelected;
+  final void Function(int index, double azimuthDeg, double elevationDeg)?
+      onSpeakerPoseChanged;
+  final void Function(int index, double distanceM)? onSpeakerDistanceChanged;
   final bool forceFallback;
 
   @override
@@ -55,8 +67,12 @@ class _SpatialWorkspaceState extends State<SpatialWorkspace> {
   var _failed = false;
   String? _lastJs;
 
+  bool get _arrayOn =>
+      widget.arraySpeakers != null && widget.arraySpeakers!.isNotEmpty;
+
   bool get _useWebView {
     if (widget.forceFallback) return false;
+    if (_arrayOn) return false;
     if (_failed) return false;
     if (kIsWeb) return false;
     if (Platform.environment.containsKey('FLUTTER_TEST')) return false;
@@ -171,8 +187,13 @@ class _SpatialWorkspaceState extends State<SpatialWorkspace> {
         envelopment: widget.envelopment,
         active: widget.active,
         orbiting: widget.orbiting,
+        arraySpeakers: widget.arraySpeakers,
+        selectedSpeakerIndex: widget.selectedSpeakerIndex,
         onPoseChanged: widget.onPoseChanged,
         onDistanceChanged: widget.onDistanceChanged,
+        onSpeakerSelected: widget.onSpeakerSelected,
+        onSpeakerPoseChanged: widget.onSpeakerPoseChanged,
+        onSpeakerDistanceChanged: widget.onSpeakerDistanceChanged,
       );
     }
     final web = _web;

@@ -36,4 +36,19 @@ abstract class EngineApi {
   Future<void> dispose();
 
   Future<bool> isPreviewDirty();
+
+  /// False when the loaded DLL has no `yinwei_set_array` symbol.
+  bool get supportsArray => false;
+
+  Future<void> setArrayMode(int mode) async {}
+
+  Future<void> setSpeaker({
+    required int index,
+    required double azimuthDeg,
+    required double elevationDeg,
+    required double distanceM,
+    required double gainDb,
+    required bool mute,
+    required int feed,
+  }) async {}
 }

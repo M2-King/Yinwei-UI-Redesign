@@ -1,6 +1,7 @@
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:yinwei_player/models/spatial_params.dart';
 import 'package:yinwei_player/theme/yinwei_theme.dart';
 import 'package:yinwei_player/widgets/orbit_visualizer.dart';
 
@@ -118,6 +119,8 @@ void main() {
       ),
     );
     await tester.pump();
+    await tester.pump(const Duration(milliseconds: 560));
+    expect(tester.binding.hasScheduledFrame, isFalse);
     expect(tester.takeException(), isNull);
 
     await tester.pumpWidget(
@@ -134,6 +137,35 @@ void main() {
 
     expect(find.text('Free'), findsOneWidget);
     expect(find.text('Top'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('2.0 field paints L/R speakers on the ball', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: YinweiTheme.dark(),
+        home: Scaffold(
+          body: Center(
+            child: SizedBox.square(
+              dimension: 420,
+              child: OrbitVisualizer(
+                playhead: 0.2,
+                azimuthDeg: 0,
+                elevationDeg: 0,
+                distanceM: 1.8,
+                envelopment: 0.2,
+                arraySpeakers: ArrayLayout.stereo2Speakers(),
+                selectedSpeakerIndex: 0,
+                onSpeakerPoseChanged: (_, __, ___) {},
+                onSpeakerSelected: (_) {},
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    expect(find.textContaining('拖动音箱'), findsOneWidget);
+    expect(find.textContaining('5.1'), findsNothing);
     expect(tester.takeException(), isNull);
   });
 }

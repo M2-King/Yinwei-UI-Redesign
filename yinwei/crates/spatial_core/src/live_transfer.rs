@@ -89,6 +89,7 @@ struct Shared {
     mode: AtomicU8Mode,
     params: Mutex<SpatialParams>,
     eq_db: Mutex<[f32; crate::eq::EQ_BANDS]>,
+    array: Mutex<crate::layout::ArrayLayout>,
     dry_q: Mutex<VecDeque<StereoFrame>>,
     wet_q: Mutex<VecDeque<StereoFrame>>,
     live_az_bits: AtomicU32,
@@ -141,6 +142,7 @@ impl LiveTransferEngine {
                 mode: AtomicU8Mode::new(1),
                 params: Mutex::new(SpatialParams::default()),
                 eq_db: Mutex::new([0.0; crate::eq::EQ_BANDS]),
+                array: Mutex::new(crate::layout::ArrayLayout::default()),
                 dry_q: Mutex::new(VecDeque::with_capacity(DRY_Q_MAX * 2)),
                 wet_q: Mutex::new(VecDeque::with_capacity(WET_Q_MAX * 2)),
                 live_az_bits: AtomicU32::new(90.0f32.to_bits()),
@@ -174,6 +176,33 @@ impl LiveTransferEngine {
             *g = crate::eq::clamp_eq_gains(gains);
         }
         Ok(())
+    }
+
+    pub fn set_array(&self, mode: i32) -> Result<(), SpatialError> {
+        let mut g = self
+            .shared
+            .array
+            .lock()
+            .map_err(|_| SpatialError::LockPoisoned)?;
+        g.set_mode(mode)
+    }
+
+    pub fn set_speaker(
+        &self,
+        index: i32,
+        az_deg: f32,
+        el_deg: f32,
+        dist_m: f32,
+        gain_db: f32,
+        mute: i32,
+        feed: i32,
+    ) -> Result<(), SpatialError> {
+        let mut g = self
+            .shared
+            .array
+            .lock()
+            .map_err(|_| SpatialError::LockPoisoned)?;
+        g.set_speaker(index, az_deg, el_deg, dist_m, gain_db, mute, feed)
     }
 
     pub fn set_mode(&self, mode: PlaybackMode) {
@@ -940,7 +969,16 @@ fn dsp_loop(shared: Arc<Shared>) -> Result<(), SpatialError> {
         let mut wet: Vec<StereoFrame> = if mode == 0 {
             chunk
         } else {
-            streamer.process_chunk(&chunk, &params)?.to_vec()
+            let array = shared
+                .array
+                .lock()
+                .map(|g| g.clone())
+                .unwrap_or_default();
+            if array.enabled() {
+                streamer.process_chunk_array(&chunk, &params, &array)?.to_vec()
+            } else {
+                streamer.process_chunk(&chunk, &params)?.to_vec()
+            }
         };
         let eq_db = shared
             .eq_db

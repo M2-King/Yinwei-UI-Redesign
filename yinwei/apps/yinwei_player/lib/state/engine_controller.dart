@@ -7,8 +7,8 @@ import 'package:yinwei_player/models/spatial_params.dart';
 
 /// Bumped when UI wiring changes — shown in status bar so Windows hosts
 /// can confirm they pulled the latest build.
-const String kYinweiUiBuild = 'ui-27-spatial-3d';
-const String kYinweiBridgeBuild = 'p2.4.23-live-latency';
+const String kYinweiUiBuild = 'ui-32-stereo20';
+const String kYinweiBridgeBuild = 'p2.4.28-stereo20';
 
 /// App state for the locked Player UI (IMPLEMENTATION_P2 §5.1).
 class EngineController extends ChangeNotifier {
@@ -23,6 +23,7 @@ class EngineController extends ChangeNotifier {
 
   TrackMeta track = TrackMeta.demo;
   SpatialParams params = SpatialParams();
+  ArrayLayout array = ArrayLayout();
   PlaybackMode mode = PlaybackMode.spatial;
   bool playing = false;
   Duration position = const Duration(minutes: 1, seconds: 42);
@@ -39,6 +40,11 @@ class EngineController extends ChangeNotifier {
   int _liveGen = 0;
   int _paramsGen = 0;
   SpatialParams? _pendingParams;
+  ArrayLayout? _pendingArray;
+  Timer? _arrayThrottle;
+  int _arrayGen = 0;
+
+  bool get arraySupported => _engine.supportsArray;
 
   double get playhead {
     final total = track.duration.inMilliseconds;
@@ -78,6 +84,64 @@ class EngineController extends ChangeNotifier {
         if (gen != _paramsGen) return;
       }());
     });
+  }
+
+  Future<void> setArray(ArrayLayout next) async {
+    array = next.copy();
+    notifyListeners();
+    _pendingArray = array.copy();
+    _arrayThrottle ??= Timer(const Duration(milliseconds: 32), () {
+      _arrayThrottle = null;
+      final pending = _pendingArray;
+      if (pending == null) return;
+      _pendingArray = null;
+      final gen = ++_arrayGen;
+      unawaited(() async {
+        await _pushArray(pending);
+        if (gen != _arrayGen) return;
+      }());
+    });
+  }
+
+  Future<void> applyArrayMode(ArrayMode mode) async {
+    final next = array.copy();
+    if (mode == ArrayMode.stereo2) {
+      next.applyStereo2Preset();
+    } else {
+      next.mode = ArrayMode.off;
+    }
+    array = next;
+    notifyListeners();
+    _arrayThrottle?.cancel();
+    _arrayThrottle = null;
+    _pendingArray = null;
+    final gen = ++_arrayGen;
+    await _pushArray(array);
+    if (gen != _arrayGen) return;
+  }
+
+  Future<void> selectArraySpeaker(int index) async {
+    if (index < 0 || index >= array.speakers.length) return;
+    final next = array.copy()..selectedIndex = index;
+    array = next;
+    notifyListeners();
+  }
+
+  Future<void> _pushArray(ArrayLayout layout) async {
+    await _engine.setArrayMode(layout.nativeMode);
+    if (!layout.enabled) return;
+    for (var i = 0; i < layout.speakers.length; i++) {
+      final s = layout.speakers[i];
+      await _engine.setSpeaker(
+        index: i,
+        azimuthDeg: s.azimuthDeg,
+        elevationDeg: s.elevationDeg,
+        distanceM: s.distanceM,
+        gainDb: s.gainDb,
+        mute: s.mute,
+        feed: s.nativeFeed,
+      );
+    }
   }
 
   Future<void> applyPreset(PositionPreset preset) async {
@@ -230,6 +294,7 @@ class EngineController extends ChangeNotifier {
   void dispose() {
     _paramsThrottle?.cancel();
     _liveRebuild?.cancel();
+    _arrayThrottle?.cancel();
     _tick?.cancel();
     _engine.dispose();
     super.dispose();

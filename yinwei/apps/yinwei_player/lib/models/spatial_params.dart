@@ -145,6 +145,122 @@ class SpatialParams {
   }
 }
 
+enum ArrayMode { off, stereo2 }
+
+enum SpeakerFeed { left, right }
+
+class ArraySpeaker {
+  ArraySpeaker({
+    required this.label,
+    required this.azimuthDeg,
+    required this.elevationDeg,
+    required this.distanceM,
+    this.gainDb = 0,
+    this.mute = false,
+    this.feed = SpeakerFeed.left,
+  });
+
+  String label;
+  double azimuthDeg;
+  double elevationDeg;
+  double distanceM;
+  double gainDb;
+  bool mute;
+  SpeakerFeed feed;
+
+  int get nativeFeed {
+    switch (feed) {
+      case SpeakerFeed.left:
+        return 0;
+      case SpeakerFeed.right:
+        return 1;
+    }
+  }
+
+  ArraySpeaker copy() => ArraySpeaker(
+        label: label,
+        azimuthDeg: azimuthDeg,
+        elevationDeg: elevationDeg,
+        distanceM: distanceM,
+        gainDb: gainDb,
+        mute: mute,
+        feed: feed,
+      );
+}
+
+/// Discrete array. Default [mode] is Point (off). Not part of [SpatialParams].
+class ArrayLayout {
+  ArrayLayout({
+    this.mode = ArrayMode.off,
+    this.selectedIndex = 0,
+    List<ArraySpeaker>? speakers,
+  }) : speakers = speakers ?? stereo2Speakers();
+
+  ArrayMode mode;
+  int selectedIndex;
+  List<ArraySpeaker> speakers;
+
+  bool get enabled => mode != ArrayMode.off;
+
+  int get nativeMode {
+    switch (mode) {
+      case ArrayMode.off:
+        return 0;
+      case ArrayMode.stereo2:
+        return 1;
+    }
+  }
+
+  String get shortLabel {
+    switch (mode) {
+      case ArrayMode.off:
+        return '';
+      case ArrayMode.stereo2:
+        return '2.0';
+    }
+  }
+
+  ArraySpeaker get selected {
+    if (speakers.isEmpty) return stereo2Speakers().first;
+    final i = selectedIndex.clamp(0, speakers.length - 1).toInt();
+    return speakers[i];
+  }
+
+  static List<ArraySpeaker> stereo2Speakers() => [
+        ArraySpeaker(
+          label: 'L',
+          azimuthDeg: -30,
+          elevationDeg: 0,
+          distanceM: 1.8,
+          feed: SpeakerFeed.left,
+        ),
+        ArraySpeaker(
+          label: 'R',
+          azimuthDeg: 30,
+          elevationDeg: 0,
+          distanceM: 1.8,
+          feed: SpeakerFeed.right,
+        ),
+      ];
+
+  factory ArrayLayout.stereo2() => ArrayLayout(
+        mode: ArrayMode.stereo2,
+        speakers: stereo2Speakers(),
+      );
+
+  ArrayLayout copy() => ArrayLayout(
+        mode: mode,
+        selectedIndex: selectedIndex,
+        speakers: speakers.map((s) => s.copy()).toList(),
+      );
+
+  void applyStereo2Preset() {
+    mode = ArrayMode.stereo2;
+    speakers = stereo2Speakers();
+    selectedIndex = 0;
+  }
+}
+
 class TrackMeta {
   const TrackMeta({
     required this.title,

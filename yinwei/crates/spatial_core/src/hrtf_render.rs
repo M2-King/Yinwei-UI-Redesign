@@ -27,6 +27,13 @@ pub const STREAM_BLOCK: usize = 512;
 pub const STREAM_INTERP: usize = 1;
 pub const STREAM_CHUNK: usize = STREAM_BLOCK * STREAM_INTERP;
 
+/// Max HRTF voices for the 2.0 array (L/R).
+const ARRAY_VOICES: usize = crate::layout::MAX_SPEAKERS;
+/// 2.0 opposite-channel bleed (no delay — Live lipsync). Fills phantom center.
+const ARRAY_2_CROSSFEED: f32 = 0.30;
+const ARRAY_2_TRIM: f32 = 0.90;
+const ARRAY_2_REV: f32 = 1.12;
+
 /// Large pose jumps slew at these rates (see `IMPLEMENTATION_POSE_SLEW.md`).
 pub const SLEW_AZ_DEG_PER_SEC: f32 = 180.0;
 pub const SLEW_EL_DEG_PER_SEC: f32 = 90.0;
@@ -451,6 +458,34 @@ pub struct HrtfStreamer {
     smooth_dist: f32,
     smooth_env: f32,
     smooth_rev: f32,
+    /// Array voices — never read by [`Self::process_chunk`].
+    crossover_arr_l: LinkwitzRileyCrossover,
+    crossover_arr_r: LinkwitzRileyCrossover,
+    array_voices: Vec<ArrayVoice>,
+}
+
+struct ArrayVoice {
+    prev_l: Vec<f32>,
+    prev_r: Vec<f32>,
+    prev_pos: Vec3,
+    smooth_az: f32,
+    smooth_el: f32,
+    smooth_dist: f32,
+    prev_dist: f32,
+}
+
+impl ArrayVoice {
+    fn at(az: f32, el: f32, dist: f32) -> Self {
+        Self {
+            prev_l: Vec::new(),
+            prev_r: Vec::new(),
+            prev_pos: spherical_to_vec(az, el),
+            smooth_az: az,
+            smooth_el: el,
+            smooth_dist: dist,
+            prev_dist: dist,
+        }
+    }
 }
 
 impl HrtfStreamer {
@@ -482,12 +517,22 @@ impl HrtfStreamer {
             smooth_dist: params.distance_m,
             smooth_env: params.envelopment,
             smooth_rev: params.reverb_mix,
+            crossover_arr_l: LinkwitzRileyCrossover::new(sample_rate, 80.0),
+            crossover_arr_r: LinkwitzRileyCrossover::new(sample_rate, 80.0),
+            array_voices: (0..ARRAY_VOICES)
+                .map(|i| match i {
+                    0 => ArrayVoice::at(-30.0, 0.0, 1.8),
+                    _ => ArrayVoice::at(30.0, 0.0, 1.8),
+                })
+                .collect(),
         })
     }
 
     pub fn reset(&mut self) {
         self.crossover_mid.reset_state();
         self.crossover_side.reset_state();
+        self.crossover_arr_l.reset_state();
+        self.crossover_arr_r.reset_state();
         self.reverb.reset_state();
         self.prev_mid_l.clear();
         self.prev_mid_r.clear();
@@ -495,6 +540,10 @@ impl HrtfStreamer {
         self.prev_side_r.clear();
         self.prev_side2_l.clear();
         self.prev_side2_r.clear();
+        for v in &mut self.array_voices {
+            v.prev_l.clear();
+            v.prev_r.clear();
+        }
         self.phase = 0.0;
         self.air_lp = OnePoleLp::new();
     }
@@ -699,6 +748,170 @@ impl HrtfStreamer {
         self.prev_dist = new_dist;
         Ok(output)
     }
+
+    /// Discrete 2.0 array: L/R HRTF voices + opposite-channel crossfeed.
+    /// Does not touch Point prev_mid / envelopment / orbit state.
+    pub fn process_chunk_array(
+        &mut self,
+        input: &[StereoFrame],
+        params: &SpatialParams,
+        layout: &crate::layout::ArrayLayout,
+    ) -> Result<[StereoFrame; STREAM_CHUNK], SpatialError> {
+        params.validate()?;
+
+        let dt = STREAM_CHUNK as f32 / self.sample_rate as f32;
+        self.smooth_rev += (params.reverb_mix - self.smooth_rev) * CHASE_A;
+
+        let n = layout.speakers.len().min(self.array_voices.len());
+        for i in 0..n {
+            let spk = layout.speakers[i];
+            let v = &mut self.array_voices[i];
+            slew_speaker_pose(
+                &mut v.smooth_az,
+                &mut v.smooth_el,
+                &mut v.smooth_dist,
+                spk.az_deg,
+                spk.el_deg,
+                spk.dist_m,
+                dt,
+            );
+        }
+
+        let mut padded = [(0.0f32, 0.0f32); STREAM_CHUNK];
+        let n_in = input.len().min(STREAM_CHUNK);
+        padded[..n_in].copy_from_slice(&input[..n_in]);
+
+        let mut bass = [0.0f32; STREAM_CHUNK];
+        let mut high_l = [0.0f32; STREAM_CHUNK];
+        let mut high_r = [0.0f32; STREAM_CHUNK];
+        for i in 0..STREAM_CHUNK {
+            let (b_l, h_l) = self.crossover_arr_l.process(padded[i].0);
+            let (b_r, h_r) = self.crossover_arr_r.process(padded[i].1);
+            bass[i] = (b_l + b_r) * 0.5;
+            high_l[i] = h_l;
+            high_r[i] = h_r;
+        }
+
+        let stereo2 = layout.mode == crate::layout::ArrayMode::Stereo2;
+        let mut feed_l = high_l;
+        let mut feed_r = high_r;
+        if stereo2 {
+            for i in 0..STREAM_CHUNK {
+                feed_l[i] = high_l[i] + ARRAY_2_CROSSFEED * high_r[i];
+                feed_r[i] = high_r[i] + ARRAY_2_CROSSFEED * high_l[i];
+            }
+        }
+
+        let mut mix = [(0.0f32, 0.0f32); STREAM_CHUNK];
+        let mut dist_acc = 0.0f32;
+        let mut hrtf_n = 0u32;
+
+        for i in 0..n {
+            let spk = layout.speakers[i];
+            if spk.mute {
+                continue;
+            }
+            let gain = db_to_lin(spk.gain_db);
+            let new_dist = self.array_voices[i].smooth_dist;
+            let new_g = distance_gain(new_dist) * gain;
+
+            let prev_g = distance_gain(self.array_voices[i].prev_dist) * gain;
+            let pos = spherical_to_vec(
+                self.array_voices[i].smooth_az,
+                self.array_voices[i].smooth_el,
+            );
+            let high: &[f32] = match spk.feed {
+                crate::layout::SpeakerFeed::Left => &feed_l,
+                crate::layout::SpeakerFeed::Right => &feed_r,
+            };
+            let mut spk_out = [(0.0f32, 0.0f32); STREAM_CHUNK];
+            let from_pos = self.array_voices[i].prev_pos;
+            {
+                let processor = &mut self.processor;
+                let voice = &mut self.array_voices[i];
+                process_hrtf_path(
+                    processor,
+                    high,
+                    &mut spk_out,
+                    from_pos,
+                    pos,
+                    &mut voice.prev_l,
+                    &mut voice.prev_r,
+                    prev_g,
+                    new_g,
+                );
+                voice.prev_pos = pos;
+                voice.prev_dist = new_dist;
+            }
+            for j in 0..STREAM_CHUNK {
+                mix[j].0 += spk_out[j].0;
+                mix[j].1 += spk_out[j].1;
+            }
+            dist_acc += new_dist;
+            hrtf_n += 1;
+        }
+
+        let mean_dist = if hrtf_n > 0 {
+            dist_acc / hrtf_n as f32
+        } else {
+            1.8
+        };
+        let air_c = air_absorption_coeff(mean_dist);
+        let mut wet = distance_reverb_mix(self.smooth_rev, mean_dist);
+        if stereo2 {
+            wet = (wet * ARRAY_2_REV).clamp(0.0, 0.55);
+        }
+
+        let mut output = [(0.0f32, 0.0f32); STREAM_CHUNK];
+        for i in 0..STREAM_CHUNK {
+            let g = if hrtf_n > 0 {
+                distance_gain(mean_dist)
+            } else {
+                0.0
+            };
+            let left = mix[i].0 * ARRAY_2_TRIM + bass[i] * g;
+            let right = mix[i].1 * ARRAY_2_TRIM + bass[i] * g;
+            let (dl, dr) = self.air_lp.process(left, right, air_c);
+            let (rl, rr) = self.reverb.process(dl, dr);
+            output[i] = (
+                dl * (1.0 - wet) + rl * wet,
+                dr * (1.0 - wet) + rr * wet,
+            );
+        }
+        Ok(output)
+    }
+}
+
+fn db_to_lin(db: f32) -> f32 {
+    10.0f32.powf(db / 20.0)
+}
+
+fn slew_speaker_pose(
+    smooth_az: &mut f32,
+    smooth_el: &mut f32,
+    smooth_dist: &mut f32,
+    target_az: f32,
+    target_el: f32,
+    target_dist: f32,
+    dt: f32,
+) {
+    let daz = shortest_azimuth_delta(*smooth_az, target_az);
+    let del = target_el - *smooth_el;
+    let ddist = target_dist - *smooth_dist;
+    if daz.abs() > CHASE_AZ_DEG || del.abs() > CHASE_EL_DEG || ddist.abs() > CHASE_DIST_M {
+        let max_az = SLEW_AZ_DEG_PER_SEC * dt;
+        let max_el = SLEW_EL_DEG_PER_SEC * dt;
+        let max_dist = SLEW_DIST_M_PER_SEC * dt;
+        *smooth_az = wrap_azimuth_deg(*smooth_az + daz.clamp(-max_az, max_az));
+        *smooth_el += del.clamp(-max_el, max_el);
+        *smooth_dist += ddist.clamp(-max_dist, max_dist);
+    } else {
+        *smooth_az = wrap_azimuth_deg(*smooth_az + daz * CHASE_A);
+        *smooth_el += del * CHASE_A;
+        *smooth_dist += ddist * CHASE_A;
+    }
+    *smooth_el = smooth_el.clamp(-90.0, 90.0);
+    *smooth_dist = smooth_dist.clamp(0.5, 10.0);
 }
 
 
@@ -846,5 +1059,125 @@ mod distance_tests {
             "Orbit HRIR should stay held most chunks; changes={changes}/{N}"
         );
         assert!(changes >= 1, "Orbit should still advance quantized steps");
+    }
+
+    fn stereo_tone(sr: u32) -> Vec<StereoFrame> {
+        (0..STREAM_CHUNK)
+            .map(|i| {
+                let t = i as f32 / sr as f32;
+                let l = (t * 440.0 * std::f32::consts::TAU).sin() * 0.25;
+                let r = (t * 554.0 * std::f32::consts::TAU).sin() * 0.25;
+                (l, r)
+            })
+            .collect()
+    }
+
+    fn block_energy(b: &[StereoFrame]) -> f32 {
+        b.iter().map(|(l, r)| l * l + r * r).sum()
+    }
+
+    fn block_diff(a: &[StereoFrame], b: &[StereoFrame]) -> f32 {
+        a.iter()
+            .zip(b.iter())
+            .map(|(x, y)| (x.0 - y.0).abs() + (x.1 - y.1).abs())
+            .sum()
+    }
+
+    #[test]
+    fn point_process_chunk_matches_fresh_streamer() {
+        let sr = 48_000u32;
+        let chunk = stereo_tone(sr);
+        let mut params = SpatialParams::default();
+        params.motion = MotionMode::Fixed;
+        params.envelopment = 0.6;
+        let mut a = HrtfStreamer::new(sr).unwrap();
+        let mut b = HrtfStreamer::new(sr).unwrap();
+        a.snap_to_params(&params);
+        b.snap_to_params(&params);
+        let out_a = a.process_chunk(&chunk, &params).unwrap();
+        let out_b = b.process_chunk(&chunk, &params).unwrap();
+        assert!(
+            block_diff(&out_a, &out_b) < 1e-4,
+            "Point process_chunk must stay deterministic after array fields"
+        );
+    }
+
+    #[test]
+    fn array_2_0_differs_from_point_plus_90() {
+        let sr = 48_000u32;
+        let chunk = stereo_tone(sr);
+        let mut point_params = SpatialParams::default();
+        point_params.azimuth_deg = 90.0;
+        point_params.elevation_deg = 0.0;
+        point_params.distance_m = 1.5;
+        point_params.envelopment = 0.0;
+        point_params.reverb_mix = 0.0;
+        point_params.motion = MotionMode::Fixed;
+        let mut layout = crate::layout::ArrayLayout::default();
+        layout.set_mode(1).unwrap();
+
+        let mut point = HrtfStreamer::new(sr).unwrap();
+        let mut array = HrtfStreamer::new(sr).unwrap();
+        point.snap_to_params(&point_params);
+        array.snap_to_params(&point_params);
+        let out_p = point.process_chunk(&chunk, &point_params).unwrap();
+        let out_a = array
+            .process_chunk_array(&chunk, &point_params, &layout)
+            .unwrap();
+        let diff = block_diff(&out_p, &out_a);
+        assert!(
+            diff > 5.0,
+            "array 2.0 must not collapse to Point +90°; diff={diff}"
+        );
+    }
+
+    #[test]
+    fn array_mute_drops_energy() {
+        let sr = 48_000u32;
+        let chunk = stereo_tone(sr);
+        let mut params = SpatialParams::default();
+        params.reverb_mix = 0.0;
+        params.envelopment = 0.0;
+        params.motion = MotionMode::Fixed;
+        let mut both = crate::layout::ArrayLayout::default();
+        both.set_mode(1).unwrap();
+        let mut muted = both.clone();
+        muted.speakers[1].mute = true;
+
+        let mut s_both = HrtfStreamer::new(sr).unwrap();
+        let mut s_mute = HrtfStreamer::new(sr).unwrap();
+        s_both.snap_to_params(&params);
+        s_mute.snap_to_params(&params);
+        let e_both = block_energy(
+            &s_both
+                .process_chunk_array(&chunk, &params, &both)
+                .unwrap(),
+        );
+        let e_mute = block_energy(
+            &s_mute
+                .process_chunk_array(&chunk, &params, &muted)
+                .unwrap(),
+        );
+        assert!(
+            e_mute < e_both * 0.85,
+            "muting one 2.0 speaker should drop energy; both={e_both} mute={e_mute}"
+        );
+    }
+
+    #[test]
+    fn array_path_does_not_move_point_prev_mid() {
+        let sr = 48_000u32;
+        let chunk = stereo_tone(sr);
+        let params = SpatialParams::default();
+        let mut layout = crate::layout::ArrayLayout::default();
+        layout.set_mode(1).unwrap();
+        let mut s = HrtfStreamer::new(sr).unwrap();
+        s.snap_to_params(&params);
+        let before = s.prev_mid_pos;
+        s.process_chunk_array(&chunk, &params, &layout).unwrap();
+        assert!(
+            vec3_near(before, s.prev_mid_pos, 1e-6),
+            "array render must not rewrite Point prev_mid"
+        );
     }
 }

@@ -3,6 +3,7 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:yinwei_player/models/spatial_params.dart';
 import 'package:yinwei_player/theme/yinwei_theme.dart';
 
 /// Consumer Atmos-style spatial field (dome + glow orb).
@@ -21,8 +22,13 @@ class OrbitVisualizer extends StatefulWidget {
     required this.envelopment,
     this.active = true,
     this.orbiting = false,
+    this.arraySpeakers,
+    this.selectedSpeakerIndex = 0,
     this.onPoseChanged,
     this.onDistanceChanged,
+    this.onSpeakerSelected,
+    this.onSpeakerPoseChanged,
+    this.onSpeakerDistanceChanged,
   });
 
   final double playhead;
@@ -32,8 +38,14 @@ class OrbitVisualizer extends StatefulWidget {
   final double envelopment;
   final bool active;
   final bool orbiting;
+  final List<ArraySpeaker>? arraySpeakers;
+  final int selectedSpeakerIndex;
   final void Function(double azimuthDeg, double elevationDeg)? onPoseChanged;
   final ValueChanged<double>? onDistanceChanged;
+  final ValueChanged<int>? onSpeakerSelected;
+  final void Function(int index, double azimuthDeg, double elevationDeg)?
+      onSpeakerPoseChanged;
+  final void Function(int index, double distanceM)? onSpeakerDistanceChanged;
 
   @override
   State<OrbitVisualizer> createState() => _OrbitVisualizerState();
@@ -78,6 +90,7 @@ class _OrbitVisualizerState extends State<OrbitVisualizer> {
                   onPointerSignal: _onPointerSignal,
                   child: GestureDetector(
                     behavior: HitTestBehavior.opaque,
+                    onPanStart: _onPanStart,
                     onPanUpdate: _onPanUpdate,
                     child: CustomPaint(
                       painter: _AtmosFieldPainter(
@@ -90,6 +103,8 @@ class _OrbitVisualizerState extends State<OrbitVisualizer> {
                         orbiting: widget.orbiting,
                         view: _view,
                         trail: List.of(_trail),
+                        arraySpeakers: widget.arraySpeakers,
+                        selectedSpeakerIndex: widget.selectedSpeakerIndex,
                         onOrbProjected: (o) => _orbScreen = o,
                       ),
                     ),
@@ -113,9 +128,13 @@ class _OrbitVisualizerState extends State<OrbitVisualizer> {
               bottom: 0,
               right: 0,
               child: Text(
-                _view == FieldViewMode.top
-                    ? '拖动定位 · 滚轮距离 · 俯视'
-                    : '拖动定位 · 滚轮距离 · 自由视角',
+                widget.arraySpeakers != null && widget.arraySpeakers!.isNotEmpty
+                    ? (_view == FieldViewMode.top
+                        ? '拖动音箱 · 滚轮距离 · 俯视'
+                        : '拖动音箱 · 滚轮距离 · 自由视角')
+                    : (_view == FieldViewMode.top
+                        ? '拖动定位 · 滚轮距离 · 俯视'
+                        : '拖动定位 · 滚轮距离 · 自由视角'),
                 textAlign: TextAlign.center,
                 style: Theme.of(context).textTheme.labelSmall?.copyWith(
                       color: YinweiColors.textSecondary.withOpacity(0.7),
@@ -129,11 +148,46 @@ class _OrbitVisualizerState extends State<OrbitVisualizer> {
     );
   }
 
+  bool get _arrayOn =>
+      widget.arraySpeakers != null && widget.arraySpeakers!.isNotEmpty;
+
+  int? get _selectedFieldIndex {
+    if (!_arrayOn) return null;
+    return widget.selectedSpeakerIndex
+        .clamp(0, widget.arraySpeakers!.length - 1)
+        .toInt();
+  }
+
   void _onPanUpdate(DragUpdateDetails d) {
-    if (widget.onPoseChanged == null || _size == Size.zero) return;
+    if (_size == Size.zero) return;
     final origin = Offset(_size.width / 2, _size.height / 2);
     final p = d.localPosition - origin;
     final R = _size.shortestSide * 0.38;
+
+    if (_arrayOn) {
+      final idx = _selectedFieldIndex;
+      if (idx == null) return;
+      final spk = widget.arraySpeakers![idx];
+      if (_view == FieldViewMode.top) {
+        final az = math.atan2(p.dx, -p.dy) * 180 / math.pi;
+        final distNorm = (p.distance / R).clamp(0.0, 1.0);
+        widget.onSpeakerPoseChanged?.call(idx, az, spk.elevationDeg);
+        if (widget.onSpeakerDistanceChanged != null) {
+          final dist = (0.5 + distNorm * 9.5).clamp(0.5, 10.0);
+          widget.onSpeakerDistanceChanged!(idx, dist);
+        }
+      } else {
+        final az = math.atan2(p.dx, -p.dy) * 180 / math.pi;
+        final distNorm = (p.distance / (R * 1.05)).clamp(0.0, 1.0);
+        final elevFromY = (-p.dy / R).clamp(-1.0, 1.0) * 75.0;
+        final elevFromRad = (1.0 - distNorm) * 20.0;
+        final el = (elevFromY * 0.85 + elevFromRad * 0.15).clamp(-90.0, 90.0);
+        widget.onSpeakerPoseChanged?.call(idx, az, el.toDouble());
+      }
+      return;
+    }
+
+    if (widget.onPoseChanged == null) return;
 
     if (_view == FieldViewMode.top) {
       final az = math.atan2(p.dx, -p.dy) * 180 / math.pi;
@@ -153,9 +207,44 @@ class _OrbitVisualizerState extends State<OrbitVisualizer> {
     }
   }
 
+  void _onPanStart(DragStartDetails d) {
+    if (!_arrayOn || _size == Size.zero) return;
+    final origin = Offset(_size.width / 2, _size.height / 2);
+    final R = _size.shortestSide * 0.38;
+    var best = widget.selectedSpeakerIndex;
+    var bestDist = double.infinity;
+    for (var i = 0; i < widget.arraySpeakers!.length; i++) {
+      final s = widget.arraySpeakers![i];
+      final proj = _AtmosFieldPainter.project(
+        origin,
+        R,
+        _view,
+        s.azimuthDeg,
+        s.elevationDeg,
+        s.distanceM,
+      );
+      final dist = (proj - d.localPosition).distance;
+      if (dist < bestDist) {
+        bestDist = dist;
+        best = i;
+      }
+    }
+    widget.onSpeakerSelected?.call(best);
+  }
+
   void _onPointerSignal(PointerSignalEvent e) {
-    if (e is! PointerScrollEvent || widget.onDistanceChanged == null) return;
+    if (e is! PointerScrollEvent) return;
     final delta = e.scrollDelta.dy;
+    if (_arrayOn) {
+      if (widget.onSpeakerDistanceChanged == null) return;
+      final idx = _selectedFieldIndex;
+      if (idx == null) return;
+      final current = widget.arraySpeakers![idx].distanceM;
+      final next = (current + delta * 0.01).clamp(0.5, 10.0);
+      widget.onSpeakerDistanceChanged!(idx, next);
+      return;
+    }
+    if (widget.onDistanceChanged == null) return;
     final next = (widget.distanceM + delta * 0.01).clamp(0.5, 10.0);
     widget.onDistanceChanged!(next);
   }
@@ -217,6 +306,8 @@ class _AtmosFieldPainter extends CustomPainter {
     required this.view,
     required this.trail,
     required this.onOrbProjected,
+    this.arraySpeakers,
+    this.selectedSpeakerIndex = 0,
   });
 
   final double playhead;
@@ -229,6 +320,8 @@ class _AtmosFieldPainter extends CustomPainter {
   final FieldViewMode view;
   final List<Offset> trail;
   final ValueChanged<Offset> onOrbProjected;
+  final List<ArraySpeaker>? arraySpeakers;
+  final int selectedSpeakerIndex;
 
   static const double _freePitch = 0.38;
   static const double _freeYaw = -0.28;
@@ -250,6 +343,26 @@ class _AtmosFieldPainter extends CustomPainter {
         3.0 * t,
         Paint()..color = YinweiColors.accent.withOpacity(0.12 * t),
       );
+    }
+
+    final speakers = arraySpeakers;
+    if (speakers != null && speakers.isNotEmpty) {
+      for (var i = 0; i < speakers.length; i++) {
+        final s = speakers[i];
+        final orb = _projectAt(
+          origin,
+          R,
+          s.azimuthDeg,
+          s.elevationDeg,
+          s.distanceM.clamp(0.5, 10.0),
+        );
+        if (i == selectedSpeakerIndex.clamp(0, speakers.length - 1)) {
+          onOrbProjected(orb.pos);
+        }
+        _drawSource(canvas, orb, selected: i == selectedSpeakerIndex);
+        _drawSpeakerLabel(canvas, orb.pos, s.label, i == selectedSpeakerIndex);
+      }
+      return;
     }
 
     final orb = _projectSource(origin, R);
@@ -425,17 +538,34 @@ class _AtmosFieldPainter extends CustomPainter {
     );
   }
 
-  ({Offset pos, double near, double radNorm}) _projectSource(Offset origin, double R) {
+  static Offset project(
+    Offset origin,
+    double R,
+    FieldViewMode view,
+    double azimuthDeg,
+    double elevationDeg,
+    double distanceM,
+  ) {
+    return _projectStatic(origin, R, view, azimuthDeg, elevationDeg, distanceM)
+        .pos;
+  }
+
+  static ({Offset pos, double near, double radNorm}) _projectStatic(
+    Offset origin,
+    double R,
+    FieldViewMode view,
+    double azimuthDeg,
+    double elevationDeg,
+    double distanceM,
+  ) {
     final az = azimuthDeg * math.pi / 180;
     final el = elevationDeg * math.pi / 180;
     final distNorm = ((distanceM - 0.5) / 9.5).clamp(0.0, 1.0);
     final rad = 0.28 + distNorm * 0.72;
 
     if (view == FieldViewMode.top) {
-      // Top-down: front = -Y screen.
       final x = rad * math.sin(az) * R;
       final y = -rad * math.cos(az) * R;
-      // Elevation lifts toward center slightly + scales orb later.
       final lift = (el / 90.0).clamp(-1.0, 1.0) * R * 0.08;
       return (
         pos: Offset(origin.dx + x, origin.dy + y + lift),
@@ -447,7 +577,7 @@ class _AtmosFieldPainter extends CustomPainter {
     final x = rad * math.cos(el) * math.sin(az);
     final y = rad * math.sin(el);
     final z = rad * math.cos(el) * math.cos(az);
-    final p = _cam(x, y, z);
+    final p = _camStatic(x, y, z);
     return (
       pos: Offset(origin.dx + p.x * R, origin.dy + p.y * R),
       near: ((p.z + 1) / 2).clamp(0.0, 1.0),
@@ -455,7 +585,8 @@ class _AtmosFieldPainter extends CustomPainter {
     );
   }
 
-  ({double x, double y, double z}) _cam(double x, double y, double z) {
+  static ({double x, double y, double z}) _camStatic(
+      double x, double y, double z) {
     final cy = math.cos(_freeYaw);
     final sy = math.sin(_freeYaw);
     final x1 = x * cy + z * sy;
@@ -468,18 +599,36 @@ class _AtmosFieldPainter extends CustomPainter {
     return (x: x1 * persp, y: -y2 * persp, z: z2);
   }
 
-  void _drawSource(Canvas canvas, ({Offset pos, double near, double radNorm}) orb) {
-    final base = 10.0 + orb.near * 8 + envelopment * 4;
-    final glow = base * (1.6 + envelopment * 1.2);
+  ({Offset pos, double near, double radNorm}) _projectAt(
+    Offset origin,
+    double R,
+    double az,
+    double el,
+    double dist,
+  ) =>
+      _projectStatic(origin, R, view, az, el, dist);
+
+  ({Offset pos, double near, double radNorm}) _projectSource(Offset origin, double R) {
+    return _projectAt(origin, R, azimuthDeg, elevationDeg, distanceM);
+  }
+
+  void _drawSource(
+    Canvas canvas,
+    ({Offset pos, double near, double radNorm}) orb, {
+    bool selected = true,
+  }) {
+    final env = selected ? envelopment : envelopment * 0.35;
+    final base = (selected ? 10.0 : 7.5) + orb.near * 8 + env * 4;
+    final glow = base * (1.6 + env * 1.2);
 
     // Object-size outline (Atmos Music Panner).
     canvas.drawCircle(
       orb.pos,
-      glow * (0.9 + envelopment * 0.8),
+      glow * (0.9 + env * 0.8),
       Paint()
         ..style = PaintingStyle.stroke
         ..strokeWidth = 1.2
-        ..color = Colors.white.withOpacity(0.18 + envelopment * 0.25),
+        ..color = Colors.white.withOpacity(0.18 + env * 0.25),
     );
 
     // Soft bloom layers.
@@ -514,7 +663,7 @@ class _AtmosFieldPainter extends CustomPainter {
         ),
     );
 
-    if (orbiting) {
+    if (orbiting && selected) {
       canvas.drawCircle(
         orb.pos,
         base + 5,
@@ -524,6 +673,22 @@ class _AtmosFieldPainter extends CustomPainter {
           ..color = YinweiColors.accent.withOpacity(0.55),
       );
     }
+  }
+
+  void _drawSpeakerLabel(
+      Canvas canvas, Offset pos, String label, bool selected) {
+    final tp = TextPainter(
+      text: TextSpan(
+        text: label,
+        style: TextStyle(
+          color: Colors.white.withOpacity(selected ? 0.95 : 0.55),
+          fontSize: 11,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
+      textDirection: TextDirection.ltr,
+    )..layout();
+    tp.paint(canvas, pos.translate(-tp.width / 2, 12));
   }
 
   @override
@@ -536,5 +701,25 @@ class _AtmosFieldPainter extends CustomPainter {
       old.active != active ||
       old.orbiting != orbiting ||
       old.view != view ||
-      old.trail.length != trail.length;
+      old.trail.length != trail.length ||
+      old.selectedSpeakerIndex != selectedSpeakerIndex ||
+      old.arraySpeakers?.length != arraySpeakers?.length ||
+      _speakersChanged(old.arraySpeakers, arraySpeakers);
+
+  static bool _speakersChanged(List<ArraySpeaker>? a, List<ArraySpeaker>? b) {
+    if (identical(a, b)) return false;
+    if (a == null || b == null) return a != b;
+    if (a.length != b.length) return true;
+    for (var i = 0; i < a.length; i++) {
+      if (a[i].azimuthDeg != b[i].azimuthDeg ||
+          a[i].elevationDeg != b[i].elevationDeg ||
+          a[i].distanceM != b[i].distanceM ||
+          a[i].gainDb != b[i].gainDb ||
+          a[i].mute != b[i].mute ||
+          a[i].label != b[i].label) {
+        return true;
+      }
+    }
+    return false;
+  }
 }

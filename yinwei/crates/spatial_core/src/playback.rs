@@ -45,6 +45,7 @@ struct DspShared {
     mode: AtomicU8,
     params: Mutex<SpatialParams>,
     eq_db: Mutex<[f32; crate::eq::EQ_BANDS]>,
+    array: Mutex<crate::layout::ArrayLayout>,
     ring: Mutex<VecDeque<StereoFrame>>,
     stop: AtomicBool,
     seek_gen: AtomicU64,
@@ -76,6 +77,7 @@ impl RealtimePlayer {
                 mode: AtomicU8::new(1),
                 params: Mutex::new(SpatialParams::default()),
                 eq_db: Mutex::new([0.0; crate::eq::EQ_BANDS]),
+                array: Mutex::new(crate::layout::ArrayLayout::default()),
                 ring: Mutex::new(VecDeque::with_capacity(RING_MAX_FRAMES)),
                 stop: AtomicBool::new(false),
                 seek_gen: AtomicU64::new(0),
@@ -184,6 +186,43 @@ impl RealtimePlayer {
             .lock()
             .map_err(|_| SpatialError::LockPoisoned)?;
         *g = crate::eq::clamp_eq_gains(gains);
+        Ok(())
+    }
+
+    pub fn set_array(&self, mode: i32) -> Result<(), SpatialError> {
+        let mut g = self
+            .shared
+            .array
+            .lock()
+            .map_err(|_| SpatialError::LockPoisoned)?;
+        g.set_mode(mode)
+    }
+
+    pub fn set_speaker(
+        &self,
+        index: i32,
+        az_deg: f32,
+        el_deg: f32,
+        dist_m: f32,
+        gain_db: f32,
+        mute: i32,
+        feed: i32,
+    ) -> Result<(), SpatialError> {
+        let mut g = self
+            .shared
+            .array
+            .lock()
+            .map_err(|_| SpatialError::LockPoisoned)?;
+        g.set_speaker(index, az_deg, el_deg, dist_m, gain_db, mute, feed)
+    }
+
+    pub fn replace_array(&self, layout: crate::layout::ArrayLayout) -> Result<(), SpatialError> {
+        let mut g = self
+            .shared
+            .array
+            .lock()
+            .map_err(|_| SpatialError::LockPoisoned)?;
+        *g = layout;
         Ok(())
     }
 
@@ -466,17 +505,29 @@ fn dsp_loop(shared: Arc<DspShared>, streamer: &mut HrtfStreamer) {
         let wet: Vec<StereoFrame> = if mode == 0 {
             chunk[..got].to_vec()
         } else {
-            match streamer.process_chunk(&chunk[..got], &params) {
+            let array = shared
+                .array
+                .lock()
+                .map(|g| g.clone())
+                .unwrap_or_default();
+            let processed = if array.enabled() {
+                streamer.process_chunk_array(&chunk[..got], &params, &array)
+            } else {
+                streamer.process_chunk(&chunk[..got], &params)
+            };
+            match processed {
                 Ok(block) => {
-                    shared.live_az_bits.store(
-                        streamer.effective_mid_azimuth_deg(&params).to_bits(),
-                        Ordering::Relaxed,
-                    );
-                    shared.live_el_bits.store(
-                        streamer.smooth_elevation_deg().to_bits(),
-                        Ordering::Relaxed,
-                    );
-                    shared.live_pose_valid.store(true, Ordering::Relaxed);
+                    if !array.enabled() {
+                        shared.live_az_bits.store(
+                            streamer.effective_mid_azimuth_deg(&params).to_bits(),
+                            Ordering::Relaxed,
+                        );
+                        shared.live_el_bits.store(
+                            streamer.smooth_elevation_deg().to_bits(),
+                            Ordering::Relaxed,
+                        );
+                        shared.live_pose_valid.store(true, Ordering::Relaxed);
+                    }
                     block[..got].to_vec()
                 }
                 Err(e) => {

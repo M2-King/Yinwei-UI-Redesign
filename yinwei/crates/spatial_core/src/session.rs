@@ -35,6 +35,7 @@ impl PlayerSession {
         self.player.load_source(dry, sr)?;
         self.player.set_live_params(self.engine.params()?)?;
         self.player.set_live_mode(self.engine.playback_mode()?);
+        let _ = self.player.replace_array(self.engine.array_layout()?);
         // Streaming path: source is loaded; no offline full-song preview needed to play.
         self.preview_dirty.store(false, Ordering::Relaxed);
         self.has_preview.store(true, Ordering::Relaxed);
@@ -52,6 +53,29 @@ impl PlayerSession {
     pub fn set_eq(&self, gains: [f32; crate::eq::EQ_BANDS]) -> Result<(), SpatialError> {
         self.engine.set_eq(gains)?;
         self.player.set_eq(gains)?;
+        Ok(())
+    }
+
+    pub fn set_array(&self, mode: i32) -> Result<(), SpatialError> {
+        self.engine.set_array(mode)?;
+        self.player.set_array(mode)?;
+        Ok(())
+    }
+
+    pub fn set_speaker(
+        &self,
+        index: i32,
+        az_deg: f32,
+        el_deg: f32,
+        dist_m: f32,
+        gain_db: f32,
+        mute: i32,
+        feed: i32,
+    ) -> Result<(), SpatialError> {
+        self.engine
+            .set_speaker(index, az_deg, el_deg, dist_m, gain_db, mute, feed)?;
+        self.player
+            .set_speaker(index, az_deg, el_deg, dist_m, gain_db, mute, feed)?;
         Ok(())
     }
 
@@ -108,6 +132,8 @@ impl PlayerSession {
             self.player.set_live_params(self.engine.params()?)?;
             self.player.set_live_mode(self.engine.playback_mode()?);
             let _ = self.player.set_eq(self.engine.eq_gains()?);
+            let layout = self.engine.array_layout()?;
+            let _ = self.player.replace_array(layout);
             self.has_preview.store(true, Ordering::Relaxed);
             self.preview_dirty.store(false, Ordering::Relaxed);
         }

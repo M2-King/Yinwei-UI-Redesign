@@ -89,8 +89,10 @@ class IslandNowPlaying {
         elevationDeg: liveElevationDeg,
         envelopment: engine.params.envelopment,
         orbiting: engine.params.motion == MotionMode.orbit,
-        subtitle:
-            'HRTF LIVE · pid ${system.pid} · az ${liveAzimuthDeg.toStringAsFixed(0)}°',
+        subtitle: _withArrayTag(
+          engine,
+          'HRTF LIVE · pid ${system.pid} · az ${liveAzimuthDeg.toStringAsFixed(0)}°',
+        ),
       );
     }
 
@@ -135,9 +137,12 @@ class IslandNowPlaying {
         elevationDeg: engine.elevationDeg,
         envelopment: engine.params.envelopment,
         orbiting: fileSpatial && engine.params.motion == MotionMode.orbit,
-        subtitle: fileSpatial
-            ? 'Yinwei Spatial  az ${engine.azimuthDeg.toStringAsFixed(0)}°'
-            : (spatial ? 'Yinwei · Spatial ready' : 'Yinwei · Original'),
+        subtitle: _withArrayTag(
+          engine,
+          fileSpatial
+              ? 'Yinwei Spatial  az ${engine.azimuthDeg.toStringAsFixed(0)}°'
+              : (spatial ? 'Yinwei · Spatial ready' : 'Yinwei · Original'),
+        ),
       );
     }
 
@@ -199,5 +204,13 @@ class IslandNowPlaying {
     final parts = aumid.split(RegExp(r'[.!\\]'));
     final last = parts.isNotEmpty ? parts.last : aumid;
     return last.length > 18 ? '${last.substring(0, 16)}…' : last;
+  }
+
+  static String _withArrayTag(EngineController engine, String base) {
+    final tag = engine.array.shortLabel;
+    if (tag.isNotEmpty) {
+      return '$base · $tag';
+    }
+    return base;
   }
 }

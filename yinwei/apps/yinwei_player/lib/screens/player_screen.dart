@@ -234,6 +234,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     }
     // Same SpatialParams as Full-window file playback.
     final params = _ctrl.params.copy();
+    final array = _ctrl.array.copy();
     _routeGen++;
     final routeGen = _routeGen;
     _live.markStarting();
@@ -251,11 +252,11 @@ class _PlayerScreenState extends State<PlayerScreen> {
     if (split != null && !holdArmed) {
       // Old DLL without hold: pin first so wet never opens on shared headphones.
       splitNote = await _routeSplit(pid, routeGen);
-      await _live.start(processId: pid, params: params);
+      await _live.start(processId: pid, params: params, array: array);
     } else {
       // Capture may start during the pin, but wet stays silent until speakers
       // are muted (hold). No-split overlay-preview starts immediately.
-      final startFuture = _live.start(processId: pid, params: params);
+      final startFuture = _live.start(processId: pid, params: params, array: array);
       if (split != null) {
         splitNote = await _routeSplit(pid, routeGen);
       }
@@ -345,6 +346,13 @@ class _PlayerScreenState extends State<PlayerScreen> {
       _live.applyLiveParams(next);
     }
     _ctrl.setParams(next);
+  }
+
+  void _applyArrayFromUi(ArrayLayout next) {
+    if (_live.running) {
+      _live.applyLiveArray(next);
+    }
+    _ctrl.setArray(next);
   }
 
   Future<void> _stopLiveHrtf() async {
@@ -458,25 +466,61 @@ class _PlayerScreenState extends State<PlayerScreen> {
                             distanceM: c.params.distanceM,
                             envelopment: c.params.envelopment,
                             playing: now.playing,
-                            orbiting: _live.running ||
-                                (c.params.motion == MotionMode.orbit &&
-                                    c.mode == PlaybackMode.spatial &&
-                                    c.playing),
+                            arraySpeakers:
+                                c.array.enabled ? c.array.speakers : null,
+                            selectedSpeakerIndex: c.array.selectedIndex,
+                            orbiting: !c.array.enabled &&
+                                (_live.running ||
+                                    (c.params.motion == MotionMode.orbit &&
+                                        c.mode == PlaybackMode.spatial &&
+                                        c.playing)),
                             active: _live.running ||
                                 c.mode == PlaybackMode.spatial,
-                            onPoseChanged: (az, el) {
-                              final next = c.params.copy()
-                                ..azimuthDeg = az
-                                ..elevationDeg = el
-                                ..selectedPreset = null;
-                              _applySpatialFromUi(next);
-                            },
-                            onDistanceChanged: (d) {
-                              final next = c.params.copy()
-                                ..distanceM = d
-                                ..selectedPreset = null;
-                              _applySpatialFromUi(next);
-                            },
+                            onPoseChanged: c.array.enabled
+                                ? null
+                                : (az, el) {
+                                    final next = c.params.copy()
+                                      ..azimuthDeg = az
+                                      ..elevationDeg = el
+                                      ..selectedPreset = null;
+                                    _applySpatialFromUi(next);
+                                  },
+                            onDistanceChanged: c.array.enabled
+                                ? null
+                                : (d) {
+                                    final next = c.params.copy()
+                                      ..distanceM = d
+                                      ..selectedPreset = null;
+                                    _applySpatialFromUi(next);
+                                  },
+                            onSpeakerSelected: c.array.enabled
+                                ? (i) => c.selectArraySpeaker(i)
+                                : null,
+                            onSpeakerPoseChanged: c.array.enabled
+                                    ? (i, az, el) {
+                                        final next = c.array.copy();
+                                        if (i < 0 ||
+                                            i >= next.speakers.length) {
+                                          return;
+                                        }
+                                        next.selectedIndex = i;
+                                        next.speakers[i].azimuthDeg = az;
+                                        next.speakers[i].elevationDeg = el;
+                                        _applyArrayFromUi(next);
+                                      }
+                                    : null,
+                            onSpeakerDistanceChanged: c.array.enabled
+                                    ? (i, d) {
+                                        final next = c.array.copy();
+                                        if (i < 0 ||
+                                            i >= next.speakers.length) {
+                                          return;
+                                        }
+                                        next.selectedIndex = i;
+                                        next.speakers[i].distanceM = d;
+                                        _applyArrayFromUi(next);
+                                      }
+                                    : null,
                           ),
                         ),
                       ),
@@ -511,7 +555,18 @@ class _PlayerScreenState extends State<PlayerScreen> {
                       ),
                       PositionSidebar(
                         params: c.params,
+                        array: c.array,
+                        arraySupported: c.arraySupported,
                         onChanged: (p) => _applySpatialFromUi(p),
+                        onArrayChanged: _applyArrayFromUi,
+                        onArrayMode: (m) {
+                          unawaited(() async {
+                            await c.applyArrayMode(m);
+                            if (_live.running) {
+                              _live.applyLiveArray(c.array);
+                            }
+                          }());
+                        },
                         onPresetSelected: (p) {
                           if (_live.running) {
                             final next = c.params.copy()..applyPreset(p);

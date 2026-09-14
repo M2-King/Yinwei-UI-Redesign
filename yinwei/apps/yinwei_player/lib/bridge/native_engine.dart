@@ -186,6 +186,45 @@ class NativeEngine implements EngineApi {
     return _b.yinweiIsPreviewDirty() != 0;
   }
 
+  @override
+  bool get supportsArray => _b.hasArray;
+
+  @override
+  Future<void> setArrayMode(int mode) async {
+    try {
+      final code = _b.setArray(mode);
+      if (code == -1) return;
+      if (code != 0) _check(code);
+    } catch (_) {
+      // Older DLL without yinwei_set_array.
+    }
+  }
+
+  @override
+  Future<void> setSpeaker({
+    required int index,
+    required double azimuthDeg,
+    required double elevationDeg,
+    required double distanceM,
+    required double gainDb,
+    required bool mute,
+    required int feed,
+  }) async {
+    try {
+      final code = _b.setSpeaker(
+        index: index,
+        azimuthDeg: azimuthDeg,
+        elevationDeg: elevationDeg,
+        distanceM: distanceM,
+        gainDb: gainDb,
+        mute: mute,
+        feed: feed,
+      );
+      if (code == -1) return;
+      if (code != 0) _check(code);
+    } catch (_) {}
+  }
+
   void _writeParams(YinweiParamsC ref, SpatialParams p) {
     ref.azimuthDeg = p.azimuthDeg;
     ref.elevationDeg = p.elevationDeg;

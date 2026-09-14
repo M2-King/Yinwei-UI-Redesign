@@ -306,6 +306,73 @@ class YinweiBindings {
     return fn(g[0], g[1], g[2], g[3], g[4], g[5]);
   }
 
+  bool get hasArray {
+    try {
+      _lib.lookupFunction<_I32InNative, _I32InDart>('yinwei_set_array');
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  int setArray(int mode) {
+    try {
+      final fn =
+          _lib.lookupFunction<_I32InNative, _I32InDart>('yinwei_set_array');
+      return fn(mode);
+    } catch (_) {
+      return -1;
+    }
+  }
+
+  int liveSetArray(int mode) {
+    try {
+      final fn = _lib
+          .lookupFunction<_I32InNative, _I32InDart>('yinwei_live_set_array');
+      return fn(mode);
+    } catch (_) {
+      return -1;
+    }
+  }
+
+  int setSpeaker({
+    required int index,
+    required double azimuthDeg,
+    required double elevationDeg,
+    required double distanceM,
+    required double gainDb,
+    required bool mute,
+    required int feed,
+  }) {
+    try {
+      final fn =
+          _lib.lookupFunction<_SpeakerNative, _SpeakerDart>('yinwei_set_speaker');
+      return fn(index, azimuthDeg, elevationDeg, distanceM, gainDb, mute ? 1 : 0,
+          feed);
+    } catch (_) {
+      return -1;
+    }
+  }
+
+  int liveSetSpeaker({
+    required int index,
+    required double azimuthDeg,
+    required double elevationDeg,
+    required double distanceM,
+    required double gainDb,
+    required bool mute,
+    required int feed,
+  }) {
+    try {
+      final fn = _lib.lookupFunction<_SpeakerNative, _SpeakerDart>(
+          'yinwei_live_set_speaker');
+      return fn(index, azimuthDeg, elevationDeg, distanceM, gainDb, mute ? 1 : 0,
+          feed);
+    } catch (_) {
+      return -1;
+    }
+  }
+
   static List<double> _six(List<double> db) {
     return [
       db.isNotEmpty ? db[0] : 0,
@@ -374,3 +441,7 @@ typedef _LiveParamsDart = int Function(
     double, double, double, int, double, double, double, int);
 typedef _EqNative = Int32 Function(Float, Float, Float, Float, Float, Float);
 typedef _EqDart = int Function(double, double, double, double, double, double);
+typedef _SpeakerNative = Int32 Function(
+    Int32, Float, Float, Float, Float, Int32, Int32);
+typedef _SpeakerDart = int Function(
+    int, double, double, double, double, int, int);

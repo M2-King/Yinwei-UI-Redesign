@@ -5,6 +5,7 @@ mod decode;
 mod eq;
 mod error;
 mod hrtf_render;
+mod layout;
 mod mid_side;
 mod params;
 mod presets;
@@ -55,6 +56,7 @@ struct EngineInner {
     orbit_phase: f32,
     renderer: Option<HrtfRenderer>,
     eq_db: [f32; crate::eq::EQ_BANDS],
+    array: crate::layout::ArrayLayout,
 }
 
 pub struct Engine {
@@ -75,6 +77,7 @@ impl Engine {
                 orbit_phase: 0.0,
                 renderer: None,
                 eq_db: [0.0; crate::eq::EQ_BANDS],
+                array: crate::layout::ArrayLayout::default(),
             }),
             playing: AtomicBool::new(false),
             position_ms: AtomicU64::new(0),
@@ -130,6 +133,31 @@ impl Engine {
     pub fn eq_gains(&self) -> Result<[f32; crate::eq::EQ_BANDS], SpatialError> {
         let g = self.inner.lock().map_err(|_| SpatialError::LockPoisoned)?;
         Ok(g.eq_db)
+    }
+
+    pub fn set_array(&self, mode: i32) -> Result<(), SpatialError> {
+        let mut g = self.inner.lock().map_err(|_| SpatialError::LockPoisoned)?;
+        g.array.set_mode(mode)
+    }
+
+    pub fn set_speaker(
+        &self,
+        index: i32,
+        az_deg: f32,
+        el_deg: f32,
+        dist_m: f32,
+        gain_db: f32,
+        mute: i32,
+        feed: i32,
+    ) -> Result<(), SpatialError> {
+        let mut g = self.inner.lock().map_err(|_| SpatialError::LockPoisoned)?;
+        g.array
+            .set_speaker(index, az_deg, el_deg, dist_m, gain_db, mute, feed)
+    }
+
+    pub fn array_layout(&self) -> Result<crate::layout::ArrayLayout, SpatialError> {
+        let g = self.inner.lock().map_err(|_| SpatialError::LockPoisoned)?;
+        Ok(g.array.clone())
     }
 
     /// Clone dry decoded PCM once for the streaming player (no HRTF).

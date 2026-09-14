@@ -138,6 +138,23 @@ class MockEngine implements EngineApi {
   @override
   Future<bool> isPreviewDirty() async => _dirty;
 
+  @override
+  bool get supportsArray => true;
+
+  @override
+  Future<void> setArrayMode(int mode) async {}
+
+  @override
+  Future<void> setSpeaker({
+    required int index,
+    required double azimuthDeg,
+    required double elevationDeg,
+    required double distanceM,
+    required double gainDb,
+    required bool mute,
+    required int feed,
+  }) async {}
+
   PlaybackMode get mode => _mode;
   SpatialParams get params => _params.copy();
   TrackMeta? get track => _track;

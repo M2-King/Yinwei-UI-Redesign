@@ -12,6 +12,10 @@ class PositionSidebar extends StatelessWidget {
     required this.onSavePreset,
     required this.onOpenEq,
     this.onPresetSelected,
+    this.array,
+    this.arraySupported = false,
+    this.onArrayChanged,
+    this.onArrayMode,
   });
 
   final SpatialParams params;
@@ -21,6 +25,12 @@ class PositionSidebar extends StatelessWidget {
   final VoidCallback onOpenEq;
   /// Prefer this for grid taps so the engine can apply presets without drag throttle.
   final ValueChanged<PositionPreset>? onPresetSelected;
+  final ArrayLayout? array;
+  final bool arraySupported;
+  final ValueChanged<ArrayLayout>? onArrayChanged;
+  final ValueChanged<ArrayMode>? onArrayMode;
+
+  bool get _arrayOn => arraySupported && (array?.enabled ?? false);
 
   @override
   Widget build(BuildContext context) {
@@ -49,107 +59,251 @@ class PositionSidebar extends StatelessWidget {
                           color: YinweiColors.textSecondary,
                         ),
                   ),
+                  if (arraySupported) ...[
+                    const SizedBox(height: 12),
+                    CupertinoSlidingSegmentedControl<ArrayMode>(
+                      groupValue: array?.mode ?? ArrayMode.off,
+                      backgroundColor: YinweiColors.panelElevated,
+                      thumbColor: const Color(0xFF2C2C2E),
+                      children: {
+                        ArrayMode.off: _segLabel(
+                            '点源', array?.mode == ArrayMode.off),
+                        ArrayMode.stereo2: _segLabel(
+                            '2.0', array?.mode == ArrayMode.stereo2),
+                      },
+                      onValueChanged: (v) {
+                        if (v == null) return;
+                        onArrayMode?.call(v);
+                      },
+                    ),
+                  ],
                   const SizedBox(height: 14),
-                  _PresetGrid(
-                    selected: params.selectedPreset,
-                    onSelect: (p) {
-                      if (onPresetSelected != null) {
-                        onPresetSelected!(p);
-                      } else {
-                        final next = params.copy()..applyPreset(p);
-                        onChanged(next);
-                      }
-                    },
-                  ),
-                  const SizedBox(height: 22),
-                  _LabeledSlider(
-                    label: 'Azimuth',
-                    hint: '方位',
-                    valueLabel: '${params.azimuthDeg.round()}°',
-                    value: params.azimuthDeg,
-                    min: -180,
-                    max: 180,
-                    onChanged: (v) {
-                      final next = params.copy()
-                        ..azimuthDeg = v
-                        ..selectedPreset = null;
-                      onChanged(next);
-                    },
-                  ),
-                  _LabeledSlider(
-                    label: 'Elevation',
-                    hint: '高度',
-                    valueLabel: '${params.elevationDeg.round()}°',
-                    value: params.elevationDeg,
-                    min: -90,
-                    max: 90,
-                    onChanged: (v) {
-                      final next = params.copy()
-                        ..elevationDeg = v
-                        ..selectedPreset = null;
-                      onChanged(next);
-                    },
-                  ),
-                  _LabeledSlider(
-                    label: 'Distance',
-                    hint: '远近 · 人声',
-                    valueLabel: '${params.distanceM.toStringAsFixed(2)} m',
-                    value: params.distanceM,
-                    min: 0.5,
-                    max: 10,
-                    onChanged: (v) {
-                      final next = params.copy()
-                        ..distanceM = v
-                        ..selectedPreset = null;
-                      onChanged(next);
-                    },
-                  ),
-                  const SizedBox(height: 10),
-                  CupertinoSlidingSegmentedControl<MotionMode>(
-                    groupValue: params.motion,
-                    backgroundColor: YinweiColors.panelElevated,
-                    thumbColor: const Color(0xFF2C2C2E),
-                    children: {
-                      MotionMode.fixed:
-                          _segLabel('Fixed', params.motion == MotionMode.fixed),
-                      MotionMode.orbit: _segLabel('Orbit', orbitOn),
-                    },
-                    onValueChanged: (v) {
-                      if (v == null) return;
-                      final next = params.copy()..motion = v;
-                      onChanged(next);
-                    },
-                  ),
-                  const SizedBox(height: 18),
                   Opacity(
-                    opacity: orbitOn ? 1 : 0.35,
+                    opacity: _arrayOn ? 0.35 : 1,
                     child: IgnorePointer(
-                      ignoring: !orbitOn,
-                      child: _LabeledSlider(
-                        label: 'Orbit Speed',
-                        hint: '绕转',
-                        valueLabel: '${params.orbitHz.toStringAsFixed(2)} Hz',
-                        value: params.orbitHz,
-                        min: 0.05,
-                        max: 2,
-                        onChanged: (v) {
-                          final next = params.copy()..orbitHz = v;
-                          onChanged(next);
+                      ignoring: _arrayOn,
+                      child: _PresetGrid(
+                        selected: params.selectedPreset,
+                        onSelect: (p) {
+                          if (onPresetSelected != null) {
+                            onPresetSelected!(p);
+                          } else {
+                            final next = params.copy()..applyPreset(p);
+                            onChanged(next);
+                          }
                         },
                       ),
                     ),
                   ),
-                  _LabeledSlider(
-                    label: 'Envelopment',
-                    hint: '包围 · 高了发闷',
-                    valueLabel: '${(params.envelopment * 100).round()}%',
-                    value: params.envelopment,
-                    min: 0,
-                    max: 1,
-                    onChanged: (v) {
-                      final next = params.copy()..envelopment = v;
-                      onChanged(next);
-                    },
+                  if (_arrayOn && array != null) ...[
+                    const SizedBox(height: 18),
+                    Wrap(
+                      spacing: 6,
+                      runSpacing: 6,
+                      children: [
+                        for (var i = 0; i < array!.speakers.length; i++)
+                          _SpeakerChip(
+                            label: array!.speakers[i].label,
+                            selected: array!.selectedIndex == i,
+                            muted: array!.speakers[i].mute,
+                            onTap: () {
+                              if (onArrayChanged == null) return;
+                              onArrayChanged!(
+                                  array!.copy()..selectedIndex = i);
+                            },
+                          ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    _LabeledSlider(
+                      label: 'Azimuth',
+                      hint: '音箱方位',
+                      valueLabel: '${array!.selected.azimuthDeg.round()}°',
+                      value: array!.selected.azimuthDeg,
+                      min: -180,
+                      max: 180,
+                      onChanged: (v) {
+                        if (onArrayChanged == null) return;
+                        final next = array!.copy();
+                        next.speakers[next.selectedIndex].azimuthDeg = v;
+                        onArrayChanged!(next);
+                      },
+                    ),
+                    _LabeledSlider(
+                      label: 'Elevation',
+                      hint: '高度',
+                      valueLabel: '${array!.selected.elevationDeg.round()}°',
+                      value: array!.selected.elevationDeg,
+                      min: -90,
+                      max: 90,
+                      onChanged: (v) {
+                        if (onArrayChanged == null) return;
+                        final next = array!.copy();
+                        next.speakers[next.selectedIndex].elevationDeg = v;
+                        onArrayChanged!(next);
+                      },
+                    ),
+                    _LabeledSlider(
+                      label: 'Distance',
+                      hint: '音箱远近',
+                      valueLabel:
+                          '${array!.selected.distanceM.toStringAsFixed(2)} m',
+                      value: array!.selected.distanceM,
+                      min: 0.5,
+                      max: 10,
+                      onChanged: (v) {
+                        if (onArrayChanged == null) return;
+                        final next = array!.copy();
+                        next.speakers[next.selectedIndex].distanceM = v;
+                        onArrayChanged!(next);
+                      },
+                    ),
+                    _LabeledSlider(
+                      label: 'Gain',
+                      hint: '该箱电平',
+                      valueLabel:
+                          '${array!.selected.gainDb.toStringAsFixed(1)} dB',
+                      value: array!.selected.gainDb,
+                      min: -12,
+                      max: 6,
+                      onChanged: (v) {
+                        if (onArrayChanged == null) return;
+                        final next = array!.copy();
+                        next.speakers[next.selectedIndex].gainDb = v;
+                        onArrayChanged!(next);
+                      },
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 10),
+                      child: Row(
+                        children: [
+                          Text('Mute',
+                              style: Theme.of(context).textTheme.bodySmall),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              '该箱静音',
+                              overflow: TextOverflow.ellipsis,
+                              style: Theme.of(context).textTheme.labelSmall,
+                            ),
+                          ),
+                          CupertinoSwitch(
+                            value: array!.selected.mute,
+                            activeColor: YinweiColors.accent,
+                            onChanged: (v) {
+                              if (onArrayChanged == null) return;
+                              final next = array!.copy();
+                              next.speakers[next.selectedIndex].mute = v;
+                              onArrayChanged!(next);
+                            },
+                          ),
+                        ],
+                      ),
+                    ),
+                  ] else ...[
+                    const SizedBox(height: 22),
+                    _LabeledSlider(
+                      label: 'Azimuth',
+                      hint: '方位',
+                      valueLabel: '${params.azimuthDeg.round()}°',
+                      value: params.azimuthDeg,
+                      min: -180,
+                      max: 180,
+                      onChanged: (v) {
+                        final next = params.copy()
+                          ..azimuthDeg = v
+                          ..selectedPreset = null;
+                        onChanged(next);
+                      },
+                    ),
+                    _LabeledSlider(
+                      label: 'Elevation',
+                      hint: '高度',
+                      valueLabel: '${params.elevationDeg.round()}°',
+                      value: params.elevationDeg,
+                      min: -90,
+                      max: 90,
+                      onChanged: (v) {
+                        final next = params.copy()
+                          ..elevationDeg = v
+                          ..selectedPreset = null;
+                        onChanged(next);
+                      },
+                    ),
+                    _LabeledSlider(
+                      label: 'Distance',
+                      hint: '远近 · 人声',
+                      valueLabel: '${params.distanceM.toStringAsFixed(2)} m',
+                      value: params.distanceM,
+                      min: 0.5,
+                      max: 10,
+                      onChanged: (v) {
+                        final next = params.copy()
+                          ..distanceM = v
+                          ..selectedPreset = null;
+                        onChanged(next);
+                      },
+                    ),
+                  ],
+                  const SizedBox(height: 10),
+                  Opacity(
+                    opacity: _arrayOn ? 0.35 : 1,
+                    child: IgnorePointer(
+                      ignoring: _arrayOn,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          CupertinoSlidingSegmentedControl<MotionMode>(
+                            groupValue: params.motion,
+                            backgroundColor: YinweiColors.panelElevated,
+                            thumbColor: const Color(0xFF2C2C2E),
+                            children: {
+                              MotionMode.fixed: _segLabel(
+                                  'Fixed', params.motion == MotionMode.fixed),
+                              MotionMode.orbit: _segLabel('Orbit', orbitOn),
+                            },
+                            onValueChanged: (v) {
+                              if (v == null) return;
+                              final next = params.copy()..motion = v;
+                              onChanged(next);
+                            },
+                          ),
+                          const SizedBox(height: 18),
+                          Opacity(
+                            opacity: orbitOn ? 1 : 0.35,
+                            child: IgnorePointer(
+                              ignoring: !orbitOn,
+                              child: _LabeledSlider(
+                                label: 'Orbit Speed',
+                                hint: '绕转',
+                                valueLabel:
+                                    '${params.orbitHz.toStringAsFixed(2)} Hz',
+                                value: params.orbitHz,
+                                min: 0.05,
+                                max: 2,
+                                onChanged: (v) {
+                                  final next = params.copy()..orbitHz = v;
+                                  onChanged(next);
+                                },
+                              ),
+                            ),
+                          ),
+                          _LabeledSlider(
+                            label: 'Envelopment',
+                            hint: '包围 · 高了发闷',
+                            valueLabel:
+                                '${(params.envelopment * 100).round()}%',
+                            value: params.envelopment,
+                            min: 0,
+                            max: 1,
+                            onChanged: (v) {
+                              final next = params.copy()..envelopment = v;
+                              onChanged(next);
+                            },
+                          ),
+                        ],
+                      ),
+                    ),
                   ),
                   _LabeledSlider(
                     label: 'Reverb',
@@ -239,13 +393,67 @@ class PositionSidebar extends StatelessWidget {
 
   Widget _segLabel(String text, bool selected) {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
       child: Text(
         text,
         style: TextStyle(
           fontSize: 12,
           fontWeight: FontWeight.w500,
           color: selected ? YinweiColors.textPrimary : YinweiColors.textSecondary,
+        ),
+      ),
+    );
+  }
+}
+
+class _SpeakerChip extends StatelessWidget {
+  const _SpeakerChip({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+    this.muted = false,
+  });
+
+  final String label;
+  final bool selected;
+  final bool muted;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: selected
+          ? YinweiColors.accent.withOpacity(0.22)
+          : YinweiColors.panelElevated,
+      borderRadius: BorderRadius.circular(8),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(8),
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(
+              color: selected
+                  ? YinweiColors.accent.withOpacity(0.55)
+                  : Colors.transparent,
+            ),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+            child: Text(
+              label,
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w500,
+                decoration: muted ? TextDecoration.lineThrough : null,
+                color: muted
+                    ? YinweiColors.textSecondary
+                    : (selected
+                        ? YinweiColors.textPrimary
+                        : YinweiColors.textSecondary),
+              ),
+            ),
+          ),
         ),
       ),
     );

@@ -25,6 +25,7 @@ class LiveTransferController extends ChangeNotifier {
   int _reconnectFails = 0;
   bool _reconnecting = false;
   SpatialParams? _appliedParams;
+  ArrayLayout? _appliedArray;
   int _sessionGen = 0;
 
   YinweiBindings? get _b => YinweiBindings.tryLoad();
@@ -89,7 +90,11 @@ class LiveTransferController extends ChangeNotifier {
     }
   }
 
-  Future<void> start({required int processId, SpatialParams? params}) async {
+  Future<void> start({
+    required int processId,
+    SpatialParams? params,
+    ArrayLayout? array,
+  }) async {
     final b = _b;
     if (b == null) {
       fail('spatial_core.dll not loaded — run build_native_windows.ps1');
@@ -98,6 +103,7 @@ class LiveTransferController extends ChangeNotifier {
     lastError = null;
     lastPid = processId;
     _appliedParams = params;
+    if (array != null) _appliedArray = array.copy();
     _nativeDownTicks = 0;
     _reconnectFails = 0;
     _sessionGen++;
@@ -178,6 +184,7 @@ class LiveTransferController extends ChangeNotifier {
     starting = false;
     running = true;
     lastError = null;
+    if (_appliedArray != null) applyLiveArray(_appliedArray!);
     _refreshHealth(b);
     notifyListeners();
   }
@@ -217,6 +224,9 @@ class LiveTransferController extends ChangeNotifier {
       final applied = _appliedParams;
       if (applied != null) {
         applyLiveParams(applied);
+      }
+      if (_appliedArray != null) {
+        applyLiveArray(_appliedArray!);
       }
       try {
         b.liveSetMode(1);
@@ -265,6 +275,46 @@ class LiveTransferController extends ChangeNotifier {
     } catch (e) {
       lastError = e.toString();
       notifyListeners();
+      return false;
+    }
+  }
+
+  bool applyLiveArray(ArrayLayout layout) {
+    final b = _b;
+    if (b == null || !running) return false;
+    _appliedArray = layout.copy();
+    try {
+      final mc = b.liveSetArray(layout.nativeMode);
+      if (mc == -1) return false;
+      if (mc != 0) {
+        lastError = b.readLastError().isEmpty
+            ? 'yinwei_live_set_array failed ($mc)'
+            : b.readLastError();
+        notifyListeners();
+        return false;
+      }
+      if (!layout.enabled) return true;
+      for (var i = 0; i < layout.speakers.length; i++) {
+        final s = layout.speakers[i];
+        final sc = b.liveSetSpeaker(
+          index: i,
+          azimuthDeg: s.azimuthDeg,
+          elevationDeg: s.elevationDeg,
+          distanceM: s.distanceM,
+          gainDb: s.gainDb,
+          mute: s.mute,
+          feed: s.nativeFeed,
+        );
+        if (sc != 0 && sc != -1) {
+          lastError = b.readLastError().isEmpty
+              ? 'yinwei_live_set_speaker failed ($sc)'
+              : b.readLastError();
+          notifyListeners();
+          return false;
+        }
+      }
+      return true;
+    } catch (_) {
       return false;
     }
   }
@@ -356,14 +406,17 @@ class LiveTransferController extends ChangeNotifier {
         }
         return;
       }
-      if (params != null) {
-        applyLiveParams(params);
-      }
-      b.liveSetMode(1);
       running = true;
       lastError = null;
       _nativeDownTicks = 0;
       _reconnectFails = 0;
+      if (params != null) {
+        applyLiveParams(params);
+      }
+      if (_appliedArray != null) {
+        applyLiveArray(_appliedArray!);
+      }
+      b.liveSetMode(1);
       _refreshHealth(b);
       notifyListeners();
     } catch (e) {
