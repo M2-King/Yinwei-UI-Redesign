@@ -3,9 +3,10 @@
 (function () {
   'use strict';
 
-  if (typeof THREE === 'undefined') {
-    throw new Error('THREE missing');
-  }
+  window.addEventListener('error', function (e) {
+    var hint = document.getElementById('hint');
+    if (hint) hint.textContent = e.message || String(e.error || e);
+  });
 
   var DEG = Math.PI / 180;
   var ROOM = 6.4;
@@ -81,11 +82,26 @@
   }
   placeCamera();
 
-  var renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false, powerPreference: 'low-power' });
+  var renderer;
+  try {
+    renderer = new THREE.WebGLRenderer({
+      antialias: true,
+      alpha: false,
+      powerPreference: 'default',
+      failIfMajorPerformanceCaveat: false,
+      preserveDrawingBuffer: true,
+    });
+  } catch (err) {
+    document.getElementById('hint').textContent = 'WebGL unavailable: ' + err;
+    throw err;
+  }
   renderer.setClearColor(0x0b0b0d, 1);
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.shadowMap.enabled = false;
   document.body.appendChild(renderer.domElement);
+  if (!renderer.getContext()) {
+    document.getElementById('hint').textContent = 'WebGL context missing';
+  }
 
   function capDpr() {
     var dpr = Math.min(window.devicePixelRatio || 1, MAX_DPR);
@@ -104,57 +120,49 @@
   window.addEventListener('resize', onResize);
   onResize();
 
-  scene.add(new THREE.HemisphereLight(0xb8c4d4, 0x1a1a1c, 0.55));
-  var key = new THREE.DirectionalLight(0xf2f2f7, 0.45);
+  scene.add(new THREE.HemisphereLight(0xc5ccd6, 0x2a2a2e, 0.95));
+  var key = new THREE.DirectionalLight(0xf7f7fa, 0.85);
   key.position.set(2.2, 5.4, 3.1);
   scene.add(key);
-  var fill = new THREE.DirectionalLight(0x8e8e93, 0.12);
+  var fill = new THREE.DirectionalLight(0xb0b0b8, 0.28);
   fill.position.set(-3, 1.4, -2);
   scene.add(fill);
 
-  var matWall = new THREE.MeshStandardMaterial({
-    color: 0x161618,
-    roughness: 0.92,
-    metalness: 0.04,
+  var matWall = new THREE.MeshPhongMaterial({
+    color: 0x2a2a30,
+    shininess: 8,
   });
-  var matFloor = new THREE.MeshStandardMaterial({
-    color: 0x121214,
-    roughness: 0.88,
-    metalness: 0.06,
+  var matFloor = new THREE.MeshPhongMaterial({
+    color: 0x1c1c20,
+    shininess: 6,
   });
-  var matAbsorber = new THREE.MeshStandardMaterial({
-    color: 0x1c1c1f,
-    roughness: 0.96,
-    metalness: 0.02,
+  var matAbsorber = new THREE.MeshPhongMaterial({
+    color: 0x323238,
+    shininess: 4,
   });
-  var matListener = new THREE.MeshStandardMaterial({
-    color: 0xd8d8dc,
-    roughness: 0.55,
-    metalness: 0.08,
+  var matListener = new THREE.MeshPhongMaterial({
+    color: 0xe8e8ed,
+    shininess: 18,
   });
-  var matSpeaker = new THREE.MeshStandardMaterial({
-    color: 0x2c2c30,
-    roughness: 0.62,
-    metalness: 0.18,
+  var matSpeaker = new THREE.MeshPhongMaterial({
+    color: 0x4a4a50,
+    shininess: 22,
   });
-  var matDriver = new THREE.MeshStandardMaterial({
+  var matDriver = new THREE.MeshPhongMaterial({
     color: 0x6e6e73,
-    roughness: 0.4,
-    metalness: 0.28,
+    shininess: 40,
   });
-  var matSource = new THREE.MeshStandardMaterial({
+  var matSource = new THREE.MeshPhongMaterial({
     color: 0x0a84ff,
     emissive: 0x0a84ff,
-    emissiveIntensity: 0.22,
-    roughness: 0.35,
-    metalness: 0.18,
+    emissiveIntensity: 0.28,
+    shininess: 50,
   });
-  var matDome = new THREE.MeshStandardMaterial({
+  var matDome = new THREE.MeshPhongMaterial({
     color: 0x3a4a5c,
-    roughness: 0.2,
-    metalness: 0.05,
+    shininess: 12,
     transparent: true,
-    opacity: 0.06,
+    opacity: 0.07,
     side: THREE.DoubleSide,
     depthWrite: false,
   });
@@ -328,6 +336,7 @@
     matSource.emissiveIntensity = state.active ? 0.22 + state.envelopment * 0.12 : 0.08;
   }
   applySourcePose();
+  renderer.render(scene, camera);
 
   function postToHost(payload) {
     var msg = JSON.stringify(payload);
