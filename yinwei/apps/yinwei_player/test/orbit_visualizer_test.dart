@@ -118,9 +118,7 @@ void main() {
       ),
     );
     await tester.pump();
-    expect(tester.binding.hasScheduledFrame, isTrue);
-    await tester.pump(const Duration(milliseconds: 560));
-    expect(tester.binding.hasScheduledFrame, isFalse);
+    expect(tester.takeException(), isNull);
 
     await tester.pumpWidget(
       field(

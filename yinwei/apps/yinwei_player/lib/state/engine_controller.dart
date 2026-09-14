@@ -7,7 +7,7 @@ import 'package:yinwei_player/models/spatial_params.dart';
 
 /// Bumped when UI wiring changes — shown in status bar so Windows hosts
 /// can confirm they pulled the latest build.
-const String kYinweiUiBuild = 'ui-26-live-nowplaying';
+const String kYinweiUiBuild = 'ui-27-spatial-3d';
 const String kYinweiBridgeBuild = 'p2.4.23-live-latency';
 
 /// App state for the locked Player UI (IMPLEMENTATION_P2 §5.1).

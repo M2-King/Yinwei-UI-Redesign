@@ -18,7 +18,7 @@ import 'package:yinwei_player/theme/yinwei_theme.dart';
 import 'package:yinwei_player/widgets/eq_mixer_window.dart';
 import 'package:yinwei_player/widgets/island_bar.dart';
 import 'package:yinwei_player/widgets/now_playing_panel.dart';
-import 'package:yinwei_player/widgets/orbit_visualizer.dart';
+import 'package:yinwei_player/widgets/spatial_workspace.dart';
 import 'package:yinwei_player/widgets/position_sidebar.dart';
 import 'package:yinwei_player/widgets/system_live_monitor_bar.dart';
 
@@ -447,7 +447,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
                         flex: 5,
                         child: Padding(
                           padding: const EdgeInsets.fromLTRB(28, 12, 12, 20),
-                          child: OrbitVisualizer(
+                          child: SpatialWorkspace(
                             playhead: now.playhead,
                             azimuthDeg: _live.running
                                 ? _live.azimuthDeg()
@@ -457,6 +457,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
                                 : c.elevationDeg,
                             distanceM: c.params.distanceM,
                             envelopment: c.params.envelopment,
+                            playing: now.playing,
                             orbiting: _live.running ||
                                 (c.params.motion == MotionMode.orbit &&
                                     c.mode == PlaybackMode.spatial &&

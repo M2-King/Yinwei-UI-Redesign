@@ -5,6 +5,7 @@
 list(APPEND FLUTTER_PLUGIN_LIST
   desktop_drop
   screen_retriever_windows
+  webview_flutter_windows
   window_manager
 )
 
