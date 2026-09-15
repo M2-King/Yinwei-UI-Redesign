@@ -406,7 +406,6 @@
     g.add(core, shell, field, hit, stem, knob);
     g.userData.kind = 'source';
     g.userData.visual = core;
-    g.userData.elevationHandle = true;
     return g;
   }
 
@@ -725,14 +724,22 @@
     raycaster.setFromCamera(pointer, camera);
     var hits = raycaster.intersectObjects(pickableMeshes(), true);
     if (!hits.length) return null;
-    var first = null;
+    var closest = null;
+    var closestVisible = null;
     for (var i = 0; i < hits.length; i++) {
       var resolved = resolveHit(hits[i].object);
       if (!resolved) continue;
-      if (!first) first = resolved;
-      if (resolved.mesh.userData.kind === 'source') return resolved;
+      if (resolved.elevationHandle) return resolved;
+      if (!closest) closest = resolved;
+      var mat = hits[i].object.material;
+      var vis =
+        hits[i].object.visible !== false &&
+        !(mat && mat.visible === false);
+      if (vis && !closestVisible) closestVisible = resolved;
     }
-    return first;
+    // Invisible source hit-sphere is a grab aid only. Visible listener /
+    // emitter meshes win when they lie on the same ray.
+    return closestVisible || closest;
   }
 
   function selectResolved(resolved) {
@@ -773,12 +780,16 @@
         );
       }
       selectResolved(resolved);
-      renderer.domElement.setPointerCapture(e.pointerId);
+      try {
+        renderer.domElement.setPointerCapture(e.pointerId);
+      } catch (err) {}
       return;
     }
     if (e.button === 0 && resolved && resolved.mesh.userData.kind === 'emitter') {
       selectResolved(resolved);
-      renderer.domElement.setPointerCapture(e.pointerId);
+      try {
+        renderer.domElement.setPointerCapture(e.pointerId);
+      } catch (err) {}
       return;
     }
     if (e.button === 2 || e.button === 1) {
@@ -787,7 +798,9 @@
       orbitingCam = true;
     }
     selectResolved(resolved);
-    renderer.domElement.setPointerCapture(e.pointerId);
+    try {
+      renderer.domElement.setPointerCapture(e.pointerId);
+    } catch (err) {}
   });
 
   renderer.domElement.addEventListener('pointermove', function (e) {
@@ -1034,12 +1047,131 @@
   }
   requestAnimationFrame(tick);
 
+  function clientXY(mesh) {
+    var v = new THREE.Vector3();
+    mesh.updateWorldMatrix(true, true);
+    mesh.getWorldPosition(v);
+    v.project(camera);
+    var r = renderer.domElement.getBoundingClientRect();
+    return {
+      x: r.left + (v.x * 0.5 + 0.5) * r.width,
+      y: r.top + (-v.y * 0.5 + 0.5) * r.height,
+    };
+  }
+
+  function firePointer(type, x, y, extra) {
+    extra = extra || {};
+    renderer.domElement.dispatchEvent(
+      new PointerEvent(type, {
+        bubbles: true,
+        cancelable: true,
+        view: window,
+        clientX: x,
+        clientY: y,
+        button: extra.button || 0,
+        buttons: extra.buttons != null ? extra.buttons : type === 'pointerup' ? 0 : 1,
+        pointerId: 1,
+        pointerType: 'mouse',
+        isPrimary: true,
+        shiftKey: !!extra.shift,
+      })
+    );
+  }
+
+  function debugInspect() {
+    return {
+      revision: authoritativeRevision,
+      viewMode: viewMode,
+      selected: selectedObjectId,
+      ids: Object.keys(objectsById),
+      source: source
+        ? { x: source.position.x, y: source.position.y, z: source.position.z }
+        : null,
+      hasListener: !!listener,
+      emitterCount: Object.keys(objectsById).filter(function (id) {
+        return objectsById[id].userData.kind === 'emitter';
+      }).length,
+      camera: {
+        theta: camSphGoal.theta,
+        phi: camSphGoal.phi,
+        radius: camSphGoal.radius,
+        target: {
+          x: camTargetGoal.x,
+          y: camTargetGoal.y,
+          z: camTargetGoal.z,
+        },
+      },
+    };
+  }
+
   window.YinweiWorkspace = {
     applySceneSnapshot: applySceneSnapshot,
     applyPlaybackTelemetry: applyPlaybackTelemetry,
     applyUiState: applyUiState,
     init: function () {
       postToHost({ type: 'ready' });
+    },
+    debug: {
+      inspect: debugInspect,
+      setView: function (name) {
+        setView(name);
+        return debugInspect();
+      },
+      click: function (id) {
+        var mesh = objectsById[id];
+        if (!mesh) return { ok: false, reason: 'missing', id: id };
+        var p = clientXY(mesh);
+        firePointer('pointerdown', p.x, p.y, { buttons: 1 });
+        firePointer('pointerup', p.x, p.y, { buttons: 0 });
+        return { ok: true, id: selectedObjectId, x: p.x, y: p.y };
+      },
+      dragSource: function (mode, pixels) {
+        if (!source) return { ok: false, reason: 'no-source' };
+        var p = clientXY(source);
+        var shift = mode === 'y';
+        var nx = p.x + (shift ? 0 : pixels || 70);
+        var ny = p.y + (shift ? -(pixels || 50) : 0);
+        firePointer('pointerdown', p.x, p.y, { buttons: 1, shift: shift });
+        firePointer('pointermove', nx, ny, { buttons: 1, shift: shift });
+        firePointer('pointerup', nx, ny, { buttons: 0, shift: shift });
+        return debugInspect();
+      },
+      orbit: function () {
+        var r = renderer.domElement.getBoundingClientRect();
+        var x = r.left + r.width * 0.82;
+        var y = r.top + r.height * 0.18;
+        firePointer('pointerdown', x, y, { buttons: 1 });
+        firePointer('pointermove', x + 46, y + 20, { buttons: 1 });
+        firePointer('pointerup', x + 46, y + 20, { buttons: 0 });
+        return debugInspect();
+      },
+      pan: function () {
+        var r = renderer.domElement.getBoundingClientRect();
+        var x = r.left + r.width * 0.72;
+        var y = r.top + r.height * 0.28;
+        firePointer('pointerdown', x, y, { button: 2, buttons: 2 });
+        firePointer('pointermove', x + 28, y + 14, { button: 2, buttons: 2 });
+        firePointer('pointerup', x + 28, y + 14, { button: 2, buttons: 0 });
+        return debugInspect();
+      },
+      zoom: function () {
+        var before = camSphGoal.radius;
+        var r = renderer.domElement.getBoundingClientRect();
+        renderer.domElement.dispatchEvent(
+          new WheelEvent('wheel', {
+            bubbles: true,
+            cancelable: true,
+            clientX: r.left + r.width * 0.5,
+            clientY: r.top + r.height * 0.5,
+            deltaY: 240,
+          })
+        );
+        return { before: before, after: camSphGoal.radius };
+      },
+      capture: function () {
+        renderer.render(scene, camera);
+        return renderer.domElement.toDataURL('image/png');
+      },
     },
   };
 

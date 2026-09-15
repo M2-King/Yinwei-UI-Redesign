@@ -29,10 +29,10 @@ class NowPlayingPanel extends StatelessWidget {
 
     return LayoutBuilder(
       builder: (context, constraints) {
-        final art = constraints.maxHeight < 560
-            ? (constraints.maxHeight < 480 ? 140.0 : 170.0)
-            : 200.0;
-        final gap = constraints.maxHeight < 560 ? 16.0 : 26.0;
+        final art = constraints.maxHeight < 640
+            ? (constraints.maxHeight < 540 ? 96.0 : 128.0)
+            : 168.0;
+        final gap = constraints.maxHeight < 640 ? 10.0 : 18.0;
 
         return Center(
           child: SingleChildScrollView(
@@ -77,12 +77,6 @@ class NowPlayingPanel extends StatelessWidget {
                       Text(track.album, style: theme.textTheme.labelSmall),
                     ],
                     SizedBox(height: gap),
-                    _Scrubber(
-                      position: position,
-                      duration: track.duration,
-                      onSeek: onSeek,
-                    ),
-                    const SizedBox(height: 16),
                     Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
@@ -96,14 +90,14 @@ class NowPlayingPanel extends StatelessWidget {
                           style: IconButton.styleFrom(
                             backgroundColor: YinweiColors.panelElevated,
                             foregroundColor: YinweiColors.textPrimary,
-                            minimumSize: const Size(52, 52),
+                            minimumSize: const Size(48, 48),
                           ),
                           onPressed: onPlayPause,
                           icon: Icon(
                             isPlaying
                                 ? CupertinoIcons.pause_fill
                                 : CupertinoIcons.play_fill,
-                            size: 24,
+                            size: 22,
                           ),
                         ),
                         const SizedBox(width: 10),
@@ -114,10 +108,16 @@ class NowPlayingPanel extends StatelessWidget {
                         ),
                       ],
                     ),
-                    const SizedBox(height: 20),
+                    const SizedBox(height: 12),
                     _ModeSegmented(
                       mode: playbackMode,
                       onChanged: onModeChanged,
+                    ),
+                    const SizedBox(height: 12),
+                    _Scrubber(
+                      position: position,
+                      duration: track.duration,
+                      onSeek: onSeek,
                     ),
                   ],
                 ),

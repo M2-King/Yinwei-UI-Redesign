@@ -86,6 +86,16 @@ void main() {
     expect(scene.contains('ROOM * 0.42'), isFalse);
     expect(scene.contains('yinwei_set_params'), isFalse);
     expect(scene.contains('EngineApi'), isFalse);
+    expect(scene.contains('closestVisible'), isTrue);
+    expect(
+      scene.contains('g.userData.elevationHandle = true'),
+      isFalse,
+    );
+    expect(
+      scene.contains("closest.mesh.userData.kind === 'source') return closest"),
+      isFalse,
+    );
+    expect(scene.contains('return closestVisible || closest'), isTrue);
   });
 
   test('Phase 3 HUD exposes camera fit and elevation affordance', () async {
