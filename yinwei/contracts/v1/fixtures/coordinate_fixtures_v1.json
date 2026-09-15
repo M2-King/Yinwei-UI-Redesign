@@ -1,0 +1,270 @@
+{
+  "schemaId": "CoordinateFrameV1",
+  "schemaVersion": 1,
+  "quaternionStorageOrder": ["w", "x", "y", "z"],
+  "handedness": "right",
+  "axes": {
+    "plusX": "listener_right",
+    "plusY": "up",
+    "minusZ": "listener_forward"
+  },
+  "distanceUnit": "metre",
+  "azimuthCanonicalRange": "(-180, 180]",
+  "tolerance": 1e-9,
+  "trigTolerance": 1e-6,
+  "cases": [
+    {
+      "id": "front",
+      "kind": "pose_roundtrip",
+      "input": { "azimuthDeg": 0, "elevationDeg": 0, "distanceM": 1 },
+      "expect": {
+        "world": { "x": 0, "y": 0, "z": -1 },
+        "listenerLocal": { "x": 0, "y": 0, "z": -1 },
+        "hrtfUnit": { "x": 0, "y": 0, "z": -1 },
+        "azimuthDeg": 0,
+        "elevationDeg": 0,
+        "distanceM": 1,
+        "dspDistanceM": 1
+      }
+    },
+    {
+      "id": "right",
+      "kind": "pose_roundtrip",
+      "input": { "azimuthDeg": 90, "elevationDeg": 0, "distanceM": 1 },
+      "expect": {
+        "world": { "x": 1, "y": 0, "z": 0 },
+        "listenerLocal": { "x": 1, "y": 0, "z": 0 },
+        "hrtfUnit": { "x": 1, "y": 0, "z": 0 },
+        "azimuthDeg": 90,
+        "elevationDeg": 0,
+        "distanceM": 1,
+        "dspDistanceM": 1
+      }
+    },
+    {
+      "id": "left",
+      "kind": "pose_roundtrip",
+      "input": { "azimuthDeg": -90, "elevationDeg": 0, "distanceM": 1 },
+      "expect": {
+        "world": { "x": -1, "y": 0, "z": 0 },
+        "listenerLocal": { "x": -1, "y": 0, "z": 0 },
+        "hrtfUnit": { "x": -1, "y": 0, "z": 0 },
+        "azimuthDeg": -90,
+        "elevationDeg": 0,
+        "distanceM": 1,
+        "dspDistanceM": 1
+      }
+    },
+    {
+      "id": "rear",
+      "kind": "pose_roundtrip",
+      "input": { "azimuthDeg": 180, "elevationDeg": 0, "distanceM": 1 },
+      "expect": {
+        "world": { "x": 0, "y": 0, "z": 1 },
+        "listenerLocal": { "x": 0, "y": 0, "z": 1 },
+        "hrtfUnit": { "x": 0, "y": 0, "z": 1 },
+        "azimuthDeg": 180,
+        "elevationDeg": 0,
+        "distanceM": 1,
+        "dspDistanceM": 1
+      }
+    },
+    {
+      "id": "overhead",
+      "kind": "pose_roundtrip",
+      "input": { "azimuthDeg": 0, "elevationDeg": 90, "distanceM": 1 },
+      "expect": {
+        "world": { "x": 0, "y": 1, "z": 0 },
+        "listenerLocal": { "x": 0, "y": 1, "z": 0 },
+        "hrtfUnit": { "x": 0, "y": 1, "z": 0 },
+        "azimuthDeg": 0,
+        "elevationDeg": 90,
+        "distanceM": 1,
+        "dspDistanceM": 1
+      }
+    },
+    {
+      "id": "translated_listener",
+      "kind": "world_to_listener",
+      "listener": {
+        "worldPosition": { "x": 1, "y": 0.5, "z": -1 },
+        "orientation": { "w": 1, "x": 0, "y": 0, "z": 0 }
+      },
+      "world": { "x": 1, "y": 0.5, "z": -3 },
+      "expect": {
+        "listenerLocal": { "x": 0, "y": 0, "z": -2 },
+        "hrtfUnit": { "x": 0, "y": 0, "z": -1 },
+        "azimuthDeg": 0,
+        "elevationDeg": 0,
+        "distanceM": 2,
+        "dspDistanceM": 2
+      }
+    },
+    {
+      "id": "rotated_listener",
+      "kind": "world_to_listener",
+      "comment": "Yaw -90 deg about +Y: listener faces world +X. Source 2 m along world +X is ahead.",
+      "listener": {
+        "worldPosition": { "x": 0, "y": 0, "z": 0 },
+        "orientation": { "w": 0.7071067811865476, "x": 0, "y": -0.7071067811865476, "z": 0 }
+      },
+      "world": { "x": 2, "y": 0, "z": 0 },
+      "expect": {
+        "listenerLocal": { "x": 0, "y": 0, "z": -2 },
+        "hrtfUnit": { "x": 0, "y": 0, "z": -1 },
+        "azimuthDeg": 0,
+        "elevationDeg": 0,
+        "distanceM": 2,
+        "dspDistanceM": 2
+      }
+    },
+    {
+      "id": "rotated_listener_world_front_is_left",
+      "kind": "world_to_listener",
+      "listener": {
+        "worldPosition": { "x": 0, "y": 0, "z": 0 },
+        "orientation": { "w": 0.7071067811865476, "x": 0, "y": -0.7071067811865476, "z": 0 }
+      },
+      "world": { "x": 0, "y": 0, "z": -1 },
+      "expect": {
+        "listenerLocal": { "x": -1, "y": 0, "z": 0 },
+        "hrtfUnit": { "x": -1, "y": 0, "z": 0 },
+        "azimuthDeg": -90,
+        "elevationDeg": 0,
+        "distanceM": 1,
+        "dspDistanceM": 1
+      }
+    },
+    {
+      "id": "wrap_plus_180",
+      "kind": "wrap_azimuth",
+      "inputDeg": 180,
+      "expectDeg": 180
+    },
+    {
+      "id": "wrap_minus_180",
+      "kind": "wrap_azimuth",
+      "inputDeg": -180,
+      "expectDeg": 180
+    },
+    {
+      "id": "wrap_plus_190",
+      "kind": "wrap_azimuth",
+      "inputDeg": 190,
+      "expectDeg": -170
+    },
+    {
+      "id": "wrap_minus_190",
+      "kind": "wrap_azimuth",
+      "inputDeg": -190,
+      "expectDeg": 170
+    },
+    {
+      "id": "shortest_arc_across_wrap",
+      "kind": "shortest_arc",
+      "fromDeg": 170,
+      "toDeg": -170,
+      "expectDeltaDeg": 20,
+      "t": 0.5,
+      "expectInterpDeg": 180
+    },
+    {
+      "id": "shortest_arc_across_wrap_reverse",
+      "kind": "shortest_arc",
+      "fromDeg": -170,
+      "toDeg": 170,
+      "expectDeltaDeg": -20,
+      "t": 0.5,
+      "expectInterpDeg": 180
+    },
+    {
+      "id": "shortest_arc_half_turn_positive",
+      "kind": "shortest_arc",
+      "fromDeg": 0,
+      "toDeg": 180,
+      "expectDeltaDeg": 180,
+      "t": 0.5,
+      "expectInterpDeg": 90
+    },
+    {
+      "id": "shortest_arc_half_turn_negative",
+      "kind": "shortest_arc",
+      "fromDeg": 180,
+      "toDeg": 0,
+      "expectDeltaDeg": -180,
+      "t": 0.5,
+      "expectInterpDeg": 90
+    },
+    {
+      "id": "elevation_near_plus_90",
+      "kind": "pose_roundtrip",
+      "input": { "azimuthDeg": 0, "elevationDeg": 89, "distanceM": 1 },
+      "expect": {
+        "world": { "x": 0, "y": 0.9998476951563913, "z": -0.01745240643728351 },
+        "listenerLocal": { "x": 0, "y": 0.9998476951563913, "z": -0.01745240643728351 },
+        "hrtfUnit": { "x": 0, "y": 0.9998476951563913, "z": -0.01745240643728351 },
+        "azimuthDeg": 0,
+        "elevationDeg": 89,
+        "distanceM": 1,
+        "dspDistanceM": 1
+      }
+    },
+    {
+      "id": "elevation_near_minus_90",
+      "kind": "pose_roundtrip",
+      "input": { "azimuthDeg": 0, "elevationDeg": -89, "distanceM": 1 },
+      "expect": {
+        "world": { "x": 0, "y": -0.9998476951563913, "z": -0.01745240643728351 },
+        "listenerLocal": { "x": 0, "y": -0.9998476951563913, "z": -0.01745240643728351 },
+        "hrtfUnit": { "x": 0, "y": -0.9998476951563913, "z": -0.01745240643728351 },
+        "azimuthDeg": 0,
+        "elevationDeg": -89,
+        "distanceM": 1,
+        "dspDistanceM": 1
+      }
+    },
+    {
+      "id": "elevation_north_pole_cartesian",
+      "kind": "cartesian_to_spherical",
+      "listenerLocal": { "x": 0, "y": 1, "z": 0 },
+      "expect": {
+        "azimuthDeg": 0,
+        "elevationDeg": 90,
+        "distanceM": 1,
+        "hrtfUnit": { "x": 0, "y": 1, "z": 0 }
+      }
+    },
+    {
+      "id": "zero_distance_input",
+      "kind": "zero_distance",
+      "listener": {
+        "worldPosition": { "x": 0, "y": 0, "z": 0 },
+        "orientation": { "w": 1, "x": 0, "y": 0, "z": 0 }
+      },
+      "world": { "x": 0, "y": 0, "z": 0 },
+      "expect": {
+        "listenerLocal": { "x": 0, "y": 0, "z": 0 },
+        "hrtfUnit": { "x": 0, "y": 0, "z": -1 },
+        "azimuthDeg": 0,
+        "elevationDeg": 0,
+        "distanceM": 0,
+        "dspDistanceIndependent": true
+      }
+    },
+    {
+      "id": "unit_direction_conversion",
+      "kind": "pose_roundtrip",
+      "comment": "HRTF uses the unit vector; DSP distance stays the independent metre length.",
+      "input": { "azimuthDeg": 90, "elevationDeg": 0, "distanceM": 4 },
+      "expect": {
+        "world": { "x": 4, "y": 0, "z": 0 },
+        "listenerLocal": { "x": 4, "y": 0, "z": 0 },
+        "hrtfUnit": { "x": 1, "y": 0, "z": 0 },
+        "azimuthDeg": 90,
+        "elevationDeg": 0,
+        "distanceM": 4,
+        "dspDistanceM": 4
+      }
+    }
+  ]
+}

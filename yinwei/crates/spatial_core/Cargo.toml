@@ -1,0 +1,28 @@
+[package]
+name = "spatial_core"
+version = "0.1.0"
+edition = "2021"
+description = "Yinwei / 音围 spatial HRTF engine"
+license = "MIT"
+
+[lib]
+name = "spatial_core"
+crate-type = ["cdylib", "staticlib", "rlib"]
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+thiserror = "2"
+hrtf = "0.8"
+biquad = "0.4"
+freeverb = "0.1"
+hound = "3.5"
+symphonia = { version = "0.5", features = ["mp3", "aac", "flac", "ogg", "pcm", "isomp4"] }
+cpal = { version = "0.15", optional = true }
+wasapi = { version = "0.17", optional = true }
+
+[features]
+default = ["realtime"]
+realtime = ["dep:cpal", "dep:wasapi"]
+
+[dev-dependencies]
+approx = "0.5"

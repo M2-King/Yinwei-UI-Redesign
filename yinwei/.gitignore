@@ -1,0 +1,12 @@
+# Generated / local
+target/
+**/target/
+.dart_tool/
+.packages
+build/
+.flutter-plugins
+.flutter-plugins-dependencies
+*.iml
+.idea/
+.vscode/
+.DS_Store

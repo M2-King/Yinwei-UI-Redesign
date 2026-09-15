@@ -1,0 +1,8 @@
+# flutter_rust_bridge scaffold (P2.4)
+# Run on a machine with Flutter SDK:
+#   cargo install flutter_rust_bridge_codegen
+#   cd yinwei/apps/yinwei_player && flutter_rust_bridge_codegen generate
+
+rust_input: crate::frb_api
+rust_root: ../../crates/spatial_core
+dart_output: lib/bridge/frb
