@@ -69,4 +69,38 @@ void main() {
     expect(dart.contains('applySceneSnapshot'), isTrue);
     expect(dart.contains('applyPlaybackTelemetry'), isTrue);
   });
+
+  test('Phase 3 scene.js is a professional 3D workspace without geometric clamp', () async {
+    final scene = await File('assets/spatial_workspace/scene.js').readAsString();
+    expect(scene.contains('objectsById'), isTrue);
+    expect(scene.contains('sourcePosePreview'), isTrue);
+    expect(scene.contains('sourcePoseCommit'), isTrue);
+    expect(scene.contains('elevationHandle'), isTrue);
+    expect(scene.contains('contactShadow'), isTrue);
+    expect(scene.contains('relationLine'), isTrue);
+    expect(scene.contains('camDamp'), isTrue);
+    expect(scene.contains('FRONT'), isTrue);
+    expect(scene.contains('RIGHT'), isTrue);
+    expect(scene.contains('LEFT'), isTrue);
+    expect(scene.contains('REAR'), isTrue);
+    expect(scene.contains('ROOM * 0.42'), isFalse);
+    expect(scene.contains('yinwei_set_params'), isFalse);
+    expect(scene.contains('EngineApi'), isFalse);
+  });
+
+  test('Phase 3 HUD exposes camera fit and elevation affordance', () async {
+    final html = await File('assets/spatial_workspace/index.html').readAsString();
+    expect(html.contains('data-view="fit"'), isTrue);
+    expect(html.contains('data-view="top"'), isTrue);
+    expect(html.contains('data-view="front"'), isTrue);
+    expect(html.contains('data-view="listener"'), isTrue);
+    expect(html.contains('id="sel"'), isTrue);
+  });
+
+  test('Phase 3 workspace is more prominent than Now Playing', () async {
+    final dart = await File('lib/screens/player_screen.dart').readAsString();
+    expect(dart.contains('flex: wide ? 7 : 5'), isTrue);
+    expect(dart.contains('flex: wide ? 4 : 5'), isTrue);
+    expect(dart.contains('maxWidth >= 1100'), isTrue);
+  });
 }

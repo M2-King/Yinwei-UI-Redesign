@@ -1,4 +1,4 @@
-/* Yinwei spatial workspace — Three.js r160, Apple-dark, no neon HUD.
+/* Yinwei spatial workspace — Three.js r160, professional listening room.
    Flutter SpatialSceneStore is authoritative. JS proposes world-XYZ intents.
    Visual emitters are layout-only — not discrete 7.1 / Array channels.
    Speaker drag is visual-only and does not commit acoustic scene state. */
@@ -11,10 +11,11 @@
   });
 
   var DEG = Math.PI / 180;
-  var ROOM = 6.4;
-  var WALL_H = 3.2;
+  var FLOOR_Y = -1.18;
+  var FLOOR_SIZE = 16;
   var MAX_DPR = 1.5;
   var POSE_MS = 32;
+  var CAM_FAR = 160;
 
   var state = {
     envelopment: 0.6,
@@ -29,11 +30,11 @@
   var lastPosePost = 0;
   var needsRender = true;
   var waveAcc = 0;
-  var trail = [];
   var viewTween = null;
   var objectsById = {};
   var authoritativeRevision = 0;
   var selectedObjectId = null;
+  var hoveredObjectId = null;
   var source = null;
   var listener = null;
 
@@ -54,12 +55,16 @@
   }
 
   var scene = new THREE.Scene();
-  scene.background = new THREE.Color(0x0b0b0d);
-  scene.fog = new THREE.Fog(0x0b0b0d, 9, 18);
+  scene.background = new THREE.Color(0x0a0a0c);
+  scene.fog = new THREE.Fog(0x0a0a0c, 18, 48);
 
-  var camera = new THREE.PerspectiveCamera(42, 1, 0.08, 40);
-  var camSph = new THREE.Spherical(5.4, 1.12, -0.55);
-  var camTarget = new THREE.Vector3(0, 0.55, 0);
+  var camera = new THREE.PerspectiveCamera(40, 1, 0.08, CAM_FAR);
+  var camSph = new THREE.Spherical(5.4, 1.28, -0.58);
+  var camSphGoal = camSph.clone();
+  var camTarget = new THREE.Vector3(0, 0.18, -0.35);
+  var camTargetGoal = camTarget.clone();
+  var camDamp = 0.16;
+
   function placeCamera() {
     camera.position.setFromSpherical(camSph).add(camTarget);
     camera.lookAt(camTarget);
@@ -79,7 +84,7 @@
     document.getElementById('hint').textContent = 'WebGL unavailable: ' + err;
     throw err;
   }
-  renderer.setClearColor(0x0b0b0d, 1);
+  renderer.setClearColor(0x0a0a0c, 1);
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.shadowMap.enabled = false;
   document.body.appendChild(renderer.domElement);
@@ -88,8 +93,7 @@
   }
 
   function capDpr() {
-    var dpr = Math.min(window.devicePixelRatio || 1, MAX_DPR);
-    renderer.setPixelRatio(dpr);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, MAX_DPR));
   }
 
   function onResize() {
@@ -107,111 +111,225 @@
   }
   onResize();
 
-  scene.add(new THREE.HemisphereLight(0xc5ccd6, 0x2a2a2e, 0.95));
-  var key = new THREE.DirectionalLight(0xf7f7fa, 0.85);
-  key.position.set(2.2, 5.4, 3.1);
+  scene.add(new THREE.HemisphereLight(0xd0d4dc, 0x222226, 1.05));
+  var key = new THREE.DirectionalLight(0xf7f7fa, 0.95);
+  key.position.set(2.4, 6.2, 3.4);
   scene.add(key);
-  var fill = new THREE.DirectionalLight(0xb0b0b8, 0.28);
-  fill.position.set(-3, 1.4, -2);
-  scene.add(fill);
+  var rim = new THREE.DirectionalLight(0xc5d0dc, 0.32);
+  rim.position.set(-2.6, 2.2, -3.2);
+  scene.add(rim);
+  scene.add(new THREE.AmbientLight(0x404048, 0.35));
 
-  var matWall = new THREE.MeshPhongMaterial({
-    color: 0x2a2a30,
-    shininess: 8,
-  });
-  var matFloor = new THREE.MeshPhongMaterial({
-    color: 0x1c1c20,
-    shininess: 6,
-  });
-  var matAbsorber = new THREE.MeshPhongMaterial({
-    color: 0x323238,
-    shininess: 4,
-  });
-  var matListener = new THREE.MeshPhongMaterial({
-    color: 0xe8e8ed,
-    shininess: 18,
-  });
-  var matSpeaker = new THREE.MeshPhongMaterial({
-    color: 0x4a4a50,
-    shininess: 22,
-  });
-  var matDriver = new THREE.MeshPhongMaterial({
-    color: 0x6e6e73,
-    shininess: 40,
-  });
-  var matSource = new THREE.MeshPhongMaterial({
-    color: 0x0a84ff,
-    emissive: 0x0a84ff,
-    emissiveIntensity: 0.28,
-    shininess: 50,
-  });
-  var matDome = new THREE.MeshPhongMaterial({
-    color: 0x3a4a5c,
-    shininess: 12,
-    transparent: true,
-    opacity: 0.07,
-    side: THREE.DoubleSide,
-    depthWrite: false,
-  });
+  var geo = {
+    floor: new THREE.PlaneGeometry(FLOOR_SIZE, FLOOR_SIZE),
+    shadow: new THREE.CircleGeometry(0.18, 28),
+    ring: new THREE.RingGeometry(0.96, 1.0, 64),
+    halo: new THREE.RingGeometry(0.16, 0.185, 48),
+    sourceCore: new THREE.SphereGeometry(0.09, 24, 18),
+    sourceShell: new THREE.SphereGeometry(0.15, 28, 20),
+    sourceHit: new THREE.SphereGeometry(0.48, 16, 12),
+    sourceField: new THREE.TorusGeometry(0.24, 0.005, 8, 48),
+    handleStem: new THREE.CylinderGeometry(0.01, 0.01, 0.34, 8),
+    handleKnob: new THREE.SphereGeometry(0.038, 14, 10),
+    head: new THREE.SphereGeometry(0.14, 22, 16),
+    ear: new THREE.SphereGeometry(0.032, 10, 8),
+    nose: new THREE.ConeGeometry(0.032, 0.08, 8),
+    shoulder: new THREE.SphereGeometry(0.1, 14, 10),
+    torso: new THREE.CylinderGeometry(0.13, 0.18, 0.48, 18),
+    cabinet: new THREE.BoxGeometry(0.24, 0.38, 0.18),
+    baffle: new THREE.BoxGeometry(0.22, 0.36, 0.014),
+    woofer: new THREE.CylinderGeometry(0.065, 0.065, 0.018, 20),
+    tweeter: new THREE.CylinderGeometry(0.026, 0.026, 0.014, 14),
+    stand: new THREE.CylinderGeometry(0.02, 0.032, 0.26, 10),
+    base: new THREE.CylinderGeometry(0.08, 0.08, 0.022, 12),
+  };
+
+  var mat = {
+    floor: new THREE.MeshStandardMaterial({
+      color: 0x141416,
+      roughness: 0.92,
+      metalness: 0.04,
+    }),
+    depth: new THREE.MeshStandardMaterial({
+      color: 0x16161a,
+      roughness: 1,
+      metalness: 0,
+    }),
+    listener: new THREE.MeshStandardMaterial({
+      color: 0xd8d8de,
+      roughness: 0.42,
+      metalness: 0.18,
+    }),
+    speaker: new THREE.MeshStandardMaterial({
+      color: 0x3a3a40,
+      roughness: 0.48,
+      metalness: 0.22,
+    }),
+    baffle: new THREE.MeshStandardMaterial({
+      color: 0x2c2c30,
+      roughness: 0.62,
+      metalness: 0.08,
+    }),
+    driver: new THREE.MeshStandardMaterial({
+      color: 0x6a6a70,
+      roughness: 0.35,
+      metalness: 0.28,
+    }),
+    sourceCore: new THREE.MeshStandardMaterial({
+      color: 0xe8eef4,
+      emissive: 0x8fb4d0,
+      emissiveIntensity: 0.42,
+      roughness: 0.28,
+      metalness: 0.12,
+    }),
+    sourceShell: new THREE.MeshStandardMaterial({
+      color: 0xb9c8d6,
+      emissive: 0x4a6a82,
+      emissiveIntensity: 0.08,
+      roughness: 0.18,
+      metalness: 0.34,
+      transparent: true,
+      opacity: 0.42,
+    }),
+    field: new THREE.MeshBasicMaterial({
+      color: 0xc5d4e2,
+      transparent: true,
+      opacity: 0.22,
+      depthWrite: false,
+    }),
+    handle: new THREE.MeshStandardMaterial({
+      color: 0xcecfd4,
+      roughness: 0.4,
+      metalness: 0.2,
+    }),
+    shadow: new THREE.MeshBasicMaterial({
+      color: 0x000000,
+      transparent: true,
+      opacity: 0.28,
+      depthWrite: false,
+    }),
+    halo: new THREE.MeshBasicMaterial({
+      color: 0xdfe6ee,
+      transparent: true,
+      opacity: 0.0,
+      side: THREE.DoubleSide,
+      depthWrite: false,
+    }),
+    relation: new THREE.LineBasicMaterial({
+      color: 0xa8b8c8,
+      transparent: true,
+      opacity: 0.28,
+    }),
+    drop: new THREE.LineDashedMaterial({
+      color: 0x6a6a72,
+      transparent: true,
+      opacity: 0.32,
+      dashSize: 0.05,
+      gapSize: 0.04,
+    }),
+    wave: new THREE.MeshBasicMaterial({
+      color: 0xb7c9d8,
+      transparent: true,
+      opacity: 0,
+      side: THREE.DoubleSide,
+      depthWrite: false,
+    }),
+  };
+
+  function makeLabelSprite(text, scale) {
+    var c = document.createElement('canvas');
+    c.width = 256;
+    c.height = 64;
+    var ctx = c.getContext('2d');
+    ctx.clearRect(0, 0, 256, 64);
+    ctx.fillStyle = 'rgba(245,245,247,0.55)';
+    ctx.font = '600 28px "SF Pro Text", "Segoe UI", sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(text, 128, 34);
+    var tex = new THREE.CanvasTexture(c);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    var sprite = new THREE.Sprite(
+      new THREE.SpriteMaterial({
+        map: tex,
+        transparent: true,
+        depthTest: false,
+        depthWrite: false,
+      })
+    );
+    sprite.scale.set(scale || 1.15, (scale || 1.15) * 0.25, 1);
+    sprite.renderOrder = 2;
+    return sprite;
+  }
 
   function buildRoom() {
     var g = new THREE.Group();
-    var floor = new THREE.Mesh(new THREE.PlaneGeometry(ROOM, ROOM), matFloor);
+    var floor = new THREE.Mesh(geo.floor, mat.floor);
     floor.rotation.x = -Math.PI / 2;
+    floor.position.y = FLOOR_Y;
     g.add(floor);
 
-    var grid = new THREE.GridHelper(ROOM, 16, 0x2a2a30, 0x1c1c20);
-    grid.position.y = 0.002;
+    var grid = new THREE.GridHelper(FLOOR_SIZE, 32, 0x2a2a30, 0x1a1a1e);
+    grid.position.y = FLOOR_Y + 0.003;
     var gm = grid.material;
     (Array.isArray(gm) ? gm : [gm]).forEach(function (m) {
       m.transparent = true;
-      m.opacity = 0.45;
+      m.opacity = 0.22;
     });
     g.add(grid);
 
-    function wall(w, h, d, x, y, z) {
-      var m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), matWall);
-      m.position.set(x, y, z);
-      g.add(m);
-    }
-    var t = 0.08;
-    var y = WALL_H / 2;
-    wall(ROOM + t, WALL_H, t, 0, y, -ROOM / 2);
-    wall(ROOM + t, WALL_H, t, 0, y, ROOM / 2);
-    wall(t, WALL_H, ROOM, -ROOM / 2, y, 0);
-    wall(t, WALL_H, ROOM, ROOM / 2, y, 0);
-    var ceil = new THREE.Mesh(new THREE.BoxGeometry(ROOM, t, ROOM), matWall);
-    ceil.position.y = WALL_H;
-    g.add(ceil);
+    var back = new THREE.Mesh(new THREE.PlaneGeometry(FLOOR_SIZE, 4.6), mat.depth);
+    back.position.set(0, FLOOR_Y + 2.3, FLOOR_SIZE * 0.48);
+    g.add(back);
 
-    function panel(w, h, x, y0, z, ry) {
-      var m = new THREE.Mesh(new THREE.BoxGeometry(w, h, 0.045), matAbsorber);
-      m.position.set(x, y0, z);
-      m.rotation.y = ry || 0;
-      g.add(m);
-    }
-    panel(1.4, 0.9, -1.6, 1.55, -ROOM / 2 + 0.07);
-    panel(1.4, 0.9, 1.6, 1.55, -ROOM / 2 + 0.07);
-    panel(1.1, 1.2, -ROOM / 2 + 0.07, 1.4, 0.8, Math.PI / 2);
-    panel(1.1, 1.2, ROOM / 2 - 0.07, 1.4, 0.8, Math.PI / 2);
-
-    var dome = new THREE.Mesh(new THREE.SphereGeometry(2.55, 32, 16, 0, Math.PI * 2, 0, Math.PI / 2), matDome);
-    dome.position.y = 0.02;
-    g.add(dome);
-    var domeWire = new THREE.LineSegments(
-      new THREE.WireframeGeometry(new THREE.SphereGeometry(2.56, 16, 8, 0, Math.PI * 2, 0, Math.PI / 2)),
-      new THREE.LineBasicMaterial({ color: 0x4a6a90, transparent: true, opacity: 0.22 })
-    );
-    domeWire.position.y = 0.02;
-    g.add(domeWire);
-
-    var distMat = new THREE.LineBasicMaterial({ color: 0x3a5a80, transparent: true, opacity: 0.28 });
-    [1, 2, 3.2].forEach(function (r) {
-      var pts = new THREE.EllipseCurve(0, 0, r, r, 0, Math.PI * 2, false, 0).getPoints(64).map(function (p) {
-        return new THREE.Vector3(p.x, 0.015, p.y);
-      });
-      g.add(new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints(pts), distMat));
+    var axisMat = new THREE.LineBasicMaterial({
+      color: 0x3a3a42,
+      transparent: true,
+      opacity: 0.35,
     });
+    g.add(
+      new THREE.Line(
+        new THREE.BufferGeometry().setFromPoints([
+          new THREE.Vector3(-2.6, FLOOR_Y + 0.01, 0),
+          new THREE.Vector3(2.6, FLOOR_Y + 0.01, 0),
+        ]),
+        axisMat
+      )
+    );
+    g.add(
+      new THREE.Line(
+        new THREE.BufferGeometry().setFromPoints([
+          new THREE.Vector3(0, FLOOR_Y + 0.01, -2.6),
+          new THREE.Vector3(0, FLOOR_Y + 0.01, 2.6),
+        ]),
+        axisMat
+      )
+    );
+
+    var ringMat = new THREE.MeshBasicMaterial({
+      color: 0x2e2e34,
+      transparent: true,
+      opacity: 0.35,
+      side: THREE.DoubleSide,
+      depthWrite: false,
+    });
+    [1, 2, 3.2].forEach(function (r) {
+      var ring = new THREE.Mesh(geo.ring, ringMat);
+      ring.rotation.x = -Math.PI / 2;
+      ring.position.y = FLOOR_Y + 0.008;
+      ring.scale.setScalar(r);
+      g.add(ring);
+    });
+
+    var front = makeLabelSprite('FRONT', 1.4);
+    front.position.set(0, FLOOR_Y + 0.04, -3.35);
+    var right = makeLabelSprite('RIGHT', 1.2);
+    right.position.set(3.35, FLOOR_Y + 0.04, 0);
+    var left = makeLabelSprite('LEFT', 1.2);
+    left.position.set(-3.35, FLOOR_Y + 0.04, 0);
+    var rear = makeLabelSprite('REAR', 1.2);
+    rear.position.set(0, FLOOR_Y + 0.04, 3.35);
+    g.add(front, right, left, rear);
 
     scene.add(g);
   }
@@ -219,91 +337,118 @@
 
   function makeListenerMesh() {
     var g = new THREE.Group();
-    var head = new THREE.Mesh(new THREE.SphereGeometry(0.11, 20, 16), matListener);
-    head.scale.set(0.92, 1.05, 0.96);
-    head.position.y = 1.18;
-    var earL = new THREE.Mesh(new THREE.SphereGeometry(0.028, 10, 8), matListener);
-    earL.position.set(-0.11, 1.17, 0);
+    var head = new THREE.Mesh(geo.head, mat.listener);
+    head.scale.set(0.9, 1.05, 0.94);
+    var earL = new THREE.Mesh(geo.ear, mat.listener);
+    earL.position.set(-0.12, 0.01, 0);
     var earR = earL.clone();
-    earR.position.x = 0.11;
-    var torso = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.16, 0.42, 16), matListener);
-    torso.position.y = 0.82;
-    g.add(head, earL, earR, torso);
+    earR.position.x = 0.12;
+    var nose = new THREE.Mesh(geo.nose, mat.listener);
+    nose.rotation.x = -Math.PI / 2;
+    nose.position.set(0, -0.01, -0.13);
+    var torso = new THREE.Mesh(geo.torso, mat.listener);
+    torso.position.y = -0.38;
+    var shL = new THREE.Mesh(geo.shoulder, mat.listener);
+    shL.position.set(-0.14, -0.2, 0);
+    var shR = shL.clone();
+    shR.position.x = 0.14;
+    g.add(head, earL, earR, nose, torso, shL, shR);
     g.userData.kind = 'listener';
     return g;
   }
 
   function makeEmitterMesh(obj) {
     var g = new THREE.Group();
-    var body = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.38, 0.2), matSpeaker.clone());
-    var driver = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, 0.018, 22), matDriver);
-    driver.rotation.x = Math.PI / 2;
-    driver.position.z = 0.11;
-    var tweeter = new THREE.Mesh(new THREE.CylinderGeometry(0.028, 0.028, 0.016, 16), matDriver);
+    var body = new THREE.Mesh(geo.cabinet, mat.speaker);
+    var baffle = new THREE.Mesh(geo.baffle, mat.baffle);
+    baffle.position.z = 0.086;
+    var woofer = new THREE.Mesh(geo.woofer, mat.driver);
+    woofer.rotation.x = Math.PI / 2;
+    woofer.position.set(0, -0.04, 0.095);
+    var tweeter = new THREE.Mesh(geo.tweeter, mat.driver);
     tweeter.rotation.x = Math.PI / 2;
-    tweeter.position.set(0, 0.1, 0.108);
-    g.add(body, driver, tweeter);
+    tweeter.position.set(0, 0.08, 0.094);
+    var stand = new THREE.Mesh(geo.stand, mat.speaker);
+    stand.position.y = -0.27;
+    var base = new THREE.Mesh(geo.base, mat.speaker);
+    base.position.y = -0.39;
+    g.add(body, baffle, woofer, tweeter, stand, base);
     g.userData.kind = 'emitter';
     g.userData.body = body;
     g.userData.visualRole = obj && obj.visualRole;
+    var role = (obj && obj.visualRole) || '';
+    if (role) {
+      var tag = makeLabelSprite(String(role), 0.7);
+      tag.position.y = 0.28;
+      tag.visible = false;
+      g.add(tag);
+      g.userData.label = tag;
+    }
     return g;
   }
 
   function makeSourceMesh() {
     var g = new THREE.Group();
-    var mesh = new THREE.Mesh(new THREE.IcosahedronGeometry(0.1, 1), matSource);
+    var core = new THREE.Mesh(geo.sourceCore, mat.sourceCore);
+    var shell = new THREE.Mesh(geo.sourceShell, mat.sourceShell);
+    var field = new THREE.Mesh(geo.sourceField, mat.field);
+    field.rotation.x = Math.PI / 2;
     var hit = new THREE.Mesh(
-      new THREE.SphereGeometry(0.32, 12, 10),
+      geo.sourceHit,
       new THREE.MeshBasicMaterial({ visible: false })
     );
-    g.add(mesh, hit);
+    var stem = new THREE.Mesh(geo.handleStem, mat.handle);
+    stem.position.y = 0.28;
+    var knob = new THREE.Mesh(geo.handleKnob, mat.handle);
+    knob.position.y = 0.46;
+    stem.userData.elevationHandle = true;
+    knob.userData.elevationHandle = true;
+    g.add(core, shell, field, hit, stem, knob);
     g.userData.kind = 'source';
-    g.userData.visual = mesh;
+    g.userData.visual = core;
+    g.userData.elevationHandle = true;
     return g;
   }
 
-  var sourceRing = new THREE.Mesh(
-    new THREE.RingGeometry(0.16, 0.175, 48),
-    new THREE.MeshBasicMaterial({
-      color: 0xffffff,
-      transparent: true,
-      opacity: 0.18,
-      side: THREE.DoubleSide,
-      depthWrite: false,
-    })
+  var contactShadow = new THREE.Mesh(geo.shadow, mat.shadow);
+  contactShadow.rotation.x = -Math.PI / 2;
+  contactShadow.position.y = FLOOR_Y + 0.01;
+  scene.add(contactShadow);
+
+  var selectionHalo = new THREE.Mesh(geo.halo, mat.halo);
+  selectionHalo.rotation.x = -Math.PI / 2;
+  selectionHalo.position.y = FLOOR_Y + 0.012;
+  selectionHalo.visible = false;
+  scene.add(selectionHalo);
+
+  var relationLine = new THREE.Line(
+    new THREE.BufferGeometry().setFromPoints([
+      new THREE.Vector3(),
+      new THREE.Vector3(),
+    ]),
+    mat.relation
   );
-  sourceRing.rotation.x = -Math.PI / 2;
-  scene.add(sourceRing);
+  scene.add(relationLine);
+
+  var dropLine = new THREE.Line(
+    new THREE.BufferGeometry().setFromPoints([
+      new THREE.Vector3(),
+      new THREE.Vector3(),
+    ]),
+    mat.drop
+  );
+  scene.add(dropLine);
 
   var waveGroup = new THREE.Group();
   scene.add(waveGroup);
   var waves = [];
   function makeWave() {
-    var geo = new THREE.RingGeometry(0.2, 0.22, 48);
-    var mat = new THREE.MeshBasicMaterial({
-      color: 0x7aa2c8,
-      transparent: true,
-      opacity: 0,
-      side: THREE.DoubleSide,
-      depthWrite: false,
-    });
-    var mesh = new THREE.Mesh(geo, mat);
-    mesh.rotation.x = -Math.PI / 2;
+    var mesh = new THREE.Mesh(new THREE.RingGeometry(0.18, 0.2, 48), mat.wave.clone());
     mesh.userData.age = 999;
     waveGroup.add(mesh);
     waves.push(mesh);
   }
   for (var wi = 0; wi < 4; wi++) makeWave();
-
-  var trailLine = new THREE.Line(
-    new THREE.BufferGeometry(),
-    new THREE.LineBasicMaterial({ color: 0x0a84ff, transparent: true, opacity: 0.35 })
-  );
-  scene.add(trailLine);
-
-  var selectBox = new THREE.BoxHelper(new THREE.Object3D(), 0x0a84ff);
-  selectBox.visible = false;
-  scene.add(selectBox);
 
   function worldOf(obj) {
     var p = obj.worldPosition || {};
@@ -317,22 +462,45 @@
   }
 
   function decorateSourceVisual(mesh) {
-    if (!mesh) return;
-    sourceRing.position.set(mesh.position.x, 0.03, mesh.position.z);
-    var dist = mesh.position.length();
-    var s = 0.55 + Math.min(1, dist / 4) * 0.5;
-    sourceRing.scale.setScalar(s);
-    matSource.emissiveIntensity = state.active ? 0.22 + state.envelopment * 0.12 : 0.08;
+    if (!mesh) {
+      contactShadow.visible = false;
+      relationLine.visible = false;
+      dropLine.visible = false;
+      return;
+    }
+    contactShadow.visible = true;
+    contactShadow.position.set(mesh.position.x, FLOOR_Y + 0.01, mesh.position.z);
+    var lift = Math.max(0.02, mesh.position.y - FLOOR_Y);
+    var s = 0.7 + Math.min(1.4, lift * 0.18);
+    contactShadow.scale.set(s, s, s);
+    mat.shadow.opacity = 0.32 / (1 + lift * 0.35);
+    mat.sourceCore.emissiveIntensity = state.active ? 0.36 + state.envelopment * 0.16 : 0.12;
+
+    var ear = listener ? listener.position : new THREE.Vector3();
+    relationLine.visible = true;
+    relationLine.geometry.dispose();
+    relationLine.geometry = new THREE.BufferGeometry().setFromPoints([
+      ear.clone(),
+      mesh.position.clone(),
+    ]);
+
+    dropLine.visible = true;
+    dropLine.geometry.dispose();
+    dropLine.geometry = new THREE.BufferGeometry().setFromPoints([
+      mesh.position.clone(),
+      new THREE.Vector3(mesh.position.x, FLOOR_Y + 0.02, mesh.position.z),
+    ]);
+    dropLine.computeLineDistances();
   }
 
   function formatPose() {
+    var el = document.getElementById('pose');
     if (!source) {
-      document.getElementById('pose').innerHTML =
-        '<span>Az</span>—  <span>El</span>—  <span>Dist</span>—';
+      el.innerHTML = '<span>Az</span>—  <span>El</span>—  <span>Dist</span>—';
       return;
     }
     var pose = xyzToPose(source.position);
-    document.getElementById('pose').innerHTML =
+    el.innerHTML =
       '<span>Az</span>' +
       Math.round(pose.azimuth) +
       '°  <span>El</span>' +
@@ -346,19 +514,24 @@
     var el = document.getElementById('sel');
     if (!mesh) {
       el.style.display = 'none';
-      selectBox.visible = false;
+      selectionHalo.visible = false;
       return;
     }
     var kind = mesh.userData.kind;
     var pose = xyzToPose(mesh.position);
     var xyz = mesh.position;
-    var title = mesh.userData.id || kind;
+    var title =
+      kind === 'source'
+        ? 'SOURCE'
+        : kind === 'listener'
+          ? 'LISTENER'
+          : String(mesh.userData.visualRole || mesh.userData.id || 'EMITTER').toUpperCase();
     var note =
       kind === 'emitter'
         ? 'visual layout · not acoustic Array'
         : kind === 'source'
           ? 'Point source · Flutter owns scene'
-          : 'listener';
+          : 'listener-0';
     el.style.display = 'block';
     el.innerHTML =
       '<div class="ch">' +
@@ -366,22 +539,25 @@
       '</div><div class="muted">' +
       note +
       '</div>' +
-      '<div>Az ' +
+      '<div>X ' +
+      xyz.x.toFixed(2) +
+      ' m &nbsp; Y ' +
+      xyz.y.toFixed(2) +
+      ' m &nbsp; Z ' +
+      xyz.z.toFixed(2) +
+      ' m</div>' +
+      '<div class="muted">Az ' +
       Math.round(pose.azimuth) +
       '° · El ' +
       Math.round(pose.elevation) +
-      '° · ' +
+      '° · Dist ' +
       pose.distance.toFixed(2) +
-      ' m</div>' +
-      '<div class="muted">XYZ ' +
-      xyz.x.toFixed(2) +
-      '  ' +
-      xyz.y.toFixed(2) +
-      '  ' +
-      xyz.z.toFixed(2) +
-      '</div>';
-    selectBox.setFromObject(mesh);
-    selectBox.visible = true;
+      ' m</div>';
+    selectionHalo.visible = true;
+    selectionHalo.position.set(mesh.position.x, FLOOR_Y + 0.014, mesh.position.z);
+    var hs = kind === 'source' ? 1.15 : kind === 'listener' ? 1.35 : 0.85;
+    selectionHalo.scale.setScalar(hs);
+    mat.halo.opacity = 0.55;
     needsRender = true;
   }
 
@@ -406,6 +582,10 @@
     if (mesh.userData.kind === 'emitter') {
       mesh.lookAt(new THREE.Vector3(0, mesh.position.y, 0));
       mesh.userData.visualRole = obj.visualRole;
+      if (mesh.userData.label) {
+        mesh.userData.label.visible =
+          selectedObjectId === obj.id || hoveredObjectId === obj.id;
+      }
     }
     if (mesh.userData.kind === 'source') {
       source = mesh;
@@ -487,6 +667,9 @@
 
   function postSourceIntent(type, force) {
     if (!source) return;
+    if (!isFinite(source.position.x) || !isFinite(source.position.y) || !isFinite(source.position.z)) {
+      return;
+    }
     var now = performance.now();
     if (!force && type === 'sourcePosePreview' && now - lastPosePost < POSE_MS) return;
     lastPosePost = now;
@@ -509,7 +692,8 @@
   var orbitingCam = false;
   var panningCam = false;
   var lastPtr = { x: 0, y: 0 };
-  var camEnabled = true;
+  var _dir = new THREE.Vector3();
+  var _right = new THREE.Vector3();
 
   function ndcFromEvent(ev) {
     var r = renderer.domElement.getBoundingClientRect();
@@ -523,6 +707,19 @@
     });
   }
 
+  function resolveHit(object) {
+    var obj = object;
+    var elevation = false;
+    while (obj) {
+      if (obj.userData && obj.userData.elevationHandle) elevation = true;
+      if (obj.userData && obj.userData.kind) {
+        return { mesh: obj, elevationHandle: elevation };
+      }
+      obj = obj.parent;
+    }
+    return null;
+  }
+
   function pick(ev) {
     ndcFromEvent(ev);
     raycaster.setFromCamera(pointer, camera);
@@ -530,13 +727,24 @@
     if (!hits.length) return null;
     var first = null;
     for (var i = 0; i < hits.length; i++) {
-      var obj = hits[i].object;
-      while (obj && !obj.userData.kind) obj = obj.parent;
-      if (!obj) continue;
-      if (!first) first = obj;
-      if (obj.userData.kind === 'source') return obj;
+      var resolved = resolveHit(hits[i].object);
+      if (!resolved) continue;
+      if (!first) first = resolved;
+      if (resolved.mesh.userData.kind === 'source') return resolved;
     }
     return first;
+  }
+
+  function selectResolved(resolved) {
+    if (!resolved) {
+      selectedObjectId = null;
+      postToHost({ type: 'selectObject', objectId: null });
+      showSelectionHud(null);
+      return;
+    }
+    selectedObjectId = resolved.mesh.userData.id;
+    postToHost({ type: 'selectObject', objectId: selectedObjectId });
+    showSelectionHud(resolved.mesh);
   }
 
   renderer.domElement.addEventListener('contextmenu', function (e) {
@@ -547,21 +755,29 @@
     ndcFromEvent(e);
     lastPtr.x = e.clientX;
     lastPtr.y = e.clientY;
-    var obj = pick(e);
-    if (e.button === 0 && obj && obj.userData.kind === 'source') {
-      dragging = { kind: 'source', objectId: obj.userData.id };
-      dragPlane.setFromNormalAndCoplanarPoint(new THREE.Vector3(0, 1, 0), obj.position);
-      selectedObjectId = obj.userData.id;
-      postToHost({ type: 'selectObject', objectId: obj.userData.id });
-      showSelectionHud(obj);
+    var resolved = pick(e);
+    if (e.button === 0 && resolved && resolved.mesh.userData.kind === 'source') {
+      dragging = {
+        kind: 'source',
+        objectId: resolved.mesh.userData.id,
+        mode: resolved.elevationHandle || e.shiftKey ? 'y' : 'xz',
+      };
+      if (dragging.mode === 'y') {
+        camera.getWorldDirection(_dir);
+        _right.crossVectors(_dir, camera.up).normalize();
+        dragPlane.setFromNormalAndCoplanarPoint(_right, resolved.mesh.position);
+      } else {
+        dragPlane.setFromNormalAndCoplanarPoint(
+          new THREE.Vector3(0, 1, 0),
+          resolved.mesh.position
+        );
+      }
+      selectResolved(resolved);
       renderer.domElement.setPointerCapture(e.pointerId);
       return;
     }
-    if (e.button === 0 && obj && obj.userData.kind === 'emitter') {
-      // Visual-only until Phase 3. Selection is UI state, not SceneContract.
-      selectedObjectId = obj.userData.id;
-      postToHost({ type: 'selectObject', objectId: obj.userData.id });
-      showSelectionHud(obj);
+    if (e.button === 0 && resolved && resolved.mesh.userData.kind === 'emitter') {
+      selectResolved(resolved);
       renderer.domElement.setPointerCapture(e.pointerId);
       return;
     }
@@ -570,15 +786,7 @@
     } else if (e.button === 0 && viewMode === 'free') {
       orbitingCam = true;
     }
-    if (obj && obj.userData.id) {
-      selectedObjectId = obj.userData.id;
-      postToHost({ type: 'selectObject', objectId: obj.userData.id });
-      showSelectionHud(obj);
-    } else if (!obj) {
-      selectedObjectId = null;
-      postToHost({ type: 'selectObject', objectId: null });
-      showSelectionHud(null);
-    }
+    selectResolved(resolved);
     renderer.domElement.setPointerCapture(e.pointerId);
   });
 
@@ -590,39 +798,57 @@
     if (dragging && dragging.kind === 'source' && source) {
       ndcFromEvent(e);
       raycaster.setFromCamera(pointer, camera);
-      if (e.shiftKey) {
-        dragPlane.setFromNormalAndCoplanarPoint(
-          camera.getWorldDirection(new THREE.Vector3()).cross(camera.up).normalize().cross(camera.up).normalize(),
-          source.position
-        );
+      if (e.shiftKey) dragging.mode = 'y';
+      if (dragging.mode === 'y') {
+        camera.getWorldDirection(_dir);
+        _right.crossVectors(_dir, camera.up).normalize();
+        dragPlane.setFromNormalAndCoplanarPoint(_right, source.position);
       }
       if (raycaster.ray.intersectPlane(dragPlane, dragHit)) {
-        dragHit.x = THREE.MathUtils.clamp(dragHit.x, -ROOM * 0.42, ROOM * 0.42);
-        dragHit.z = THREE.MathUtils.clamp(dragHit.z, -ROOM * 0.42, ROOM * 0.42);
-        dragHit.y = THREE.MathUtils.clamp(dragHit.y, 0.12, WALL_H - 0.3);
-        source.position.copy(dragHit);
+        if (dragging.mode === 'y') {
+          source.position.y = dragHit.y;
+        } else {
+          source.position.x = dragHit.x;
+          source.position.z = dragHit.z;
+        }
         decorateSourceVisual(source);
         formatPose();
+        showSelectionHud(source);
         postSourceIntent('sourcePosePreview', false);
         needsRender = true;
       }
       return;
     }
-    if (orbitingCam && camEnabled && viewMode === 'free') {
-      camSph.theta -= dx * 0.005;
-      camSph.phi = THREE.MathUtils.clamp(camSph.phi + dy * 0.005, 0.12, Math.PI - 0.18);
-      placeCamera();
+    if (!dragging) {
+      var hover = pick(e);
+      var nextHover = hover ? hover.mesh.userData.id : null;
+      if (nextHover !== hoveredObjectId) {
+        hoveredObjectId = nextHover;
+        Object.keys(objectsById).forEach(function (id) {
+          var mesh = objectsById[id];
+          if (mesh.userData.label) {
+            mesh.userData.label.visible =
+              selectedObjectId === id || hoveredObjectId === id;
+          }
+        });
+        renderer.domElement.style.cursor = hover ? 'pointer' : 'default';
+        needsRender = true;
+      }
+    }
+    if (orbitingCam && viewMode === 'free') {
+      camSphGoal.theta -= dx * 0.005;
+      camSphGoal.phi = THREE.MathUtils.clamp(
+        camSphGoal.phi + dy * 0.005,
+        0.12,
+        Math.PI - 0.18
+      );
       needsRender = true;
     }
-    if (panningCam && camEnabled) {
-      var pan = new THREE.Vector3();
-      var right = new THREE.Vector3();
-      camera.getWorldDirection(pan);
-      right.crossVectors(pan, camera.up).normalize();
-      var up = camera.up.clone().normalize();
-      camTarget.addScaledVector(right, -dx * 0.004 * camSph.radius);
-      camTarget.addScaledVector(up, dy * 0.004 * camSph.radius);
-      placeCamera();
+    if (panningCam) {
+      camera.getWorldDirection(_dir);
+      _right.crossVectors(_dir, camera.up).normalize();
+      camTargetGoal.addScaledVector(_right, -dx * 0.004 * camSphGoal.radius);
+      camTargetGoal.addScaledVector(camera.up, dy * 0.004 * camSphGoal.radius);
       needsRender = true;
     }
   });
@@ -642,7 +868,7 @@
       e.preventDefault();
       if (dragging && dragging.kind === 'source' && source) {
         var len = Math.max(1e-6, source.position.length());
-        var next = THREE.MathUtils.clamp(len + (e.deltaY > 0 ? 0.12 : -0.12), 0.12, 8);
+        var next = Math.max(0.05, len + (e.deltaY > 0 ? 0.12 : -0.12));
         source.position.setLength(next);
         decorateSourceVisual(source);
         formatPose();
@@ -650,26 +876,57 @@
         needsRender = true;
         return;
       }
-      camSph.radius = THREE.MathUtils.clamp(camSph.radius * (e.deltaY > 0 ? 1.07 : 0.93), 1.6, 12);
-      placeCamera();
+      camSphGoal.radius = THREE.MathUtils.clamp(
+        camSphGoal.radius * (e.deltaY > 0 ? 1.07 : 0.93),
+        1.4,
+        80
+      );
       needsRender = true;
     },
     { passive: false }
   );
 
   var VIEW = {
-    free: { radius: 5.4, phi: 1.12, theta: -0.55, target: new THREE.Vector3(0, 0.55, 0) },
-    top: { radius: 6.2, phi: 0.08, theta: 0, target: new THREE.Vector3(0, 0, 0) },
-    front: { radius: 5.6, phi: 1.35, theta: 0, target: new THREE.Vector3(0, 0.7, 0) },
-    listener: { radius: 1.15, phi: 1.45, theta: Math.PI, target: new THREE.Vector3(0, 1.12, 0) },
+    free: { radius: 5.4, phi: 1.28, theta: -0.58, target: new THREE.Vector3(0, 0.18, -0.35) },
+    top: { radius: 8.4, phi: 0.12, theta: 0, target: new THREE.Vector3(0, 0, 0) },
+    front: { radius: 5.8, phi: 1.48, theta: 0, target: new THREE.Vector3(0, 0.2, 0) },
+    listener: { radius: 1.35, phi: 1.48, theta: 0, target: new THREE.Vector3(0, 0.08, -1.6) },
   };
 
+  function fitCamera() {
+    var box = new THREE.Box3();
+    var has = false;
+    Object.keys(objectsById).forEach(function (id) {
+      box.expandByObject(objectsById[id]);
+      has = true;
+    });
+    if (!has) return VIEW.free;
+    var size = box.getSize(new THREE.Vector3());
+    var center = box.getCenter(new THREE.Vector3());
+    return {
+      radius: THREE.MathUtils.clamp(size.length() * 0.72, 3.4, 18),
+      phi: 1.26,
+      theta: -0.48,
+      target: center,
+    };
+  }
+
+  function listenerView() {
+    var origin = listener ? listener.position.clone() : new THREE.Vector3();
+    return {
+      radius: 1.45,
+      phi: 1.48,
+      theta: 0,
+      target: origin.clone().add(new THREE.Vector3(0, 0.06, -1.8)),
+    };
+  }
+
   function setView(name) {
-    viewMode = name;
-    var v = VIEW[name] || VIEW.free;
+    viewMode = name === 'fit' ? 'free' : name;
+    var v = name === 'fit' ? fitCamera() : name === 'listener' ? listenerView() : VIEW[name] || VIEW.free;
     viewTween = {
       t0: performance.now(),
-      dur: 380,
+      dur: 420,
       fromR: camSph.radius,
       fromP: camSph.phi,
       fromT: camSph.theta,
@@ -694,10 +951,10 @@
   function spawnWave() {
     if (!source) return;
     for (var i = 0; i < waves.length; i++) {
-      if (waves[i].userData.age > 1.35) {
+      if (waves[i].userData.age > 1.4) {
         waves[i].userData.age = 0;
         waves[i].position.copy(source.position);
-        waves[i].position.y = Math.max(0.05, source.position.y);
+        waves[i].lookAt(listener ? listener.position : new THREE.Vector3());
         return;
       }
     }
@@ -708,68 +965,62 @@
     waveGroup.visible = live;
     if (!live) return;
     waveAcc += dt;
-    var interval = 0.72 - state.envelopment * 0.18;
-    if (waveAcc >= interval) {
+    if (waveAcc >= 0.78 - state.envelopment * 0.16) {
       waveAcc = 0;
       spawnWave();
     }
-    var spread = 0.9 + state.envelopment * 1.4;
-    var dist = source ? source.position.length() : 1;
     waves.forEach(function (w) {
       w.userData.age += dt;
-      var t = w.userData.age / 1.4;
+      var t = w.userData.age / 1.45;
       if (t >= 1) {
         w.material.opacity = 0;
         return;
       }
-      var sc = 0.25 + t * (1.1 + dist * 0.15) * spread;
+      var sc = 0.35 + t * (1.4 + state.envelopment);
       w.scale.set(sc, sc, sc);
-      w.material.opacity = (1 - t) * 0.28;
+      w.material.opacity = (1 - t) * 0.18;
     });
   }
 
-  function updateTrail() {
-    if (!source || !state.orbiting || !state.playing) {
-      if (trail.length) {
-        trail = [];
-        trailLine.geometry.dispose();
-        trailLine.geometry = new THREE.BufferGeometry();
-      }
-      return;
-    }
-    trail.push(source.position.clone());
-    if (trail.length > 48) trail.shift();
-    trailLine.geometry.dispose();
-    trailLine.geometry = new THREE.BufferGeometry().setFromPoints(trail);
-  }
-
   var lastT = performance.now();
-  var frame = 0;
   function tick(now) {
     requestAnimationFrame(tick);
     var dt = Math.min(0.05, (now - lastT) / 1000);
     lastT = now;
-    frame++;
 
     if (viewTween) {
       var k = Math.min(1, (now - viewTween.t0) / viewTween.dur);
-      var e = 1 - Math.pow(1 - k, 3);
-      camSph.radius = viewTween.fromR + (viewTween.toR - viewTween.fromR) * e;
-      camSph.phi = viewTween.fromP + (viewTween.toP - viewTween.fromP) * e;
-      camSph.theta = viewTween.fromT + (viewTween.toT - viewTween.fromT) * e;
-      camTarget.lerpVectors(viewTween.fromTarget, viewTween.toTarget, e);
-      placeCamera();
-      needsRender = true;
+      var ease = 1 - Math.pow(1 - k, 3);
+      camSphGoal.radius = viewTween.fromR + (viewTween.toR - viewTween.fromR) * ease;
+      camSphGoal.phi = viewTween.fromP + (viewTween.toP - viewTween.fromP) * ease;
+      camSphGoal.theta = viewTween.fromT + (viewTween.toT - viewTween.fromT) * ease;
+      camTargetGoal.lerpVectors(viewTween.fromTarget, viewTween.toTarget, ease);
       if (k >= 1) viewTween = null;
+      needsRender = true;
     }
 
-    var animate = (state.playing && state.active) || state.orbiting || dragging;
+    var damp = 1 - Math.pow(1 - camDamp, dt * 60);
+    if (
+      Math.abs(camSph.radius - camSphGoal.radius) > 1e-4 ||
+      Math.abs(camSph.phi - camSphGoal.phi) > 1e-4 ||
+      Math.abs(camSph.theta - camSphGoal.theta) > 1e-4 ||
+      camTarget.distanceToSquared(camTargetGoal) > 1e-6
+    ) {
+      camSph.radius += (camSphGoal.radius - camSph.radius) * damp;
+      camSph.phi += (camSphGoal.phi - camSph.phi) * damp;
+      camSph.theta += (camSphGoal.theta - camSph.theta) * damp;
+      camTarget.lerp(camTargetGoal, damp);
+      placeCamera();
+      needsRender = true;
+    }
+
+    var animate = (state.playing && state.active) || dragging;
     if (animate) {
-      if (frame % 3 === 0) {
-        updateWaves(dt * 3);
-        updateTrail();
+      updateWaves(dt);
+      if (source) {
+        mat.sourceCore.emissiveIntensity =
+          0.34 + 0.12 * Math.sin(now * 0.004) + state.envelopment * 0.1;
       }
-      if (source) source.rotation.y += dt * 0.4;
       needsRender = true;
     } else if (waveGroup.visible) {
       waveGroup.visible = false;
@@ -799,4 +1050,42 @@
     width: window.innerWidth,
     height: window.innerHeight,
   });
+
+  if (!(window.chrome && window.chrome.webview)) {
+    setTimeout(function () {
+      if (authoritativeRevision !== 0) return;
+      applySceneSnapshot({
+        type: 'sceneSnapshot',
+        schemaVersion: 1,
+        revision: 1,
+        scene: {
+          schemaVersion: 1,
+          revision: 1,
+          listener: {
+            id: 'listener-0',
+            type: 'listener',
+            worldPosition: { x: 0, y: 0, z: 0 },
+            orientation: { w: 1, x: 0, y: 0, z: 0 },
+          },
+          sources: [
+            {
+              id: 'source-main',
+              type: 'source',
+              worldPosition: { x: 0.85, y: 0.35, z: -1.7 },
+            },
+          ],
+          emitters: [
+            { id: 'emitter-FL', type: 'emitter', visualRole: 'FL', worldPosition: { x: -1.2, y: 0, z: -2.1 } },
+            { id: 'emitter-FR', type: 'emitter', visualRole: 'FR', worldPosition: { x: 1.2, y: 0, z: -2.1 } },
+            { id: 'emitter-C', type: 'emitter', visualRole: 'C', worldPosition: { x: 0, y: 0, z: -2.4 } },
+            { id: 'emitter-LFE', type: 'emitter', visualRole: 'LFE', worldPosition: { x: -0.5, y: -0.35, z: -1.6 } },
+            { id: 'emitter-SL', type: 'emitter', visualRole: 'SL', worldPosition: { x: -2.0, y: 0, z: 0 } },
+            { id: 'emitter-SR', type: 'emitter', visualRole: 'SR', worldPosition: { x: 2.0, y: 0, z: 0 } },
+            { id: 'emitter-RL', type: 'emitter', visualRole: 'RL', worldPosition: { x: -1.2, y: 0, z: 2.1 } },
+            { id: 'emitter-RR', type: 'emitter', visualRole: 'RR', worldPosition: { x: 1.2, y: 0, z: 2.1 } },
+          ],
+        },
+      });
+    }, 40);
+  }
 })();

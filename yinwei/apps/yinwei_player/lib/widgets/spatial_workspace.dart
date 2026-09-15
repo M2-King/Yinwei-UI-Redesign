@@ -297,8 +297,9 @@ window.YinweiPose = {
 
   @override
   Widget build(BuildContext context) {
+    final Widget viewport;
     if (!_useWebView) {
-      return OrbitVisualizer(
+      viewport = OrbitVisualizer(
         playhead: widget.playhead,
         azimuthDeg: widget.azimuthDeg,
         elevationDeg: widget.elevationDeg,
@@ -316,26 +317,47 @@ window.YinweiPose = {
         onSpeakerAdd: widget.onSpeakerAdd,
         matrixLinked: widget.matrixLinked,
       );
+    } else {
+      final web = _web;
+      viewport = web == null
+          ? const ColoredBox(
+              color: YinweiColors.background,
+              child: Center(
+                child: SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(strokeWidth: 1.6),
+                ),
+              ),
+            )
+          : ColoredBox(
+              color: YinweiColors.background,
+              child: Webview(web),
+            );
     }
-    final web = _web;
-    if (web == null) {
-      return const ColoredBox(
-        color: YinweiColors.background,
-        child: Center(
-          child: SizedBox(
-            width: 18,
-            height: 18,
-            child: CircularProgressIndicator(strokeWidth: 1.6),
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const Padding(
+          padding: EdgeInsets.fromLTRB(6, 0, 6, 8),
+          child: Text(
+            'SPATIAL WORKSPACE',
+            style: TextStyle(
+              color: YinweiColors.textSecondary,
+              fontSize: 11,
+              letterSpacing: 1.2,
+              fontWeight: FontWeight.w600,
+            ),
           ),
         ),
-      );
-    }
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(16),
-      child: ColoredBox(
-        color: YinweiColors.background,
-        child: Webview(web),
-      ),
+        Expanded(
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(18),
+            child: viewport,
+          ),
+        ),
+      ],
     );
   }
 }
