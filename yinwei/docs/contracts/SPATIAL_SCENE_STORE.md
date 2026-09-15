@@ -21,4 +21,4 @@ That reported `0` is **not** an accepted revision. An empty store has no authori
 
 The snapshot is a deep copy. Consumers must not treat it as engine state or UI state.
 
-Phase 1B does **not** wire the store into `PlayerScreen` or `EngineController`.
+Phase 1C Point-mode live adoption is owned by `SpatialRuntimeAdapter`: it applies revisioned snapshots here, projects with Dart `AudioProjectionV1`, then feeds the existing `EngineController.setParams` path. Array mode remains on the legacy engine path. This store still does not call FFI or `EngineApi`.

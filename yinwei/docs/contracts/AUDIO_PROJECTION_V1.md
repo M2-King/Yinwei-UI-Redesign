@@ -2,7 +2,7 @@
 
 Pure function from a `SceneContractV1` snapshot plus **outside-the-scene** binding config to current-engine-compatible spatial values.
 
-It does **not** call `EngineController`, FFI, WebView, or UI.
+It does **not** call `EngineController`, FFI, WebView, or UI. Phase 1C live Point-mode adoption invokes this Dart projection from `SpatialRuntimeAdapter` before the existing engine write path.
 
 ```
 Scene snapshot + AudioProjectionConfigV1

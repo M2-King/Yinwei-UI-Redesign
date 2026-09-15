@@ -11,6 +11,7 @@ import 'package:yinwei_player/bridge/live_source_follow.dart';
 import 'package:yinwei_player/bridge/live_transfer.dart';
 import 'package:yinwei_player/bridge/system_media.dart';
 import 'package:yinwei_player/models/spatial_params.dart';
+import 'package:yinwei_player/runtime/spatial_runtime_adapter.dart';
 import 'package:yinwei_player/state/engine_controller.dart';
 import 'package:yinwei_player/state/island_now_playing.dart';
 import 'package:yinwei_player/state/window_mode_controller.dart';
@@ -43,6 +44,7 @@ class PlayerScreen extends StatefulWidget {
 
 class _PlayerScreenState extends State<PlayerScreen> {
   late final EngineController _ctrl;
+  late final SpatialRuntimeAdapter _spatial;
   late final WindowModeController _window;
   late final SystemMediaService _smtc;
   late final LiveTransferController _live;
@@ -85,6 +87,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
       _backend = boot.backend;
       _ctrl = EngineController(engine: boot.api, backendLabel: boot.detail);
     }
+    _spatial = SpatialRuntimeAdapter();
+    _spatial.bootstrap(_ctrl.params);
     _ctrl.addListener(_onChange);
     _window.addListener(_onWindowMode);
     _smtc.addListener(_onSmtcChange);
@@ -350,10 +354,13 @@ class _PlayerScreenState extends State<PlayerScreen> {
   }
 
   void _applySpatialFromUi(SpatialParams next) {
+    final adopted = _spatial.adoptPointParams(next);
+    if (!adopted.shouldWriteEngine) return;
+    final engineParams = adopted.engineParams!;
     if (_live.running) {
-      _live.applyLiveParams(next);
+      _live.applyLiveParams(engineParams);
     }
-    _ctrl.setParams(next);
+    _ctrl.setParams(engineParams);
   }
 
   void _applyArrayFromUi(ArrayLayout next) {
@@ -600,11 +607,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
                           }());
                         },
                         onPresetSelected: (p) {
-                          if (_live.running) {
-                            final next = c.params.copy()..applyPreset(p);
-                            _live.applyLiveParams(next);
-                          }
-                          c.applyPreset(p);
+                          final next = c.params.copy()..applyPreset(p);
+                          _applySpatialFromUi(next);
                         },
                         onOpenEq: () => setState(() => _eqOpen = true),
                         onExport: _onExport,
