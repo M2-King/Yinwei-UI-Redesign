@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 /// Mirrors `spatial_core::SpatialParams` / presets — keep in sync with Rust.
 
 enum PlaybackMode { original, spatial }
@@ -80,10 +82,10 @@ class SpatialParams {
   SpatialParams({
     this.azimuthDeg = 90,
     this.elevationDeg = -10,
-    this.distanceM = 2.1,
+    this.distanceM = 1.8,
     this.motion = MotionMode.fixed,
     this.orbitHz = 0.4,
-    this.envelopment = 0.6,
+    this.envelopment = 0.45,
     this.reverbMix = 0.2,
     this.selectedPreset = PositionPreset.right,
     List<double>? eqDb,
@@ -147,7 +149,7 @@ class SpatialParams {
 
 enum ArrayMode { off, stereo2 }
 
-enum SpeakerFeed { left, right }
+enum SpeakerFeed { left, right, mid }
 
 class ArraySpeaker {
   ArraySpeaker({
@@ -174,6 +176,8 @@ class ArraySpeaker {
         return 0;
       case SpeakerFeed.right:
         return 1;
+      case SpeakerFeed.mid:
+        return 2;
     }
   }
 
@@ -193,12 +197,28 @@ class ArrayLayout {
   ArrayLayout({
     this.mode = ArrayMode.off,
     this.selectedIndex = 0,
+    this.matrixLinked = false,
+    this.matrixSpread = 1,
     List<ArraySpeaker>? speakers,
-  }) : speakers = speakers ?? stereo2Speakers();
+    List<ArraySpeaker>? matrixRest,
+  })  : speakers = speakers ?? stereo2Speakers(),
+        matrixRest = matrixRest;
 
   ArrayMode mode;
   int selectedIndex;
   List<ArraySpeaker> speakers;
+
+  /// When true, distance/pose edits move the whole cluster (集成式).
+  bool matrixLinked;
+
+  /// 1 = rest width; <1 合并; >1 散开.
+  double matrixSpread;
+
+  /// Pose snapshot at link / last rebase. Spread is applied from this.
+  List<ArraySpeaker>? matrixRest;
+
+  static const matrixSpreadMin = 0.12;
+  static const matrixSpreadMax = 2.6;
 
   bool get enabled => mode != ArrayMode.off;
 
@@ -251,14 +271,174 @@ class ArrayLayout {
   ArrayLayout copy() => ArrayLayout(
         mode: mode,
         selectedIndex: selectedIndex,
+        matrixLinked: matrixLinked,
+        matrixSpread: matrixSpread,
         speakers: speakers.map((s) => s.copy()).toList(),
+        matrixRest: matrixRest?.map((s) => s.copy()).toList(),
       );
+
+  static const maxSpeakers = 8;
+
+  bool get canAddSpeaker => enabled && speakers.length < maxSpeakers;
+
+  bool get canRemoveSelected =>
+      enabled && selectedIndex >= 2 && speakers.length > 2;
+
+  void addSpeaker({
+    double azimuthDeg = 0,
+    double elevationDeg = 0,
+    double distanceM = 1.8,
+  }) {
+    if (speakers.length >= maxSpeakers) return;
+    speakers.add(ArraySpeaker(
+      label: '${speakers.length + 1}',
+      azimuthDeg: azimuthDeg,
+      elevationDeg: elevationDeg,
+      distanceM: distanceM,
+      feed: SpeakerFeed.mid,
+    ));
+    selectedIndex = speakers.length - 1;
+    if (matrixLinked) captureMatrixRest();
+  }
+
+  void removeSelected() {
+    if (!canRemoveSelected) return;
+    speakers.removeAt(selectedIndex);
+    selectedIndex = selectedIndex.clamp(0, speakers.length - 1).toInt();
+    if (matrixLinked) captureMatrixRest();
+  }
 
   void applyStereo2Preset() {
     mode = ArrayMode.stereo2;
     speakers = stereo2Speakers();
     selectedIndex = 0;
+    matrixLinked = false;
+    matrixSpread = 1;
+    matrixRest = null;
   }
+
+  void captureMatrixRest() {
+    matrixRest = speakers.map((s) => s.copy()).toList();
+    matrixSpread = 1;
+  }
+
+  void setMatrixLinked(bool on) {
+    matrixLinked = on;
+    if (!on) {
+      matrixRest = null;
+      matrixSpread = 1;
+      return;
+    }
+    if (speakers.isEmpty) return;
+    var mean = 0.0;
+    for (final s in speakers) {
+      mean += s.distanceM;
+    }
+    mean = (mean / speakers.length).clamp(0.5, 10.0);
+    for (final s in speakers) {
+      s.distanceM = mean;
+    }
+    captureMatrixRest();
+  }
+
+  void setAllDistance(double meters) {
+    final d = meters.clamp(0.5, 10.0);
+    for (final s in speakers) {
+      s.distanceM = d;
+    }
+    if (matrixRest != null) {
+      for (final s in matrixRest!) {
+        s.distanceM = d;
+      }
+    }
+  }
+
+  void applyGroupDelta({
+    required double azimuthDeltaDeg,
+    required double elevationDeltaDeg,
+  }) {
+    for (final s in speakers) {
+      s.azimuthDeg = _wrapAz(s.azimuthDeg + azimuthDeltaDeg);
+      s.elevationDeg = (s.elevationDeg + elevationDeltaDeg).clamp(-90.0, 90.0);
+    }
+    if (matrixRest != null) {
+      for (final s in matrixRest!) {
+        s.azimuthDeg = _wrapAz(s.azimuthDeg + azimuthDeltaDeg);
+        s.elevationDeg =
+            (s.elevationDeg + elevationDeltaDeg).clamp(-90.0, 90.0);
+      }
+    }
+  }
+
+  void moveSelectedInGroup({double? azimuthDeg, double? elevationDeg}) {
+    if (speakers.isEmpty) return;
+    final i = selectedIndex.clamp(0, speakers.length - 1).toInt();
+    final s = speakers[i];
+    applyGroupDelta(
+      azimuthDeltaDeg: azimuthDeg == null
+          ? 0
+          : _shortestDeg(s.azimuthDeg, azimuthDeg),
+      elevationDeltaDeg:
+          elevationDeg == null ? 0 : elevationDeg - s.elevationDeg,
+    );
+  }
+
+  /// Scale angular offsets around the rest centroid. 1 keeps current width.
+  void setMatrixSpread(double spread) {
+    matrixSpread = spread.clamp(matrixSpreadMin, matrixSpreadMax);
+    final rest = matrixRest;
+    if (rest == null || rest.length != speakers.length || rest.isEmpty) {
+      captureMatrixRest();
+      return;
+    }
+    final cAz = _circularMeanDeg(rest.map((s) => s.azimuthDeg).toList());
+    var cEl = 0.0;
+    for (final s in rest) {
+      cEl += s.elevationDeg;
+    }
+    cEl /= rest.length;
+    for (var i = 0; i < speakers.length; i++) {
+      final r = rest[i];
+      speakers[i].azimuthDeg =
+          _wrapAz(cAz + _shortestDeg(cAz, r.azimuthDeg) * matrixSpread);
+      speakers[i].elevationDeg =
+          (cEl + (r.elevationDeg - cEl) * matrixSpread).clamp(-90.0, 90.0);
+    }
+  }
+}
+
+double _wrapAz(double az) {
+  var a = az;
+  while (a > 180) {
+    a -= 360;
+  }
+  while (a <= -180) {
+    a += 360;
+  }
+  return a;
+}
+
+double _shortestDeg(double from, double to) {
+  var d = to - from;
+  while (d > 180) {
+    d -= 360;
+  }
+  while (d <= -180) {
+    d += 360;
+  }
+  return d;
+}
+
+double _circularMeanDeg(List<double> az) {
+  var x = 0.0;
+  var y = 0.0;
+  for (final a in az) {
+    final r = a * math.pi / 180;
+    x += math.cos(r);
+    y += math.sin(r);
+  }
+  if (x == 0 && y == 0) return 0;
+  return math.atan2(y, x) * 180 / math.pi;
 }
 
 class TrackMeta {

@@ -39,10 +39,10 @@ pub struct SpatialParams {
 pub const DEFAULT_PARAMS: SpatialParams = SpatialParams {
     azimuth_deg: 90.0,
     elevation_deg: -10.0,
-    distance_m: 2.1,
+    distance_m: 1.8,
     motion: MotionMode::Fixed,
     orbit_hz: 0.4,
-    envelopment: 0.6,
+    envelopment: 0.45,
     reverb_mix: 0.2,
     selected_preset: Some(PositionPreset::Right),
 };

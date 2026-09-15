@@ -158,13 +158,14 @@ void main() {
                 selectedSpeakerIndex: 0,
                 onSpeakerPoseChanged: (_, __, ___) {},
                 onSpeakerSelected: (_) {},
+                onSpeakerAdd: (_, __, ___) {},
               ),
             ),
           ),
         ),
       ),
     );
-    expect(find.textContaining('拖动音箱'), findsOneWidget);
+    expect(find.textContaining('点击空白加点'), findsOneWidget);
     expect(find.textContaining('5.1'), findsNothing);
     expect(tester.takeException(), isNull);
   });

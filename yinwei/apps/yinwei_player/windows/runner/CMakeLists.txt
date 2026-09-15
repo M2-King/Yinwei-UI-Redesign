@@ -38,3 +38,13 @@ target_include_directories(${BINARY_NAME} PRIVATE "${CMAKE_SOURCE_DIR}")
 
 # Run the Flutter tool portions of the build. This must not be removed.
 add_dependencies(${BINARY_NAME} flutter_assemble)
+
+# Keep the HRTF DLL next to the exe. A stale Debug copy is why extra
+# speakers can appear in UI while only L/R make sound.
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/spatial_core.dll")
+  add_custom_command(TARGET ${BINARY_NAME} POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+      "${CMAKE_CURRENT_SOURCE_DIR}/spatial_core.dll"
+      "$<TARGET_FILE_DIR:${BINARY_NAME}>/spatial_core.dll"
+    COMMENT "Copy spatial_core.dll next to yinwei_player.exe")
+endif()

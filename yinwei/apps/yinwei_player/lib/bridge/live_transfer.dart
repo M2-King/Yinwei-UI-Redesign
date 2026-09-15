@@ -294,6 +294,19 @@ class LiveTransferController extends ChangeNotifier {
         return false;
       }
       if (!layout.enabled) return true;
+      final cc = b.liveSetSpeakerCount(layout.speakers.length);
+      if (cc == -1 && layout.speakers.length > 2) {
+        lastError = '当前 DLL 不含加点，只有 L/R 会发声。请完全退出后换新 spatial_core.dll';
+        notifyListeners();
+        return false;
+      }
+      if (cc != 0 && cc != -1) {
+        lastError = b.readLastError().isEmpty
+            ? 'yinwei_live_set_speaker_count failed ($cc)'
+            : b.readLastError();
+        notifyListeners();
+        return false;
+      }
       for (var i = 0; i < layout.speakers.length; i++) {
         final s = layout.speakers[i];
         final sc = b.liveSetSpeaker(

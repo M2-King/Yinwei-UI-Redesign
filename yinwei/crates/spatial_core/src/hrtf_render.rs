@@ -30,9 +30,16 @@ pub const STREAM_CHUNK: usize = STREAM_BLOCK * STREAM_INTERP;
 /// Max HRTF voices for the 2.0 array (L/R).
 const ARRAY_VOICES: usize = crate::layout::MAX_SPEAKERS;
 /// 2.0 opposite-channel bleed (no delay — Live lipsync). Fills phantom center.
-const ARRAY_2_CROSSFEED: f32 = 0.30;
-const ARRAY_2_TRIM: f32 = 0.90;
-const ARRAY_2_REV: f32 = 1.12;
+const ARRAY_2_CROSSFEED: f32 = 0.18;
+const ARRAY_2_CROSSFEED_DELAY_S: f32 = 0.0003;
+const ARRAY_2_CROSSFEED_LP_HZ: f32 = 2_000.0;
+const ARRAY_2_TRIM: f32 = 0.96;
+const ARRAY_2_REV: f32 = 1.0;
+const ARRAY_XO_HZ: f32 = 160.0;
+const ARRAY_EL_STEP_DEG: f32 = 5.0;
+/// Point: keep Mid presence; bleed less Mid into ±110° surrounds.
+const POINT_ENV_MID_DUCK: f32 = 0.12;
+const POINT_ENV_MID_BLEED: f32 = 0.28;
 
 /// Large pose jumps slew at these rates (see `IMPLEMENTATION_POSE_SLEW.md`).
 pub const SLEW_AZ_DEG_PER_SEC: f32 = 180.0;
@@ -71,6 +78,11 @@ pub(crate) fn shortest_azimuth_delta(from_deg: f32, to_deg: f32) -> f32 {
 pub(crate) fn quantize_azimuth_deg(az_deg: f32, step_deg: f32) -> f32 {
     let step = step_deg.abs().max(1e-3);
     wrap_azimuth_deg((az_deg / step).round() * step)
+}
+
+pub(crate) fn quantize_elevation_deg(el_deg: f32, step_deg: f32) -> f32 {
+    let step = step_deg.abs().max(1e-3);
+    ((el_deg / step).round() * step).clamp(-90.0, 90.0)
 }
 
 pub(crate) fn normalize(v: Vec3) -> Vec3 {
@@ -221,6 +233,43 @@ impl OnePoleLp {
     }
 }
 
+/// Opposite-channel bleed with a few samples of ITD + one-pole LP.
+/// Instant dry mix combed the 1–4 kHz band (hands-free / telephone).
+struct CrossfeedDelay {
+    buf: Vec<f32>,
+    idx: usize,
+    lp_z: f32,
+}
+
+impl CrossfeedDelay {
+    fn new(sample_rate: u32) -> Self {
+        let n = ((ARRAY_2_CROSSFEED_DELAY_S * sample_rate as f32).round() as usize).max(1);
+        Self {
+            buf: vec![0.0; n],
+            idx: 0,
+            lp_z: 0.0,
+        }
+    }
+
+    fn process(&mut self, x: f32, lp_c: f32) -> f32 {
+        let y = self.buf[self.idx];
+        self.buf[self.idx] = x;
+        self.idx += 1;
+        if self.idx >= self.buf.len() {
+            self.idx = 0;
+        }
+        let c = lp_c.clamp(0.01, 0.5);
+        self.lp_z += c * (y - self.lp_z);
+        self.lp_z
+    }
+
+    fn reset(&mut self) {
+        self.buf.fill(0.0);
+        self.idx = 0;
+        self.lp_z = 0.0;
+    }
+}
+
 pub struct HrtfRenderer {
     sample_rate: u32,
     processor: HrtfProcessor,
@@ -319,8 +368,8 @@ impl HrtfRenderer {
                 let (b_m, h_m) = self.crossover_mid.process(mid[start + i]);
                 let (b_s, h_s) = self.crossover_side.process(side[start + i]);
                 bass[i] = b_m + b_s * 0.35;
-                mid_high[i] = h_m * (1.0 - 0.28 * env);
-                side_high[i] = (h_s + h_m * 0.55) * env;
+                mid_high[i] = h_m * (1.0 - POINT_ENV_MID_DUCK * env);
+                side_high[i] = (h_s + h_m * POINT_ENV_MID_BLEED) * env;
             }
 
             // Single Mid HRTF pass. Orbit used to render Mid twice (fixed then
@@ -461,6 +510,8 @@ pub struct HrtfStreamer {
     /// Array voices — never read by [`Self::process_chunk`].
     crossover_arr_l: LinkwitzRileyCrossover,
     crossover_arr_r: LinkwitzRileyCrossover,
+    xf_from_l: CrossfeedDelay,
+    xf_from_r: CrossfeedDelay,
     array_voices: Vec<ArrayVoice>,
 }
 
@@ -517,12 +568,15 @@ impl HrtfStreamer {
             smooth_dist: params.distance_m,
             smooth_env: params.envelopment,
             smooth_rev: params.reverb_mix,
-            crossover_arr_l: LinkwitzRileyCrossover::new(sample_rate, 80.0),
-            crossover_arr_r: LinkwitzRileyCrossover::new(sample_rate, 80.0),
+            crossover_arr_l: LinkwitzRileyCrossover::new(sample_rate, ARRAY_XO_HZ),
+            crossover_arr_r: LinkwitzRileyCrossover::new(sample_rate, ARRAY_XO_HZ),
+            xf_from_l: CrossfeedDelay::new(sample_rate),
+            xf_from_r: CrossfeedDelay::new(sample_rate),
             array_voices: (0..ARRAY_VOICES)
                 .map(|i| match i {
                     0 => ArrayVoice::at(-30.0, 0.0, 1.8),
-                    _ => ArrayVoice::at(30.0, 0.0, 1.8),
+                    1 => ArrayVoice::at(30.0, 0.0, 1.8),
+                    _ => ArrayVoice::at(0.0, 0.0, 1.8),
                 })
                 .collect(),
         })
@@ -546,6 +600,8 @@ impl HrtfStreamer {
         }
         self.phase = 0.0;
         self.air_lp = OnePoleLp::new();
+        self.xf_from_l.reset();
+        self.xf_from_r.reset();
     }
 
     /// Instantly align smoothed pose to `params` (DSP start / new track).
@@ -668,8 +724,8 @@ impl HrtfStreamer {
             let (b_m, h_m) = self.crossover_mid.process(mid[i]);
             let (b_s, h_s) = self.crossover_side.process(side[i]);
             bass[i] = b_m + b_s * 0.35;
-            mid_high[i] = h_m * (1.0 - 0.28 * env);
-            side_high[i] = (h_s + h_m * 0.55) * env;
+            mid_high[i] = h_m * (1.0 - POINT_ENV_MID_DUCK * env);
+            side_high[i] = (h_s + h_m * POINT_ENV_MID_BLEED) * env;
         }
 
         let mut mid_out = [(0.0f32, 0.0f32); STREAM_CHUNK];
@@ -781,30 +837,45 @@ impl HrtfStreamer {
         let n_in = input.len().min(STREAM_CHUNK);
         padded[..n_in].copy_from_slice(&input[..n_in]);
 
-        let mut bass = [0.0f32; STREAM_CHUNK];
+        let mut bass_l = [0.0f32; STREAM_CHUNK];
+        let mut bass_r = [0.0f32; STREAM_CHUNK];
         let mut high_l = [0.0f32; STREAM_CHUNK];
         let mut high_r = [0.0f32; STREAM_CHUNK];
         for i in 0..STREAM_CHUNK {
             let (b_l, h_l) = self.crossover_arr_l.process(padded[i].0);
             let (b_r, h_r) = self.crossover_arr_r.process(padded[i].1);
-            bass[i] = (b_l + b_r) * 0.5;
+            bass_l[i] = b_l;
+            bass_r[i] = b_r;
             high_l[i] = h_l;
             high_r[i] = h_r;
+        }
+
+        let mut high_m = [0.0f32; STREAM_CHUNK];
+        for i in 0..STREAM_CHUNK {
+            high_m[i] = (high_l[i] + high_r[i]) * 0.5 * 0.707;
         }
 
         let stereo2 = layout.mode == crate::layout::ArrayMode::Stereo2;
         let mut feed_l = high_l;
         let mut feed_r = high_r;
         if stereo2 {
+            let lp_c = 1.0
+                - (-2.0 * std::f32::consts::PI * ARRAY_2_CROSSFEED_LP_HZ
+                    / self.sample_rate as f32)
+                    .exp();
             for i in 0..STREAM_CHUNK {
-                feed_l[i] = high_l[i] + ARRAY_2_CROSSFEED * high_r[i];
-                feed_r[i] = high_r[i] + ARRAY_2_CROSSFEED * high_l[i];
+                let bleed_r = self.xf_from_r.process(high_r[i], lp_c);
+                let bleed_l = self.xf_from_l.process(high_l[i], lp_c);
+                feed_l[i] = high_l[i] + ARRAY_2_CROSSFEED * bleed_r;
+                feed_r[i] = high_r[i] + ARRAY_2_CROSSFEED * bleed_l;
             }
         }
 
         let mut mix = [(0.0f32, 0.0f32); STREAM_CHUNK];
         let mut dist_acc = 0.0f32;
         let mut hrtf_n = 0u32;
+        let mut bass_g_l = 0.0f32;
+        let mut bass_g_r = 0.0f32;
 
         for i in 0..n {
             let spk = layout.speakers[i];
@@ -816,13 +887,19 @@ impl HrtfStreamer {
             let new_g = distance_gain(new_dist) * gain;
 
             let prev_g = distance_gain(self.array_voices[i].prev_dist) * gain;
-            let pos = spherical_to_vec(
+            let render_az = quantize_azimuth_deg(
                 self.array_voices[i].smooth_az,
-                self.array_voices[i].smooth_el,
+                ORBIT_HRIR_STEP_DEG,
             );
+            let render_el = quantize_elevation_deg(
+                self.array_voices[i].smooth_el,
+                ARRAY_EL_STEP_DEG,
+            );
+            let pos = spherical_to_vec(render_az, render_el);
             let high: &[f32] = match spk.feed {
                 crate::layout::SpeakerFeed::Left => &feed_l,
                 crate::layout::SpeakerFeed::Right => &feed_r,
+                crate::layout::SpeakerFeed::Mid => &high_m,
             };
             let mut spk_out = [(0.0f32, 0.0f32); STREAM_CHUNK];
             let from_pos = self.array_voices[i].prev_pos;
@@ -849,6 +926,11 @@ impl HrtfStreamer {
             }
             dist_acc += new_dist;
             hrtf_n += 1;
+            match spk.feed {
+                crate::layout::SpeakerFeed::Left => bass_g_l = new_g,
+                crate::layout::SpeakerFeed::Right => bass_g_r = new_g,
+                crate::layout::SpeakerFeed::Mid => {}
+            }
         }
 
         let mean_dist = if hrtf_n > 0 {
@@ -864,13 +946,8 @@ impl HrtfStreamer {
 
         let mut output = [(0.0f32, 0.0f32); STREAM_CHUNK];
         for i in 0..STREAM_CHUNK {
-            let g = if hrtf_n > 0 {
-                distance_gain(mean_dist)
-            } else {
-                0.0
-            };
-            let left = mix[i].0 * ARRAY_2_TRIM + bass[i] * g;
-            let right = mix[i].1 * ARRAY_2_TRIM + bass[i] * g;
+            let left = mix[i].0 * ARRAY_2_TRIM + bass_l[i] * bass_g_l;
+            let right = mix[i].1 * ARRAY_2_TRIM + bass_r[i] * bass_g_r;
             let (dl, dr) = self.air_lp.process(left, right, air_c);
             let (rl, rr) = self.reverb.process(dl, dr);
             output[i] = (
@@ -1031,6 +1108,13 @@ mod distance_tests {
     }
 
     #[test]
+    fn quantize_elevation_snaps_to_step() {
+        assert!((quantize_elevation_deg(2.0, 5.0) - 0.0).abs() < 1e-3);
+        assert!((quantize_elevation_deg(3.0, 5.0) - 5.0).abs() < 1e-3);
+        assert!(quantize_elevation_deg(89.0, 5.0) <= 90.0);
+    }
+
+    #[test]
     fn orbit_holds_hrir_across_adjacent_chunks() {
         let sr = 48_000u32;
         let mut streamer = HrtfStreamer::new(sr).unwrap();
@@ -1179,5 +1263,91 @@ mod distance_tests {
             vec3_near(before, s.prev_mid_pos, 1e-6),
             "array render must not rewrite Point prev_mid"
         );
+    }
+
+    #[test]
+    fn array_holds_hrir_while_speaker_slews() {
+        let sr = 48_000u32;
+        let mut s = HrtfStreamer::new(sr).unwrap();
+        let mut params = SpatialParams::default();
+        params.reverb_mix = 0.0;
+        params.envelopment = 0.0;
+        s.snap_to_params(&params);
+        let mut layout = crate::layout::ArrayLayout::default();
+        layout.set_mode(1).unwrap();
+        let silence = vec![(0.0f32, 0.0f32); STREAM_CHUNK];
+        s.process_chunk_array(&silence, &params, &layout).unwrap();
+        let mut last = s.array_voices[0].prev_pos;
+        let mut changes = 0usize;
+        const N: usize = 40;
+        for k in 0..N {
+            layout.speakers[0].az_deg = -30.0 + k as f32 * 2.0;
+            s.process_chunk_array(&silence, &params, &layout).unwrap();
+            let p = s.array_voices[0].prev_pos;
+            if !vec3_near(last, p, 1e-5) {
+                changes += 1;
+                last = p;
+            }
+        }
+        assert!(
+            changes < N / 2,
+            "array HRIR should stay held inside 8° bins; changes={changes}/{N}"
+        );
+        assert!(changes >= 1, "array HRIR should still step when drag crosses bins");
+    }
+
+    #[test]
+    fn array_stereo_bass_keeps_left_weight() {
+        let sr = 48_000u32;
+        let chunk: Vec<StereoFrame> = (0..STREAM_CHUNK)
+            .map(|i| {
+                let t = i as f32 / sr as f32;
+                let s = (t * 40.0 * std::f32::consts::TAU).sin() * 0.5;
+                (s, 0.0)
+            })
+            .collect();
+        let mut params = SpatialParams::default();
+        params.reverb_mix = 0.0;
+        params.envelopment = 0.0;
+        let mut layout = crate::layout::ArrayLayout::default();
+        layout.set_mode(1).unwrap();
+        let mut s = HrtfStreamer::new(sr).unwrap();
+        s.snap_to_params(&params);
+        let mut e_l = 0.0f32;
+        let mut e_r = 0.0f32;
+        for _ in 0..4 {
+            let out = s.process_chunk_array(&chunk, &params, &layout).unwrap();
+            e_l = out.iter().map(|f| f.0 * f.0).sum();
+            e_r = out.iter().map(|f| f.1 * f.1).sum();
+        }
+        assert!(
+            e_l > e_r * 1.4,
+            "40 Hz left-only should stay left-weighted after stereo bass; L={e_l} R={e_r}"
+        );
+    }
+
+    #[test]
+    fn array_extra_mid_point_changes_output() {
+        let sr = 48_000u32;
+        let chunk = stereo_tone(sr);
+        let mut params = SpatialParams::default();
+        params.reverb_mix = 0.0;
+        params.envelopment = 0.0;
+        let mut two = crate::layout::ArrayLayout::default();
+        two.set_mode(1).unwrap();
+        let mut three = two.clone();
+        three.set_speaker_count(3).unwrap();
+        three
+            .set_speaker(2, 0.0, 0.0, 1.8, 0.0, 0, 2)
+            .unwrap();
+        let mut s2 = HrtfStreamer::new(sr).unwrap();
+        let mut s3 = HrtfStreamer::new(sr).unwrap();
+        s2.snap_to_params(&params);
+        s3.snap_to_params(&params);
+        let d = block_diff(
+            &s2.process_chunk_array(&chunk, &params, &two).unwrap(),
+            &s3.process_chunk_array(&chunk, &params, &three).unwrap(),
+        );
+        assert!(d > 1.0, "extra Mid point must be audible; diff={d}");
     }
 }

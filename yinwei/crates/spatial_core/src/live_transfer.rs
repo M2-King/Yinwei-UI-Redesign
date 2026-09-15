@@ -205,6 +205,15 @@ impl LiveTransferEngine {
         g.set_speaker(index, az_deg, el_deg, dist_m, gain_db, mute, feed)
     }
 
+    pub fn set_speaker_count(&self, n: i32) -> Result<(), SpatialError> {
+        let mut g = self
+            .shared
+            .array
+            .lock()
+            .map_err(|_| SpatialError::LockPoisoned)?;
+        g.set_speaker_count(n)
+    }
+
     pub fn set_mode(&self, mode: PlaybackMode) {
         self.shared.mode.store(match mode {
             PlaybackMode::Original => 0,

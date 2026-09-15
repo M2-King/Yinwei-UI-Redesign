@@ -56,5 +56,81 @@ void main() {
     expect(find.text('Center'), findsNothing);
     expect(find.text('Surround'), findsNothing);
     expect(find.text('LFE'), findsNothing);
+    expect(find.text('+'), findsOneWidget);
+    expect(find.text('矩阵'), findsOneWidget);
+    expect(find.text('Spread'), findsNothing);
+  });
+
+  testWidgets('Point mode hides extra-speaker chips', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: YinweiTheme.dark(),
+        home: Scaffold(
+          body: PositionSidebar(
+            params: SpatialParams(),
+            array: ArrayLayout(),
+            arraySupported: true,
+            onChanged: (_) {},
+            onArrayChanged: (_) {},
+            onArrayMode: (_) {},
+            onExport: () {},
+            onSavePreset: () {},
+            onOpenEq: () {},
+          ),
+        ),
+      ),
+    );
+    expect(find.text('+'), findsNothing);
+    expect(find.text('移除点位'), findsNothing);
+    expect(find.text('矩阵'), findsNothing);
+  });
+
+  testWidgets('extra Mid chip can be removed, L/R cannot', (tester) async {
+    final layout = ArrayLayout.stereo2()..addSpeaker(azimuthDeg: 0);
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: YinweiTheme.dark(),
+        home: Scaffold(
+          body: PositionSidebar(
+            params: SpatialParams(),
+            array: layout,
+            arraySupported: true,
+            onChanged: (_) {},
+            onArrayChanged: (_) {},
+            onArrayMode: (_) {},
+            onExport: () {},
+            onSavePreset: () {},
+            onOpenEq: () {},
+          ),
+        ),
+      ),
+    );
+    expect(find.text('3'), findsOneWidget);
+    expect(find.text('移除点位'), findsOneWidget);
+  });
+
+  testWidgets('matrix chip shows spread slider', (tester) async {
+    final layout = ArrayLayout.stereo2()..setMatrixLinked(true);
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: YinweiTheme.dark(),
+        home: Scaffold(
+          body: PositionSidebar(
+            params: SpatialParams(),
+            array: layout,
+            arraySupported: true,
+            onChanged: (_) {},
+            onArrayChanged: (_) {},
+            onArrayMode: (_) {},
+            onExport: () {},
+            onSavePreset: () {},
+            onOpenEq: () {},
+          ),
+        ),
+      ),
+    );
+    expect(find.text('矩阵'), findsOneWidget);
+    expect(find.text('Spread'), findsOneWidget);
+    expect(find.textContaining('合并'), findsOneWidget);
   });
 }

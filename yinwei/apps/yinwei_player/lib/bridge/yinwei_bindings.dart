@@ -122,9 +122,13 @@ class YinweiBindings {
       final cwd = Directory.current.path;
       // Prefer the DLL next to the running exe (fresh build) BEFORE bare /
       // cwd names — those often resolve to a stale copy.
+      // Prefer the newest existing file. A locked stale spatial_core.dll next
+      // to the exe must not beat a freshly copied sibling (e.g. .next.dll).
       final candidates = <String>[
+        '$exeDir\\spatial_core.next.dll',
         '$exeDir\\spatial_core.dll',
         '$exeDir\\libspatial_core.dll',
+        '$cwd\\build\\windows\\x64\\runner\\Debug\\spatial_core.next.dll',
         '$cwd\\build\\windows\\x64\\runner\\Debug\\spatial_core.dll',
         '$cwd\\build\\windows\\x64\\runner\\Release\\spatial_core.dll',
         '$cwd\\windows\\runner\\spatial_core.dll',
@@ -132,13 +136,20 @@ class YinweiBindings {
         'spatial_core.dll',
         'libspatial_core.dll',
       ];
+      final existing = <File>[];
       for (final name in candidates) {
+        final f = File(name);
+        if (f.existsSync()) existing.add(f);
+      }
+      existing.sort((a, b) =>
+          b.lastModifiedSync().compareTo(a.lastModifiedSync()));
+      for (final f in existing) {
         try {
-          final abs = File(name).absolute.path;
+          final abs = f.absolute.path;
           final lib = DynamicLibrary.open(abs);
           return (lib: lib, path: abs);
         } catch (e) {
-          errors.add('$name → $e');
+          errors.add('${f.path} → $e');
         }
       }
       throw StateError('spatial_core.dll load failed:\n${errors.join('\n')}');
@@ -368,6 +379,35 @@ class YinweiBindings {
           'yinwei_live_set_speaker');
       return fn(index, azimuthDeg, elevationDeg, distanceM, gainDb, mute ? 1 : 0,
           feed);
+    } catch (_) {
+      return -1;
+    }
+  }
+
+  bool get hasSpeakerCount {
+    try {
+      _lib.lookupFunction<_I32InNative, _I32InDart>('yinwei_set_speaker_count');
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  int setSpeakerCount(int n) {
+    try {
+      final fn =
+          _lib.lookupFunction<_I32InNative, _I32InDart>('yinwei_set_speaker_count');
+      return fn(n);
+    } catch (_) {
+      return -1;
+    }
+  }
+
+  int liveSetSpeakerCount(int n) {
+    try {
+      final fn = _lib.lookupFunction<_I32InNative, _I32InDart>(
+          'yinwei_live_set_speaker_count');
+      return fn(n);
     } catch (_) {
       return -1;
     }

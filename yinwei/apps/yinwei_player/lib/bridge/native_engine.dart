@@ -190,6 +190,9 @@ class NativeEngine implements EngineApi {
   bool get supportsArray => _b.hasArray;
 
   @override
+  bool get supportsExtraSpeakers => _b.hasSpeakerCount;
+
+  @override
   Future<void> setArrayMode(int mode) async {
     try {
       final code = _b.setArray(mode);
@@ -220,6 +223,15 @@ class NativeEngine implements EngineApi {
         mute: mute,
         feed: feed,
       );
+      if (code == -1) return;
+      if (code != 0) _check(code);
+    } catch (_) {}
+  }
+
+  @override
+  Future<void> setSpeakerCount(int n) async {
+    try {
+      final code = _b.setSpeakerCount(n);
       if (code == -1) return;
       if (code != 0) _check(code);
     } catch (_) {}

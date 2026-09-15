@@ -142,6 +142,9 @@ class MockEngine implements EngineApi {
   bool get supportsArray => true;
 
   @override
+  bool get supportsExtraSpeakers => true;
+
+  @override
   Future<void> setArrayMode(int mode) async {}
 
   @override
@@ -154,6 +157,9 @@ class MockEngine implements EngineApi {
     required bool mute,
     required int feed,
   }) async {}
+
+  @override
+  Future<void> setSpeakerCount(int n) async {}
 
   PlaybackMode get mode => _mode;
   SpatialParams get params => _params.copy();

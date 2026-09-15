@@ -216,6 +216,15 @@ impl RealtimePlayer {
         g.set_speaker(index, az_deg, el_deg, dist_m, gain_db, mute, feed)
     }
 
+    pub fn set_speaker_count(&self, n: i32) -> Result<(), SpatialError> {
+        let mut g = self
+            .shared
+            .array
+            .lock()
+            .map_err(|_| SpatialError::LockPoisoned)?;
+        g.set_speaker_count(n)
+    }
+
     pub fn replace_array(&self, layout: crate::layout::ArrayLayout) -> Result<(), SpatialError> {
         let mut g = self
             .shared

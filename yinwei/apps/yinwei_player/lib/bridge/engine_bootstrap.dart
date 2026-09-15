@@ -18,7 +18,9 @@ class EngineBootstrap {
       return EngineBootstrap._(
         native,
         EngineBackend.native,
-        'Native · spatial_core',
+        native.supportsExtraSpeakers
+            ? 'Native · spatial_core · extra-pts'
+            : 'Native · spatial_core',
       );
     }
     final why = YinweiBindings.loadError ?? 'spatial_core.dll 未找到';

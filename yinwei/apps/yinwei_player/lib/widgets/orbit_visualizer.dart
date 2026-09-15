@@ -29,6 +29,8 @@ class OrbitVisualizer extends StatefulWidget {
     this.onSpeakerSelected,
     this.onSpeakerPoseChanged,
     this.onSpeakerDistanceChanged,
+    this.onSpeakerAdd,
+    this.matrixLinked = false,
   });
 
   final double playhead;
@@ -46,6 +48,9 @@ class OrbitVisualizer extends StatefulWidget {
   final void Function(int index, double azimuthDeg, double elevationDeg)?
       onSpeakerPoseChanged;
   final void Function(int index, double distanceM)? onSpeakerDistanceChanged;
+  final void Function(double azimuthDeg, double elevationDeg, double distanceM)?
+      onSpeakerAdd;
+  final bool matrixLinked;
 
   @override
   State<OrbitVisualizer> createState() => _OrbitVisualizerState();
@@ -92,6 +97,8 @@ class _OrbitVisualizerState extends State<OrbitVisualizer> {
                     behavior: HitTestBehavior.opaque,
                     onPanStart: _onPanStart,
                     onPanUpdate: _onPanUpdate,
+                    onTapUp:
+                        widget.onSpeakerAdd != null ? _onTapUp : null,
                     child: CustomPaint(
                       painter: _AtmosFieldPainter(
                         playhead: widget.playhead.clamp(0.0, 1.0),
@@ -129,9 +136,7 @@ class _OrbitVisualizerState extends State<OrbitVisualizer> {
               right: 0,
               child: Text(
                 widget.arraySpeakers != null && widget.arraySpeakers!.isNotEmpty
-                    ? (_view == FieldViewMode.top
-                        ? '拖动音箱 · 滚轮距离 · 俯视'
-                        : '拖动音箱 · 滚轮距离 · 自由视角')
+                    ? (_arrayHint())
                     : (_view == FieldViewMode.top
                         ? '拖动定位 · 滚轮距离 · 俯视'
                         : '拖动定位 · 滚轮距离 · 自由视角'),
@@ -150,6 +155,17 @@ class _OrbitVisualizerState extends State<OrbitVisualizer> {
 
   bool get _arrayOn =>
       widget.arraySpeakers != null && widget.arraySpeakers!.isNotEmpty;
+
+  String _arrayHint() {
+    final view = _view == FieldViewMode.top ? '俯视' : '自由视角';
+    if (widget.matrixLinked) {
+      return '拖动整体 · 滚轮阵列距离 · $view';
+    }
+    if (widget.onSpeakerAdd != null) {
+      return '点击空白加点 · 拖动音箱 · $view';
+    }
+    return '拖动音箱 · $view';
+  }
 
   int? get _selectedFieldIndex {
     if (!_arrayOn) return null;
@@ -230,6 +246,47 @@ class _OrbitVisualizerState extends State<OrbitVisualizer> {
       }
     }
     widget.onSpeakerSelected?.call(best);
+  }
+
+  void _onTapUp(TapUpDetails d) {
+    if (!_arrayOn || widget.onSpeakerAdd == null || _size == Size.zero) return;
+    if (widget.arraySpeakers!.length >= ArrayLayout.maxSpeakers) return;
+    if (_nearestSpeakerDistance(d.localPosition) < 36) return;
+    final origin = Offset(_size.width / 2, _size.height / 2);
+    final p = d.localPosition - origin;
+    final R = _size.shortestSide * 0.38;
+    final az = math.atan2(p.dx, -p.dy) * 180 / math.pi;
+    if (_view == FieldViewMode.top) {
+      final distNorm = (p.distance / R).clamp(0.0, 1.0);
+      final dist = (0.5 + distNorm * 9.5).clamp(0.5, 10.0);
+      widget.onSpeakerAdd!(az, 0, dist);
+    } else {
+      final distNorm = (p.distance / (R * 1.05)).clamp(0.0, 1.0);
+      final elevFromY = (-p.dy / R).clamp(-1.0, 1.0) * 75.0;
+      final elevFromRad = (1.0 - distNorm) * 20.0;
+      final el = (elevFromY * 0.85 + elevFromRad * 0.15).clamp(-90.0, 90.0);
+      widget.onSpeakerAdd!(az, el.toDouble(), 1.8);
+    }
+  }
+
+  double _nearestSpeakerDistance(Offset local) {
+    if (!_arrayOn || _size == Size.zero) return double.infinity;
+    final origin = Offset(_size.width / 2, _size.height / 2);
+    final R = _size.shortestSide * 0.38;
+    var best = double.infinity;
+    for (final s in widget.arraySpeakers!) {
+      final proj = _AtmosFieldPainter.project(
+        origin,
+        R,
+        _view,
+        s.azimuthDeg,
+        s.elevationDeg,
+        s.distanceM,
+      );
+      final dist = (proj - local).distance;
+      if (dist < best) best = dist;
+    }
+    return best;
   }
 
   void _onPointerSignal(PointerSignalEvent e) {

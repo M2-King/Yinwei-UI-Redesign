@@ -469,6 +469,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
                             arraySpeakers:
                                 c.array.enabled ? c.array.speakers : null,
                             selectedSpeakerIndex: c.array.selectedIndex,
+                            matrixLinked: c.array.matrixLinked,
                             orbiting: !c.array.enabled &&
                                 (_live.running ||
                                     (c.params.motion == MotionMode.orbit &&
@@ -504,8 +505,15 @@ class _PlayerScreenState extends State<PlayerScreen> {
                                           return;
                                         }
                                         next.selectedIndex = i;
-                                        next.speakers[i].azimuthDeg = az;
-                                        next.speakers[i].elevationDeg = el;
+                                        if (next.matrixLinked) {
+                                          next.moveSelectedInGroup(
+                                            azimuthDeg: az,
+                                            elevationDeg: el,
+                                          );
+                                        } else {
+                                          next.speakers[i].azimuthDeg = az;
+                                          next.speakers[i].elevationDeg = el;
+                                        }
                                         _applyArrayFromUi(next);
                                       }
                                     : null,
@@ -517,10 +525,26 @@ class _PlayerScreenState extends State<PlayerScreen> {
                                           return;
                                         }
                                         next.selectedIndex = i;
-                                        next.speakers[i].distanceM = d;
+                                        if (next.matrixLinked) {
+                                          next.setAllDistance(d);
+                                        } else {
+                                          next.speakers[i].distanceM = d;
+                                        }
                                         _applyArrayFromUi(next);
                                       }
                                     : null,
+                            onSpeakerAdd: c.array.enabled
+                                ? (az, el, dist) {
+                                    if (!c.array.canAddSpeaker) return;
+                                    final next = c.array.copy()
+                                      ..addSpeaker(
+                                        azimuthDeg: az,
+                                        elevationDeg: el,
+                                        distanceM: dist,
+                                      );
+                                    _applyArrayFromUi(next);
+                                  }
+                                : null,
                           ),
                         ),
                       ),

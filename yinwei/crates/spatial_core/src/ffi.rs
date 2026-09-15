@@ -330,6 +330,14 @@ pub extern "C" fn yinwei_set_speaker(
 }
 
 #[no_mangle]
+pub extern "C" fn yinwei_set_speaker_count(n: i32) -> i32 {
+    match global_session().and_then(|s| s.set_speaker_count(n)) {
+        Ok(()) => OK,
+        Err(e) => map_err(e),
+    }
+}
+
+#[no_mangle]
 pub unsafe extern "C" fn yinwei_get_params(out: *mut YinweiParamsC) -> i32 {
     if out.is_null() {
         set_err("null out");
@@ -781,6 +789,31 @@ pub extern "C" fn yinwei_live_set_speaker(
     #[cfg(not(windows))]
     {
         let _ = (index, az_deg, el_deg, dist_m, gain_db, mute, feed);
+        OK
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn yinwei_live_set_speaker_count(n: i32) -> i32 {
+    #[cfg(windows)]
+    {
+        use crate::live_transfer::{ensure_live, global_live};
+        if let Err(e) = ensure_live() {
+            return map_err(e);
+        }
+        match global_live().and_then(|mut g| {
+            if let Some(eng) = g.as_mut() {
+                eng.set_speaker_count(n)?;
+            }
+            Ok(())
+        }) {
+            Ok(()) => OK,
+            Err(e) => map_err(e),
+        }
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = n;
         OK
     }
 }

@@ -112,12 +112,51 @@ class PositionSidebar extends StatelessWidget {
                                   array!.copy()..selectedIndex = i);
                             },
                           ),
+                        if (array!.canAddSpeaker)
+                          _SpeakerChip(
+                            label: '+',
+                            selected: false,
+                            muted: false,
+                            onTap: () {
+                              if (onArrayChanged == null) return;
+                              final next = array!.copy()..addSpeaker();
+                              onArrayChanged!(next);
+                            },
+                          ),
+                        _SpeakerChip(
+                          label: '矩阵',
+                          selected: array!.matrixLinked,
+                          muted: false,
+                          onTap: () {
+                            if (onArrayChanged == null) return;
+                            final next = array!.copy()
+                              ..setMatrixLinked(!array!.matrixLinked);
+                            onArrayChanged!(next);
+                          },
+                        ),
                       ],
                     ),
+                    if (array!.matrixLinked) ...[
+                      const SizedBox(height: 16),
+                      _LabeledSlider(
+                        label: 'Spread',
+                        hint: '合并 · 散开',
+                        valueLabel:
+                            '${array!.matrixSpread.toStringAsFixed(2)}×',
+                        value: array!.matrixSpread,
+                        min: ArrayLayout.matrixSpreadMin,
+                        max: ArrayLayout.matrixSpreadMax,
+                        onChanged: (v) {
+                          if (onArrayChanged == null) return;
+                          final next = array!.copy()..setMatrixSpread(v);
+                          onArrayChanged!(next);
+                        },
+                      ),
+                    ],
                     const SizedBox(height: 16),
                     _LabeledSlider(
                       label: 'Azimuth',
-                      hint: '音箱方位',
+                      hint: array!.matrixLinked ? '矩阵旋转' : '音箱方位',
                       valueLabel: '${array!.selected.azimuthDeg.round()}°',
                       value: array!.selected.azimuthDeg,
                       min: -180,
@@ -125,13 +164,17 @@ class PositionSidebar extends StatelessWidget {
                       onChanged: (v) {
                         if (onArrayChanged == null) return;
                         final next = array!.copy();
-                        next.speakers[next.selectedIndex].azimuthDeg = v;
+                        if (next.matrixLinked) {
+                          next.moveSelectedInGroup(azimuthDeg: v);
+                        } else {
+                          next.speakers[next.selectedIndex].azimuthDeg = v;
+                        }
                         onArrayChanged!(next);
                       },
                     ),
                     _LabeledSlider(
                       label: 'Elevation',
-                      hint: '高度',
+                      hint: array!.matrixLinked ? '矩阵高度' : '高度',
                       valueLabel: '${array!.selected.elevationDeg.round()}°',
                       value: array!.selected.elevationDeg,
                       min: -90,
@@ -139,13 +182,17 @@ class PositionSidebar extends StatelessWidget {
                       onChanged: (v) {
                         if (onArrayChanged == null) return;
                         final next = array!.copy();
-                        next.speakers[next.selectedIndex].elevationDeg = v;
+                        if (next.matrixLinked) {
+                          next.moveSelectedInGroup(elevationDeg: v);
+                        } else {
+                          next.speakers[next.selectedIndex].elevationDeg = v;
+                        }
                         onArrayChanged!(next);
                       },
                     ),
                     _LabeledSlider(
                       label: 'Distance',
-                      hint: '音箱远近',
+                      hint: array!.matrixLinked ? '阵列远近 · 整体' : '音箱远近',
                       valueLabel:
                           '${array!.selected.distanceM.toStringAsFixed(2)} m',
                       value: array!.selected.distanceM,
@@ -154,7 +201,11 @@ class PositionSidebar extends StatelessWidget {
                       onChanged: (v) {
                         if (onArrayChanged == null) return;
                         final next = array!.copy();
-                        next.speakers[next.selectedIndex].distanceM = v;
+                        if (next.matrixLinked) {
+                          next.setAllDistance(v);
+                        } else {
+                          next.speakers[next.selectedIndex].distanceM = v;
+                        }
                         onArrayChanged!(next);
                       },
                     ),
@@ -200,6 +251,18 @@ class PositionSidebar extends StatelessWidget {
                         ],
                       ),
                     ),
+                    if (array!.canRemoveSelected)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 10),
+                        child: OutlinedButton(
+                          onPressed: () {
+                            if (onArrayChanged == null) return;
+                            final next = array!.copy()..removeSelected();
+                            onArrayChanged!(next);
+                          },
+                          child: const Text('移除点位'),
+                        ),
+                      ),
                   ] else ...[
                     const SizedBox(height: 22),
                     _LabeledSlider(

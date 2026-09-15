@@ -155,6 +155,11 @@ impl Engine {
             .set_speaker(index, az_deg, el_deg, dist_m, gain_db, mute, feed)
     }
 
+    pub fn set_speaker_count(&self, n: i32) -> Result<(), SpatialError> {
+        let mut g = self.inner.lock().map_err(|_| SpatialError::LockPoisoned)?;
+        g.array.set_speaker_count(n)
+    }
+
     pub fn array_layout(&self) -> Result<crate::layout::ArrayLayout, SpatialError> {
         let g = self.inner.lock().map_err(|_| SpatialError::LockPoisoned)?;
         Ok(g.array.clone())

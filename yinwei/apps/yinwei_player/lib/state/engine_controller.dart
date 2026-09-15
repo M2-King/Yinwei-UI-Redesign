@@ -7,8 +7,8 @@ import 'package:yinwei_player/models/spatial_params.dart';
 
 /// Bumped when UI wiring changes — shown in status bar so Windows hosts
 /// can confirm they pulled the latest build.
-const String kYinweiUiBuild = 'ui-32-stereo20';
-const String kYinweiBridgeBuild = 'p2.4.28-stereo20';
+const String kYinweiUiBuild = 'ui-36-matrix';
+const String kYinweiBridgeBuild = 'p2.4.32-matrix';
 
 /// App state for the locked Player UI (IMPLEMENTATION_P2 §5.1).
 class EngineController extends ChangeNotifier {
@@ -45,6 +45,8 @@ class EngineController extends ChangeNotifier {
   int _arrayGen = 0;
 
   bool get arraySupported => _engine.supportsArray;
+
+  bool get extraSpeakersSupported => _engine.supportsExtraSpeakers;
 
   double get playhead {
     final total = track.duration.inMilliseconds;
@@ -106,7 +108,11 @@ class EngineController extends ChangeNotifier {
   Future<void> applyArrayMode(ArrayMode mode) async {
     final next = array.copy();
     if (mode == ArrayMode.stereo2) {
-      next.applyStereo2Preset();
+      if (next.speakers.length < 2) {
+        next.applyStereo2Preset();
+      } else {
+        next.mode = ArrayMode.stereo2;
+      }
     } else {
       next.mode = ArrayMode.off;
     }
@@ -130,6 +136,7 @@ class EngineController extends ChangeNotifier {
   Future<void> _pushArray(ArrayLayout layout) async {
     await _engine.setArrayMode(layout.nativeMode);
     if (!layout.enabled) return;
+    await _engine.setSpeakerCount(layout.speakers.length);
     for (var i = 0; i < layout.speakers.length; i++) {
       final s = layout.speakers[i];
       await _engine.setSpeaker(

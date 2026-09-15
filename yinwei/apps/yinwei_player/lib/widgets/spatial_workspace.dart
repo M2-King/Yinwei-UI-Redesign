@@ -36,6 +36,8 @@ class SpatialWorkspace extends StatefulWidget {
     this.onSpeakerSelected,
     this.onSpeakerPoseChanged,
     this.onSpeakerDistanceChanged,
+    this.onSpeakerAdd,
+    this.matrixLinked = false,
     this.forceFallback = false,
   });
 
@@ -55,6 +57,9 @@ class SpatialWorkspace extends StatefulWidget {
   final void Function(int index, double azimuthDeg, double elevationDeg)?
       onSpeakerPoseChanged;
   final void Function(int index, double distanceM)? onSpeakerDistanceChanged;
+  final void Function(double azimuthDeg, double elevationDeg, double distanceM)?
+      onSpeakerAdd;
+  final bool matrixLinked;
   final bool forceFallback;
 
   @override

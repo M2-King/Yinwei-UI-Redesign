@@ -79,6 +79,12 @@ impl PlayerSession {
         Ok(())
     }
 
+    pub fn set_speaker_count(&self, n: i32) -> Result<(), SpatialError> {
+        self.engine.set_speaker_count(n)?;
+        self.player.set_speaker_count(n)?;
+        Ok(())
+    }
+
     pub fn params(&self) -> Result<SpatialParams, SpatialError> {
         self.engine.params()
     }

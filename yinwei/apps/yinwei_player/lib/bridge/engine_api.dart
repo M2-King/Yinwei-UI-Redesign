@@ -40,6 +40,8 @@ abstract class EngineApi {
   /// False when the loaded DLL has no `yinwei_set_array` symbol.
   bool get supportsArray => false;
 
+  bool get supportsExtraSpeakers => false;
+
   Future<void> setArrayMode(int mode) async {}
 
   Future<void> setSpeaker({
@@ -51,4 +53,6 @@ abstract class EngineApi {
     required bool mute,
     required int feed,
   }) async {}
+
+  Future<void> setSpeakerCount(int n) async {}
 }
