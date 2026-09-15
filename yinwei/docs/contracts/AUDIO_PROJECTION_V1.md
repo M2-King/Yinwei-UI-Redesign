@@ -48,6 +48,15 @@ Mute remains outside SceneContractV1.
 
 Zero-length geometry: HRTF unit is `(0, 0, −1)` (listener-forward). `spatial_core::normalize` still uses `(0, 0, +1)` and is **not** changed.
 
+## Invalid scene
+
+If `validateSceneV1` fails (`pointSourceStatus = invalidScene`):
+
+- `emitterSlots = []`
+- the validation `reason` is preserved (`forbidden_key`, `missing_listener`, …)
+- emitters are **not** partially projected
+- `failedUnknownEmitter` is **not** used merely because the scene was invalid
+
 ## Emitters
 
 Bindings are `emitterId → left|right|mid` only.
@@ -57,5 +66,10 @@ Bindings are `emitterId → left|right|mid` only.
 - List order never implies routing
 - Unknown emitter id → `failedUnknownEmitter`
 - Invalid feed name → `failedInvalidFeed`
+
+Emitter projection results are returned sorted by `emitterId`.
+Result order has no acoustic-routing meaning.
+
+Routing remains exclusively `emitterId → left | right | mid`. Do not infer routing from emitter list order, binding insertion order, visual role, or speaker label.
 
 Not a 7.1 decoder. Not a second array renderer.

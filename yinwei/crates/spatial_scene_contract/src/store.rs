@@ -65,6 +65,23 @@ impl SpatialSceneStore {
             .get("revision")
             .and_then(Value::as_u64)
             .unwrap_or(0);
+        if !self.has_scene() {
+            self.scene = Some(incoming.clone());
+            self.applied_revision = incoming_revision;
+            return if incoming_revision > 1 {
+                SceneApplyResultV1 {
+                    status: SceneApplyStatusV1::AppliedWithDiscontinuity,
+                    reason: None,
+                    discontinuity: true,
+                }
+            } else {
+                SceneApplyResultV1 {
+                    status: SceneApplyStatusV1::Applied,
+                    reason: None,
+                    discontinuity: false,
+                }
+            };
+        }
         let verdict = decide_revision_v1(self.applied_revision, incoming_revision);
         if verdict.decision == RevisionDecisionV1::RejectStale {
             return SceneApplyResultV1 {
