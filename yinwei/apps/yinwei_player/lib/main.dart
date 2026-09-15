@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:yinwei_player/screens/player_screen.dart';
@@ -34,7 +36,16 @@ class YinweiApp extends StatelessWidget {
       title: '音围 Spatial Player',
       debugShowCheckedModeBanner: false,
       theme: YinweiTheme.dark(),
-      home: const PlayerScreen(),
+      // Flutter 3.47's Windows AXTree bridge can crash while dynamic UI and
+      // tooltip overlays update under an active accessibility client. Keep the
+      // visual/interactive UI intact while containing that engine defect.
+      home: TooltipVisibility(
+        visible: !Platform.isWindows,
+        child: ExcludeSemantics(
+          excluding: Platform.isWindows,
+          child: const PlayerScreen(),
+        ),
+      ),
     );
   }
 }

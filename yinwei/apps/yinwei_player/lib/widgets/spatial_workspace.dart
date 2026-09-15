@@ -199,6 +199,8 @@ class _SpatialWorkspaceState extends State<SpatialWorkspace> {
         onSpeakerSelected: widget.onSpeakerSelected,
         onSpeakerPoseChanged: widget.onSpeakerPoseChanged,
         onSpeakerDistanceChanged: widget.onSpeakerDistanceChanged,
+        onSpeakerAdd: widget.onSpeakerAdd,
+        matrixLinked: widget.matrixLinked,
       );
     }
     final web = _web;

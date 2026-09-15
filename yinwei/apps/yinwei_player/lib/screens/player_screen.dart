@@ -52,6 +52,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
   bool _eqOpen = false;
   Offset _eqPos = const Offset(140, 72);
   Timer? _islandAnim;
+  int _liveUiTick = 0;
   Timer? _followDebounce;
   AppAudioSplit? _split;
   int _routeGen = 0;
@@ -93,11 +94,18 @@ class _PlayerScreenState extends State<PlayerScreen> {
     _live.refreshDevices();
     _islandAnim = Timer.periodic(const Duration(milliseconds: 80), (_) {
       final wasRunning = _live.running;
-      if (_live.running) _live.refreshTelemetry();
+      if (wasRunning) {
+        // Keep native health sampling at 80 ms, but only repaint telemetry at
+        // 320 ms so Live mode does not rebuild the whole player at 12.5 fps.
+        _live.refreshTelemetry(notify: false);
+        _liveUiTick = (_liveUiTick + 1) % 4;
+        if (_liveUiTick == 0) _onChange();
+      } else {
+        _liveUiTick = 0;
+      }
       if (wasRunning && !_live.running) {
         unawaited(_audioRoute.restore());
       }
-      if (mounted) setState(() {});
     });
   }
 

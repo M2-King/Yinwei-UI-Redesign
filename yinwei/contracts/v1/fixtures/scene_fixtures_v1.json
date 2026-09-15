@@ -1,0 +1,196 @@
+{
+  "schemaId": "SceneContractV1",
+  "schemaVersion": 1,
+  "forbiddenTopLevelKeys": [
+    "camera",
+    "selection",
+    "hover",
+    "drag",
+    "telemetry",
+    "audio",
+    "spatialParams",
+    "arrayLayout"
+  ],
+  "cases": [
+    {
+      "id": "minimal_valid",
+      "kind": "validate",
+      "scene": {
+        "schemaVersion": 1,
+        "revision": 1,
+        "listener": {
+          "id": "listener-0",
+          "type": "listener",
+          "worldPosition": { "x": 0, "y": 0, "z": 0 },
+          "orientation": { "w": 1, "x": 0, "y": 0, "z": 0 },
+          "enabled": true,
+          "active": true
+        },
+        "sources": [
+          {
+            "id": "source-0",
+            "type": "source",
+            "worldPosition": { "x": 0, "y": 0, "z": -1.8 },
+            "enabled": true,
+            "active": true
+          }
+        ],
+        "emitters": []
+      },
+      "expect": { "valid": true }
+    },
+    {
+      "id": "eight_visual_emitters_allowed",
+      "kind": "validate",
+      "scene": {
+        "schemaVersion": 1,
+        "revision": 2,
+        "listener": {
+          "id": "listener-0",
+          "type": "listener",
+          "worldPosition": { "x": 0, "y": 0, "z": 0 },
+          "enabled": true,
+          "active": true
+        },
+        "sources": [
+          {
+            "id": "source-0",
+            "type": "source",
+            "worldPosition": { "x": 1.8, "y": 0, "z": 0 },
+            "enabled": true,
+            "active": true
+          }
+        ],
+        "emitters": [
+          { "id": "emitter-L", "type": "emitter", "worldPosition": { "x": -1, "y": 0, "z": -1.7320508075688772 }, "enabled": true, "active": true, "visualRole": "L" },
+          { "id": "emitter-R", "type": "emitter", "worldPosition": { "x": 1, "y": 0, "z": -1.7320508075688772 }, "enabled": true, "active": true, "visualRole": "R" },
+          { "id": "emitter-C", "type": "emitter", "worldPosition": { "x": 0, "y": 0, "z": -2 }, "enabled": true, "active": true, "visualRole": "C" },
+          { "id": "emitter-LFE", "type": "emitter", "worldPosition": { "x": 0, "y": -0.7986355100472928, "z": -1.5011309545689827 }, "enabled": true, "active": true, "visualRole": "LFE" },
+          { "id": "emitter-Ls", "type": "emitter", "worldPosition": { "x": -2, "y": 0, "z": 0 }, "enabled": true, "active": true, "visualRole": "Ls" },
+          { "id": "emitter-Rs", "type": "emitter", "worldPosition": { "x": 2, "y": 0, "z": 0 }, "enabled": true, "active": true, "visualRole": "Rs" },
+          { "id": "emitter-Lb", "type": "emitter", "worldPosition": { "x": -1.4142135623730951, "y": 0, "z": 1.4142135623730951 }, "enabled": true, "active": true, "visualRole": "Lb" },
+          { "id": "emitter-Rb", "type": "emitter", "worldPosition": { "x": 1.4142135623730951, "y": 0, "z": 1.4142135623730951 }, "enabled": true, "active": true, "visualRole": "Rb" }
+        ]
+      },
+      "expect": { "valid": true }
+    },
+    {
+      "id": "reject_camera_in_scene",
+      "kind": "validate",
+      "scene": {
+        "schemaVersion": 1,
+        "revision": 1,
+        "listener": {
+          "id": "listener-0",
+          "type": "listener",
+          "worldPosition": { "x": 0, "y": 0, "z": 0 },
+          "enabled": true,
+          "active": true
+        },
+        "sources": [],
+        "emitters": [],
+        "camera": { "distance": 5.4 }
+      },
+      "expect": { "valid": false, "reason": "forbidden_key" }
+    },
+    {
+      "id": "reject_selection_in_scene",
+      "kind": "validate",
+      "scene": {
+        "schemaVersion": 1,
+        "revision": 1,
+        "listener": {
+          "id": "listener-0",
+          "type": "listener",
+          "worldPosition": { "x": 0, "y": 0, "z": 0 },
+          "enabled": true,
+          "active": true
+        },
+        "sources": [],
+        "emitters": [],
+        "selection": { "id": "source-0" }
+      },
+      "expect": { "valid": false, "reason": "forbidden_key" }
+    },
+    {
+      "id": "reject_duplicate_ids",
+      "kind": "validate",
+      "scene": {
+        "schemaVersion": 1,
+        "revision": 1,
+        "listener": {
+          "id": "dup",
+          "type": "listener",
+          "worldPosition": { "x": 0, "y": 0, "z": 0 },
+          "enabled": true,
+          "active": true
+        },
+        "sources": [
+          {
+            "id": "dup",
+            "type": "source",
+            "worldPosition": { "x": 0, "y": 0, "z": -1 },
+            "enabled": true,
+            "active": true
+          }
+        ],
+        "emitters": []
+      },
+      "expect": { "valid": false, "reason": "duplicate_id" }
+    },
+    {
+      "id": "reject_non_finite_position",
+      "kind": "validate",
+      "scene": {
+        "schemaVersion": 1,
+        "revision": 1,
+        "listener": {
+          "id": "listener-0",
+          "type": "listener",
+          "worldPosition": { "x": 0, "y": 0, "z": 0 },
+          "enabled": true,
+          "active": true
+        },
+        "sources": [
+          {
+            "id": "source-0",
+            "type": "source",
+            "worldPosition": { "x": "NaN", "y": 0, "z": 0 },
+            "enabled": true,
+            "active": true
+          }
+        ],
+        "emitters": []
+      },
+      "expect": { "valid": false, "reason": "non_finite_position" }
+    },
+    {
+      "id": "apply_newer_revision",
+      "kind": "revision",
+      "appliedRevision": 4,
+      "incomingRevision": 5,
+      "expect": { "apply": true }
+    },
+    {
+      "id": "reject_stale_revision",
+      "kind": "revision",
+      "appliedRevision": 4,
+      "incomingRevision": 3,
+      "expect": { "apply": false, "reason": "stale_revision" }
+    },
+    {
+      "id": "reject_equal_revision",
+      "kind": "revision",
+      "appliedRevision": 4,
+      "incomingRevision": 4,
+      "expect": { "apply": false, "reason": "stale_revision" }
+    },
+    {
+      "id": "accept_revision_gap",
+      "kind": "revision",
+      "appliedRevision": 4,
+      "incomingRevision": 7,
+      "expect": { "apply": true, "discontinuity": true }
+    }
+  ]
+}

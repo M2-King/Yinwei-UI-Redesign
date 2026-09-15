@@ -376,7 +376,7 @@ class LiveTransferController extends ChangeNotifier {
     notifyListeners();
   }
 
-  void refreshTelemetry() {
+  void refreshTelemetry({bool notify = true}) {
     final b = _b;
     if (b == null || !running || _reconnecting) return;
     capturedFrames = b.liveCapturedFrames();
@@ -395,7 +395,7 @@ class LiveTransferController extends ChangeNotifier {
     _reconnectFails = 0;
     lastError = null;
     _refreshHealth(b);
-    notifyListeners();
+    if (notify) notifyListeners();
   }
 
   Future<void> _reconnectNative() async {
