@@ -104,6 +104,37 @@ fn near(got: f64, want: f64, eps: f64) {
 }
 
 #[test]
+fn empty_store_accepts_revision_zero() {
+    let mut store = SpatialSceneStore::new();
+    assert!(!store.has_scene());
+    assert_eq!(store.applied_revision(), 0);
+
+    let first = store.apply(&default_scene(0, -1.8));
+    assert_eq!(first.status, SceneApplyStatusV1::Applied);
+    assert!(!first.discontinuity);
+    assert!(store.has_scene());
+    assert_eq!(store.applied_revision(), 0);
+    assert_eq!(store.snapshot().unwrap()["revision"].as_u64(), Some(0));
+
+    let again = store.apply(&default_scene(0, -9.0));
+    assert_eq!(again.status, SceneApplyStatusV1::RejectedStale);
+    assert_eq!(store.applied_revision(), 0);
+    assert_eq!(
+        store.snapshot().unwrap()["sources"][0]["worldPosition"]["z"].as_f64(),
+        Some(-1.8)
+    );
+
+    let next = store.apply(&default_scene(1, -2.0));
+    assert_eq!(next.status, SceneApplyStatusV1::Applied);
+    assert!(!next.discontinuity);
+    assert_eq!(store.applied_revision(), 1);
+    assert_eq!(
+        store.snapshot().unwrap()["sources"][0]["worldPosition"]["z"].as_f64(),
+        Some(-2.0)
+    );
+}
+
+#[test]
 fn store_revision_and_forbidden_keys() {
     let mut store = SpatialSceneStore::new();
     assert!(!store.has_scene());
@@ -368,18 +399,106 @@ fn projection_distance_binding_and_emitters() {
         &emitters,
         &cfg("source-0", &[("emitter-B", "left"), ("emitter-A", "right")]),
     );
-    let left_slot = ordered
-        .emitter_slots
-        .iter()
-        .find(|s| s.emitter_id == "emitter-B")
-        .unwrap();
-    let right_slot = ordered
-        .emitter_slots
-        .iter()
-        .find(|s| s.emitter_id == "emitter-A")
-        .unwrap();
-    assert_eq!(left_slot.feed, Some(AcousticFeedV1::Left));
-    assert_eq!(right_slot.feed, Some(AcousticFeedV1::Right));
+    assert_eq!(
+        ordered
+            .emitter_slots
+            .iter()
+            .map(|s| s.emitter_id.as_str())
+            .collect::<Vec<_>>(),
+        vec!["emitter-A", "emitter-B"]
+    );
+    assert_eq!(ordered.emitter_slots[0].feed, Some(AcousticFeedV1::Right));
+    assert_eq!(ordered.emitter_slots[1].feed, Some(AcousticFeedV1::Left));
+
+    let unsorted = scene(
+        1,
+        object(
+            "listener-0",
+            "listener",
+            0.0,
+            0.0,
+            0.0,
+            true,
+            true,
+            Some([1.0, 0.0, 0.0, 0.0]),
+            None,
+        ),
+        vec![object(
+            "source-0",
+            "source",
+            0.0,
+            0.0,
+            -1.0,
+            true,
+            true,
+            None,
+            None,
+        )],
+        vec![
+            object("emitter-Z", "emitter", 1.0, 0.0, 0.0, true, true, None, None),
+            object("emitter-A", "emitter", -1.0, 0.0, 0.0, true, true, None, None),
+            object("emitter-M", "emitter", 0.0, 0.0, 0.0, true, true, None, None),
+        ],
+    );
+    let sorted = project_audio_v1(
+        &unsorted,
+        &cfg(
+            "source-0",
+            &[
+                ("emitter-Z", "right"),
+                ("emitter-A", "left"),
+                ("emitter-M", "mid"),
+            ],
+        ),
+    );
+    assert_eq!(
+        sorted
+            .emitter_slots
+            .iter()
+            .map(|s| s.emitter_id.as_str())
+            .collect::<Vec<_>>(),
+        vec!["emitter-A", "emitter-M", "emitter-Z"]
+    );
+    assert_eq!(sorted.emitter_slots[0].feed, Some(AcousticFeedV1::Left));
+    assert_eq!(sorted.emitter_slots[1].feed, Some(AcousticFeedV1::Mid));
+    assert_eq!(sorted.emitter_slots[2].feed, Some(AcousticFeedV1::Right));
+
+    let missing_listener = project_audio_v1(
+        &json!({
+            "schemaVersion": 1,
+            "revision": 1,
+            "sources": [object("source-0", "source", 0.0, 0.0, -1.0, true, true, None, None)],
+            "emitters": [object("emitter-A", "emitter", 0.0, 0.0, 0.0, true, true, None, None)]
+        }),
+        &cfg("source-0", &[("emitter-A", "left")]),
+    );
+    assert_eq!(
+        missing_listener.point_source_status,
+        PointSourceStatusV1::InvalidScene
+    );
+    assert!(missing_listener.emitter_slots.is_empty());
+    assert_eq!(missing_listener.reason.as_deref(), Some("missing_listener"));
+
+    let mut with_camera = default_scene(1, -1.0);
+    with_camera["camera"] = json!({"distance": 5});
+    with_camera["emitters"] = json!([object(
+        "emitter-A",
+        "emitter",
+        0.0,
+        0.0,
+        0.0,
+        true,
+        true,
+        None,
+        None
+    )]);
+    let forbidden = project_audio_v1(&with_camera, &cfg("source-0", &[("emitter-A", "left")]));
+    assert_eq!(
+        forbidden.point_source_status,
+        PointSourceStatusV1::InvalidScene
+    );
+    assert!(forbidden.emitter_slots.is_empty());
+    assert_eq!(forbidden.reason.as_deref(), Some("forbidden_key"));
 
     let bad = project_audio_v1(
         &emitters,

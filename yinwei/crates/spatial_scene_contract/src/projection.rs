@@ -290,6 +290,7 @@ fn project_emitters(
             visual_role,
         });
     }
+    slots.sort_by(|a, b| a.emitter_id.cmp(&b.emitter_id));
     slots
 }
 
@@ -300,7 +301,7 @@ pub fn project_audio_v1(scene: &Value, config: &AudioProjectionConfigV1) -> Audi
             point_source_status: PointSourceStatusV1::InvalidScene,
             point_source: None,
             reason: validation.reason,
-            emitter_slots: project_emitters(scene, config, None),
+            emitter_slots: vec![],
         };
     }
     let listener = listener_pose(&scene["listener"]);
@@ -342,7 +343,7 @@ pub fn project_audio_v1(scene: &Value, config: &AudioProjectionConfigV1) -> Audi
             point_source_status: PointSourceStatusV1::InvalidScene,
             point_source: None,
             reason: Some("missing_listener".into()),
-            emitter_slots,
+            emitter_slots: vec![],
         };
     };
     let Some(world) = source.get("worldPosition").and_then(vec3) else {
@@ -350,7 +351,7 @@ pub fn project_audio_v1(scene: &Value, config: &AudioProjectionConfigV1) -> Audi
             point_source_status: PointSourceStatusV1::InvalidScene,
             point_source: None,
             reason: Some("non_finite_position".into()),
-            emitter_slots,
+            emitter_slots: vec![],
         };
     };
     let posed = project_world(world, listener);

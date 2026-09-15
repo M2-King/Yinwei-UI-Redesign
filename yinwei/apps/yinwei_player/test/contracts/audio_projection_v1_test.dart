@@ -349,9 +349,58 @@ void main() {
         'emitter-A': 'right',
       },
     );
-    expect(result.emitterSlots.map((s) => s.emitterId).toList(), ['emitter-B', 'emitter-A']);
+    expect(result.emitterSlots.map((s) => s.emitterId).toList(), ['emitter-A', 'emitter-B']);
+    expect(result.emitterSlots[0].feed, AcousticFeedV1.right);
+    expect(result.emitterSlots[1].feed, AcousticFeedV1.left);
+  });
+
+  test('32b emitterSlots are sorted by emitterId with feeds bound by id', () {
+    final result = _project(
+      _scene(emitters: [
+        _object(id: 'emitter-Z', type: 'emitter', x: 1),
+        _object(id: 'emitter-A', type: 'emitter', x: -1),
+        _object(id: 'emitter-M', type: 'emitter'),
+      ]),
+      emitters: {
+        'emitter-Z': 'right',
+        'emitter-A': 'left',
+        'emitter-M': 'mid',
+      },
+    );
+    expect(result.emitterSlots.map((s) => s.emitterId).toList(), [
+      'emitter-A',
+      'emitter-M',
+      'emitter-Z',
+    ]);
     expect(result.emitterSlots[0].feed, AcousticFeedV1.left);
-    expect(result.emitterSlots[1].feed, AcousticFeedV1.right);
+    expect(result.emitterSlots[1].feed, AcousticFeedV1.mid);
+    expect(result.emitterSlots[2].feed, AcousticFeedV1.right);
+  });
+
+  test('32c invalid scene with emitter bindings returns empty slots', () {
+    final missingListener = _project(
+      {
+        'schemaVersion': 1,
+        'revision': 1,
+        'sources': [_object(id: 'source-0', type: 'source', z: -1)],
+        'emitters': [_object(id: 'emitter-A', type: 'emitter')],
+      },
+      emitters: {'emitter-A': 'left'},
+    );
+    expect(missingListener.pointSourceStatus, PointSourceStatusV1.invalidScene);
+    expect(missingListener.emitterSlots, isEmpty);
+    expect(missingListener.reason, 'missing_listener');
+
+    final forbidden = _project(
+      {
+        ..._scene(emitters: [_object(id: 'emitter-A', type: 'emitter')]),
+        'camera': {'distance': 5},
+      },
+      emitters: {'emitter-A': 'left'},
+    );
+    expect(forbidden.pointSourceStatus, PointSourceStatusV1.invalidScene);
+    expect(forbidden.emitterSlots, isEmpty);
+    expect(forbidden.reason, 'forbidden_key');
   });
 
   test('33 invalid/unbound feed fails or is skipped per documented rules', () {
@@ -365,9 +414,13 @@ void main() {
         'emitter-L': 'rear',
       },
     );
+    expect(result.emitterSlots.map((s) => s.emitterId).toList(), [
+      'emitter-L',
+      'emitter-missing',
+    ]);
     expect(result.emitterSlots.map((s) => s.status).toList(), [
-      EmitterSlotStatusV1.failedUnknownEmitter,
       EmitterSlotStatusV1.failedInvalidFeed,
+      EmitterSlotStatusV1.failedUnknownEmitter,
     ]);
   });
 

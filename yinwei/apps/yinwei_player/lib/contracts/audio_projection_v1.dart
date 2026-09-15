@@ -200,7 +200,7 @@ class AudioProjectionV1 {
       return AudioProjectionResultV1(
         pointSourceStatus: PointSourceStatusV1.invalidScene,
         reason: validation.reason,
-        emitterSlots: _projectEmitters(scene, config, null),
+        emitterSlots: const [],
       );
     }
     final listener = _listenerPose(scene['listener'] as Map);
@@ -321,6 +321,7 @@ class AudioProjectionV1 {
         visualRole: visualRole,
       ));
     }
+    slots.sort((a, b) => a.emitterId.compareTo(b.emitterId));
     return slots;
   }
 }

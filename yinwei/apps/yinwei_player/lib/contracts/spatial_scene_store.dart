@@ -36,8 +36,10 @@ Map<String, dynamic> _cloneScene(Map<dynamic, dynamic> scene) {
 
 /// Holds the last accepted SceneContractV1 snapshot.
 ///
-/// Empty store reports [appliedRevision] `0` (no scene). Incoming revisions
-/// are compared with [decideRevisionV1]. Invalid and stale updates leave the
+/// Empty store reports [appliedRevision] `0` and [hasScene] `false`. That `0`
+/// is not an accepted revision: the first valid scene — including
+/// `revision = 0` — is applied. After a scene exists, incoming revisions are
+/// compared with [decideRevisionV1]. Invalid and stale updates leave the
 /// previous snapshot unchanged.
 class SpatialSceneStore {
   int _appliedRevision = 0;
@@ -64,6 +66,17 @@ class SpatialSceneStore {
       );
     }
     final incomingRevision = copy['revision'] as int;
+    if (!hasScene) {
+      _scene = copy;
+      _appliedRevision = incomingRevision;
+      if (incomingRevision > 1) {
+        return const SceneApplyResultV1(
+          status: SceneApplyStatusV1.appliedWithDiscontinuity,
+          discontinuity: true,
+        );
+      }
+      return const SceneApplyResultV1(status: SceneApplyStatusV1.applied);
+    }
     final verdict = decideRevisionV1(
       appliedRevision: _appliedRevision,
       incomingRevision: incomingRevision,

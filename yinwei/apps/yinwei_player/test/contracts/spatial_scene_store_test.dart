@@ -63,6 +63,40 @@ void main() {
     expect(store.snapshot()!['revision'], 1);
   });
 
+  test('1b empty store accepts valid revision 0', () {
+    final store = SpatialSceneStore();
+    expect(store.hasScene, isFalse);
+    final result = store.apply(_scene(revision: 0));
+    expect(result.status, SceneApplyStatusV1.applied);
+    expect(result.discontinuity, isFalse);
+    expect(store.hasScene, isTrue);
+    expect(store.appliedRevision, 0);
+    expect(store.snapshot()!['revision'], 0);
+  });
+
+  test('1c revision 0 again is rejected stale', () {
+    final store = SpatialSceneStore();
+    store.apply(_scene(revision: 0));
+    final result = store.apply(_scene(revision: 0, sources: [
+      _object(id: 'source-other', type: 'source', x: 9),
+    ]));
+    expect(result.status, SceneApplyStatusV1.rejectedStale);
+    expect(store.appliedRevision, 0);
+    expect((store.snapshot()!['sources'] as List).first['id'], 'source-0');
+  });
+
+  test('1d revision 1 after revision 0 is applied', () {
+    final store = SpatialSceneStore();
+    store.apply(_scene(revision: 0));
+    final result = store.apply(_scene(revision: 1, sources: [
+      _object(id: 'source-0', type: 'source', z: -2),
+    ]));
+    expect(result.status, SceneApplyStatusV1.applied);
+    expect(result.discontinuity, isFalse);
+    expect(store.appliedRevision, 1);
+    expect((store.snapshot()!['sources'] as List).first['worldPosition']['z'], -2);
+  });
+
   test('2 newer sequential revision accepted', () {
     final store = SpatialSceneStore();
     store.apply(_scene(revision: 1));
