@@ -743,4 +743,53 @@ void main() {
     expect(_sourceWorld(bridge.adapter.snapshot()!).z, closeTo(-2, trig));
     expect(stale.applyStatus, SceneApplyStatusV1.rejectedStale);
   });
+
+  test('Phase 3 elevation world Y updates Scene and engine elevation', () {
+    final bridge = boot();
+    final result = bridge.handleMessage(jsonEncode(_poseIntent(
+      type: 'sourcePoseCommit',
+      objectId: kSpatialPointSourceIdV1,
+      x: 0,
+      y: 0.8,
+      z: -2,
+      basedOnRevision: 1,
+    )));
+    expect(result.accepted, isTrue);
+    expect(bridge.adapter.appliedRevision, 2);
+    expect(_sourceWorld(bridge.adapter.snapshot()!).y, closeTo(0.8, trig));
+    expect(result.engineParams!.elevationDeg, greaterThan(10));
+    expect(result.engineParams!.azimuthDeg, closeTo(0, 1e-3));
+  });
+
+  test('Phase 3 geometric 25m stays unclamped while DSP projects to 10', () {
+    final bridge = boot();
+    final result = bridge.handleMessage(jsonEncode(_poseIntent(
+      type: 'sourcePoseCommit',
+      objectId: kSpatialPointSourceIdV1,
+      x: 0,
+      y: 0,
+      z: -25,
+      basedOnRevision: 1,
+    )));
+    expect(result.accepted, isTrue);
+    final world = _sourceWorld(bridge.adapter.snapshot()!);
+    expect(world.z, closeTo(-25, trig));
+    expect(world.length, closeTo(25, trig));
+    expect(result.engineParams!.distanceM, 10);
+  });
+
+  test('Phase 3 zero-distance world remains projection-safe', () {
+    final bridge = boot();
+    final result = bridge.handleMessage(jsonEncode(_poseIntent(
+      type: 'sourcePoseCommit',
+      objectId: kSpatialPointSourceIdV1,
+      x: 0,
+      y: 0,
+      z: 0,
+      basedOnRevision: 1,
+    )));
+    expect(result.accepted, isTrue);
+    expect(_sourceWorld(bridge.adapter.snapshot()!).length, closeTo(0, trig));
+    expect(result.engineParams!.distanceM, greaterThanOrEqualTo(0.5));
+  });
 }

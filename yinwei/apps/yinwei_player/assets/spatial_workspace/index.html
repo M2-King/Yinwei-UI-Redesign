@@ -10,7 +10,7 @@
       width: 100%;
       height: 100%;
       overflow: hidden;
-      background: #0B0B0D;
+      background: #0A0A0C;
       font-family: "SF Pro Text", "Segoe UI", "Helvetica Neue", sans-serif;
       color: #F5F5F7;
       user-select: none;
@@ -28,9 +28,10 @@
       display: flex;
       gap: 2px;
       padding: 3px;
-      border-radius: 10px;
-      background: rgba(18, 18, 20, 0.88);
-      border: 1px solid rgba(255, 255, 255, 0.09);
+      border-radius: 11px;
+      background: rgba(16, 16, 18, 0.86);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      backdrop-filter: blur(16px);
       pointer-events: auto;
     }
     #views button {
@@ -40,44 +41,47 @@
       color: #8E8E93;
       font-size: 11px;
       font-weight: 500;
+      letter-spacing: 0.04em;
       padding: 6px 10px;
       border-radius: 8px;
       cursor: pointer;
     }
     #views button.on {
-      background: rgba(10, 132, 255, 0.32);
-      color: #fff;
+      background: rgba(255, 255, 255, 0.1);
+      color: #F5F5F7;
     }
     #pose {
       position: absolute;
       top: 12px;
       right: 12px;
       padding: 8px 12px;
-      border-radius: 10px;
-      background: rgba(18, 18, 20, 0.88);
-      border: 1px solid rgba(255, 255, 255, 0.09);
+      border-radius: 11px;
+      background: rgba(16, 16, 18, 0.86);
+      border: 1px solid rgba(255, 255, 255, 0.08);
       font-size: 11px;
       letter-spacing: 0.02em;
       color: #F5F5F7;
+      backdrop-filter: blur(16px);
     }
     #pose span { color: #8E8E93; margin-right: 4px; }
     #sel {
       position: absolute;
       left: 12px;
       bottom: 36px;
-      padding: 10px 12px;
-      border-radius: 12px;
-      background: rgba(18, 18, 20, 0.92);
-      border: 1px solid rgba(255, 255, 255, 0.09);
+      padding: 12px 14px;
+      border-radius: 14px;
+      background: rgba(16, 16, 18, 0.9);
+      border: 1px solid rgba(255, 255, 255, 0.08);
       font-size: 11px;
-      line-height: 1.45;
+      line-height: 1.5;
       display: none;
-      min-width: 168px;
+      min-width: 176px;
+      backdrop-filter: blur(16px);
     }
     #sel .ch {
-      font-size: 13px;
+      font-size: 12px;
       font-weight: 600;
-      letter-spacing: 0.04em;
+      letter-spacing: 0.08em;
     }
     #sel .muted { color: #8E8E93; }
     #hint {
@@ -87,7 +91,7 @@
       bottom: 10px;
       text-align: center;
       font-size: 10px;
-      color: rgba(142, 142, 147, 0.85);
+      color: rgba(142, 142, 147, 0.82);
     }
   </style>
 </head>
@@ -98,10 +102,11 @@
       <button data-view="top">Top</button>
       <button data-view="front">Front</button>
       <button data-view="listener">Listener</button>
+      <button data-view="fit">Fit</button>
     </div>
     <div id="pose"><span>Az</span>— <span>El</span>— <span>Dist</span>—</div>
     <div id="sel"></div>
-    <div id="hint">拖动音源提交 XYZ 意图 · 音箱仅显示 · 右键平移 · 滚轮缩放</div>
+    <div id="hint">拖动平移 · Shift 升降 · 右键平移 · 滚轮缩放</div>
   </div>
   <script src="vendor/three.min.js"></script>
   <script src="scene.js"></script>

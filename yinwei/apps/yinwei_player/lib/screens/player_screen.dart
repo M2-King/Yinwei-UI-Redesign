@@ -501,13 +501,16 @@ class _PlayerScreenState extends State<PlayerScreen> {
                   onSelectOutput: (name) => unawaited(_selectWetOutput(name)),
                 ),
                 Expanded(
-                  child: Row(
+                  child: LayoutBuilder(
+                    builder: (context, constraints) {
+                      final wide = constraints.maxWidth >= 1100;
+                      return Row(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
                       Expanded(
-                        flex: 5,
+                        flex: wide ? 7 : 5,
                         child: Padding(
-                          padding: const EdgeInsets.fromLTRB(28, 12, 12, 20),
+                          padding: const EdgeInsets.fromLTRB(22, 8, 10, 16),
                           child: SpatialWorkspace(
                             playhead: now.playhead,
                             azimuthDeg: _live.running
@@ -606,7 +609,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
                         ),
                       ),
                       Expanded(
-                        flex: 5,
+                        flex: wide ? 4 : 5,
                         child: Padding(
                           padding: const EdgeInsets.symmetric(
                               horizontal: 12, vertical: 24),
@@ -665,6 +668,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
                         },
                       ),
                     ],
+                  );
+                    },
                   ),
                 ),
                 _StatusBar(
