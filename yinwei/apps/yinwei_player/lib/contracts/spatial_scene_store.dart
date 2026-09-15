@@ -1,6 +1,7 @@
 /// SpatialSceneStore — authoritative SceneContractV1 holder.
 ///
-/// Domain state only. Not wired to EngineController, UI, or Three.js.
+/// Domain state for SceneContractV1. Live Point-mode adoption is owned by
+/// SpatialRuntimeAdapter; this store still does not call the audio engine.
 library;
 
 import 'dart:convert';
