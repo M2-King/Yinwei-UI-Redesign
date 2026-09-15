@@ -12,6 +12,7 @@ import 'package:yinwei_player/bridge/live_transfer.dart';
 import 'package:yinwei_player/bridge/system_media.dart';
 import 'package:yinwei_player/models/spatial_params.dart';
 import 'package:yinwei_player/runtime/spatial_runtime_adapter.dart';
+import 'package:yinwei_player/runtime/spatial_scene_bridge.dart';
 import 'package:yinwei_player/state/engine_controller.dart';
 import 'package:yinwei_player/state/island_now_playing.dart';
 import 'package:yinwei_player/state/window_mode_controller.dart';
@@ -45,6 +46,7 @@ class PlayerScreen extends StatefulWidget {
 class _PlayerScreenState extends State<PlayerScreen> {
   late final EngineController _ctrl;
   late final SpatialRuntimeAdapter _spatial;
+  late final SpatialSceneBridge _sceneBridge;
   late final WindowModeController _window;
   late final SystemMediaService _smtc;
   late final LiveTransferController _live;
@@ -89,6 +91,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     }
     _spatial = SpatialRuntimeAdapter();
     _spatial.bootstrap(_ctrl.params);
+    _sceneBridge = SpatialSceneBridge(adapter: _spatial);
     _ctrl.addListener(_onChange);
     _window.addListener(_onWindowMode);
     _smtc.addListener(_onSmtcChange);
@@ -114,7 +117,41 @@ class _PlayerScreenState extends State<PlayerScreen> {
   }
 
   void _onChange() {
+    _sceneBridge.observePlaybackTelemetry(
+      playhead: _ctrl.playhead,
+      playing: _ctrl.playing,
+      orbiting: _ctrl.params.motion == MotionMode.orbit &&
+          _ctrl.mode == PlaybackMode.spatial &&
+          _ctrl.playing,
+      envelopment: _ctrl.params.envelopment,
+      active: _live.running || _ctrl.mode == PlaybackMode.spatial,
+    );
     if (mounted) setState(() {});
+  }
+
+  void _commitEnginePose(SpatialParams projected) {
+    final next = _ctrl.params.copy()
+      ..azimuthDeg = projected.azimuthDeg
+      ..elevationDeg = projected.elevationDeg
+      ..distanceM = projected.distanceM
+      ..selectedPreset = null;
+    if (_live.running) {
+      _live.applyLiveParams(next);
+    }
+    _ctrl.setParams(next);
+  }
+
+  SceneBridgeResult _onSceneIntent(String raw) {
+    final result = _sceneBridge.handleMessage(raw);
+    debugPrint(
+      '[SceneBridge] accepted=${result.accepted} mutated=${result.sceneMutated} '
+      'write=${result.shouldWriteEngine} rev=${_spatial.appliedRevision} '
+      'reason=${result.reason}',
+    );
+    if (result.shouldWriteEngine) {
+      _commitEnginePose(result.engineParams!);
+    }
+    return result;
   }
 
   void _onSmtcChange() {
@@ -385,6 +422,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     _window.removeListener(_onWindowMode);
     _smtc.removeListener(_onSmtcChange);
     _live.removeListener(_onChange);
+    _sceneBridge.dispose();
     unawaited(_live.stop());
     unawaited(_audioRoute.restore());
     if (widget.controller == null) {
@@ -481,6 +519,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
                             distanceM: c.params.distanceM,
                             envelopment: c.params.envelopment,
                             playing: now.playing,
+                            sceneSnapshot: _spatial.snapshot(),
+                            selectedObjectId: _sceneBridge.selectedObjectId,
+                            onSceneIntent:
+                                c.array.enabled ? null : _onSceneIntent,
                             arraySpeakers:
                                 c.array.enabled ? c.array.speakers : null,
                             selectedSpeakerIndex: c.array.selectedIndex,

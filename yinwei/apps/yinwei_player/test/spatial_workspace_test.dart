@@ -51,9 +51,11 @@ void main() {
     expect(html.contains('visual layout'), isTrue);
   });
 
-  test('Three.js source poses post to Flutter host only', () async {
+  test('Three.js source poses post intents to Flutter host only', () async {
     final scene = await File('assets/spatial_workspace/scene.js').readAsString();
     expect(scene.contains('YinweiPose.postMessage'), isTrue);
+    expect(scene.contains('sourcePosePreview'), isTrue);
+    expect(scene.contains('sourcePoseCommit'), isTrue);
     expect(scene.contains('yinwei_set_params'), isFalse);
     expect(scene.contains('EngineApi'), isFalse);
     expect(scene.contains('spatial_core'), isFalse);
@@ -63,6 +65,8 @@ void main() {
     final dart = await File('lib/widgets/spatial_workspace.dart').readAsString();
     expect(dart.contains('YinweiPose'), isTrue);
     expect(dart.contains('dist.clamp(0.5, 10.0)'), isFalse);
-    expect(dart.contains('onDistanceChanged?.call(dist)'), isTrue);
+    expect(dart.contains('onSceneIntent'), isTrue);
+    expect(dart.contains('applySceneSnapshot'), isTrue);
+    expect(dart.contains('applyPlaybackTelemetry'), isTrue);
   });
 }

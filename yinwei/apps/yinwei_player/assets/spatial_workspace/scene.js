@@ -1,5 +1,7 @@
 /* Yinwei spatial workspace — Three.js r160, Apple-dark, no neon HUD.
-   Speakers are visual layout only. Source pose drives existing Point HRTF. */
+   Flutter SpatialSceneStore is authoritative. JS proposes world-XYZ intents.
+   Visual emitters are layout-only — not discrete 7.1 / Array channels.
+   Speaker drag is visual-only and does not commit acoustic scene state. */
 (function () {
   'use strict';
 
@@ -14,21 +16,7 @@
   var MAX_DPR = 1.5;
   var POSE_MS = 32;
 
-  var DEFAULT_SPEAKERS = [
-    { id: 'L', channel: 'L', azimuth: -30, elevation: 0, distance: 2 },
-    { id: 'R', channel: 'R', azimuth: 30, elevation: 0, distance: 2 },
-    { id: 'C', channel: 'C', azimuth: 0, elevation: 0, distance: 2 },
-    { id: 'LFE', channel: 'LFE', azimuth: 0, elevation: -28, distance: 1.7 },
-    { id: 'Ls', channel: 'Ls', azimuth: -90, elevation: 0, distance: 2 },
-    { id: 'Rs', channel: 'Rs', azimuth: 90, elevation: 0, distance: 2 },
-    { id: 'Lb', channel: 'Lb', azimuth: -135, elevation: 0, distance: 2 },
-    { id: 'Rb', channel: 'Rb', azimuth: 135, elevation: 0, distance: 2 },
-  ];
-
   var state = {
-    azimuth: 90,
-    elevation: -10,
-    distance: 2.1,
     envelopment: 0.6,
     playhead: 0,
     playing: false,
@@ -37,36 +25,32 @@
   };
 
   var viewMode = 'free';
-  var dragging = null; // { kind, mesh, planeY } | null
+  var dragging = null;
   var lastPosePost = 0;
   var needsRender = true;
   var waveAcc = 0;
   var trail = [];
-  var speakerMeshes = [];
-  var selectedSpeaker = null;
   var viewTween = null;
-
-  function poseToXyz(az, el, dist) {
-    var a = az * DEG;
-    var e = el * DEG;
-    var ce = Math.cos(e);
-    return new THREE.Vector3(
-      dist * Math.sin(a) * ce,
-      dist * Math.sin(e),
-      -dist * Math.cos(a) * ce
-    );
-  }
+  var objectsById = {};
+  var authoritativeRevision = 0;
+  var selectedObjectId = null;
+  var source = null;
+  var listener = null;
 
   function xyzToPose(v) {
-    var dist = Math.max(0.5, Math.min(10, v.length()));
-    if (v.length() < 1e-6) {
-      return { azimuth: 0, elevation: 0, distance: 0.5 };
+    var dist = v.length();
+    if (dist < 1e-6) {
+      return { azimuth: 0, elevation: 0, distance: 0 };
     }
-    var el = Math.asin(THREE.MathUtils.clamp(v.y / v.length(), -1, 1)) / DEG;
+    var el = Math.asin(THREE.MathUtils.clamp(v.y / dist, -1, 1)) / DEG;
     var az = Math.atan2(v.x, -v.z) / DEG;
     if (az > 180) az -= 360;
     if (az <= -180) az += 360;
     return { azimuth: az, elevation: THREE.MathUtils.clamp(el, -90, 90), distance: dist };
+  }
+
+  function quatDomainToThree(q) {
+    return { x: q.x, y: q.y, z: q.z, w: q.w };
   }
 
   var scene = new THREE.Scene();
@@ -118,6 +102,9 @@
     needsRender = true;
   }
   window.addEventListener('resize', onResize);
+  if (window.ResizeObserver) {
+    new ResizeObserver(onResize).observe(document.documentElement);
+  }
   onResize();
 
   scene.add(new THREE.HemisphereLight(0xc5ccd6, 0x2a2a2e, 0.95));
@@ -230,7 +217,7 @@
   }
   buildRoom();
 
-  function makeListener() {
+  function makeListenerMesh() {
     var g = new THREE.Group();
     var head = new THREE.Mesh(new THREE.SphereGeometry(0.11, 20, 16), matListener);
     head.scale.set(0.92, 1.05, 0.96);
@@ -243,12 +230,10 @@
     torso.position.y = 0.82;
     g.add(head, earL, earR, torso);
     g.userData.kind = 'listener';
-    scene.add(g);
     return g;
   }
-  var listener = makeListener();
 
-  function makeSpeaker(spec) {
+  function makeEmitterMesh(obj) {
     var g = new THREE.Group();
     var body = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.38, 0.2), matSpeaker.clone());
     var driver = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, 0.018, 22), matDriver);
@@ -258,31 +243,24 @@
     tweeter.rotation.x = Math.PI / 2;
     tweeter.position.set(0, 0.1, 0.108);
     g.add(body, driver, tweeter);
-    g.userData.kind = 'speaker';
-    g.userData.spec = spec;
+    g.userData.kind = 'emitter';
     g.userData.body = body;
-    placeSpeaker(g, spec);
-    scene.add(g);
+    g.userData.visualRole = obj && obj.visualRole;
     return g;
   }
 
-  function placeSpeaker(mesh, spec) {
-    var p = poseToXyz(spec.azimuth, spec.elevation, spec.distance);
-    mesh.position.copy(p);
-    mesh.lookAt(new THREE.Vector3(0, p.y, 0));
+  function makeSourceMesh() {
+    var g = new THREE.Group();
+    var mesh = new THREE.Mesh(new THREE.IcosahedronGeometry(0.1, 1), matSource);
+    var hit = new THREE.Mesh(
+      new THREE.SphereGeometry(0.32, 12, 10),
+      new THREE.MeshBasicMaterial({ visible: false })
+    );
+    g.add(mesh, hit);
+    g.userData.kind = 'source';
+    g.userData.visual = mesh;
+    return g;
   }
-
-  function rebuildSpeakers(list) {
-    speakerMeshes.forEach(function (m) {
-      scene.remove(m);
-    });
-    speakerMeshes = (list || DEFAULT_SPEAKERS).map(makeSpeaker);
-  }
-  rebuildSpeakers(DEFAULT_SPEAKERS);
-
-  var source = new THREE.Mesh(new THREE.IcosahedronGeometry(0.1, 1), matSource);
-  source.userData.kind = 'source';
-  scene.add(source);
 
   var sourceRing = new THREE.Mesh(
     new THREE.RingGeometry(0.16, 0.175, 48),
@@ -327,69 +305,73 @@
   selectBox.visible = false;
   scene.add(selectBox);
 
-  function applySourcePose() {
-    var p = poseToXyz(state.azimuth, state.elevation, state.distance);
-    source.position.copy(p);
-    sourceRing.position.set(p.x, 0.03, p.z);
-    var s = 0.55 + Math.min(1, state.distance / 4) * 0.5;
+  function worldOf(obj) {
+    var p = obj.worldPosition || {};
+    return new THREE.Vector3(p.x || 0, p.y || 0, p.z || 0);
+  }
+
+  function applyDomainOrientation(mesh, obj) {
+    if (!obj || !obj.orientation) return;
+    var q = quatDomainToThree(obj.orientation);
+    mesh.quaternion.set(q.x, q.y, q.z, q.w);
+  }
+
+  function decorateSourceVisual(mesh) {
+    if (!mesh) return;
+    sourceRing.position.set(mesh.position.x, 0.03, mesh.position.z);
+    var dist = mesh.position.length();
+    var s = 0.55 + Math.min(1, dist / 4) * 0.5;
     sourceRing.scale.setScalar(s);
     matSource.emissiveIntensity = state.active ? 0.22 + state.envelopment * 0.12 : 0.08;
   }
-  applySourcePose();
-  renderer.render(scene, camera);
-
-  function postToHost(payload) {
-    var msg = JSON.stringify(payload);
-    if (window.YinweiPose && typeof window.YinweiPose.postMessage === 'function') {
-      window.YinweiPose.postMessage(msg);
-    }
-  }
-
-  function postSourcePose(force) {
-    var now = performance.now();
-    if (!force && now - lastPosePost < POSE_MS) return;
-    lastPosePost = now;
-    postToHost({
-      type: 'source',
-      azimuth: state.azimuth,
-      elevation: state.elevation,
-      distance: state.distance,
-    });
-  }
 
   function formatPose() {
-    var az = Math.round(state.azimuth);
-    var el = Math.round(state.elevation);
-    var d = state.distance.toFixed(2);
+    if (!source) {
+      document.getElementById('pose').innerHTML =
+        '<span>Az</span>—  <span>El</span>—  <span>Dist</span>—';
+      return;
+    }
+    var pose = xyzToPose(source.position);
     document.getElementById('pose').innerHTML =
-      '<span>Az</span>' + az + '°  <span>El</span>' + el + '°  <span>Dist</span>' + d + ' m';
+      '<span>Az</span>' +
+      Math.round(pose.azimuth) +
+      '°  <span>El</span>' +
+      Math.round(pose.elevation) +
+      '°  <span>Dist</span>' +
+      pose.distance.toFixed(2) +
+      ' m';
   }
-  formatPose();
 
-  function showSpeakerHud(mesh) {
+  function showSelectionHud(mesh) {
     var el = document.getElementById('sel');
     if (!mesh) {
       el.style.display = 'none';
       selectBox.visible = false;
       return;
     }
-    var spec = mesh.userData.spec;
-    var p = xyzToPose(mesh.position);
-    spec.azimuth = p.azimuth;
-    spec.elevation = p.elevation;
-    spec.distance = p.distance;
+    var kind = mesh.userData.kind;
+    var pose = xyzToPose(mesh.position);
     var xyz = mesh.position;
+    var title = mesh.userData.id || kind;
+    var note =
+      kind === 'emitter'
+        ? 'visual layout · not acoustic Array'
+        : kind === 'source'
+          ? 'Point source · Flutter owns scene'
+          : 'listener';
     el.style.display = 'block';
     el.innerHTML =
       '<div class="ch">' +
-      spec.channel +
-      '</div><div class="muted">visual layout · not a mix bus</div>' +
+      title +
+      '</div><div class="muted">' +
+      note +
+      '</div>' +
       '<div>Az ' +
-      Math.round(p.azimuth) +
+      Math.round(pose.azimuth) +
       '° · El ' +
-      Math.round(p.elevation) +
+      Math.round(pose.elevation) +
       '° · ' +
-      p.distance.toFixed(2) +
+      pose.distance.toFixed(2) +
       ' m</div>' +
       '<div class="muted">XYZ ' +
       xyz.x.toFixed(2) +
@@ -401,16 +383,122 @@
     selectBox.setFromObject(mesh);
     selectBox.visible = true;
     needsRender = true;
+  }
+
+  function createMeshFor(obj) {
+    var mesh;
+    if (obj.type === 'listener') mesh = makeListenerMesh();
+    else if (obj.type === 'source') mesh = makeSourceMesh();
+    else mesh = makeEmitterMesh(obj);
+    mesh.userData.id = obj.id;
+    mesh.userData.kind = obj.type;
+    scene.add(mesh);
+    objectsById[obj.id] = mesh;
+    if (obj.type === 'listener') listener = mesh;
+    if (obj.type === 'source') source = mesh;
+    return mesh;
+  }
+
+  function updateMeshTransform(mesh, obj, skipSource) {
+    if (skipSource && mesh.userData.kind === 'source') return;
+    mesh.position.copy(worldOf(obj));
+    applyDomainOrientation(mesh, obj);
+    if (mesh.userData.kind === 'emitter') {
+      mesh.lookAt(new THREE.Vector3(0, mesh.position.y, 0));
+      mesh.userData.visualRole = obj.visualRole;
+    }
+    if (mesh.userData.kind === 'source') {
+      source = mesh;
+      decorateSourceVisual(mesh);
+    }
+    if (mesh.userData.kind === 'listener') listener = mesh;
+  }
+
+  function applySceneSnapshot(msg) {
+    if (!msg || !msg.scene) return;
+    authoritativeRevision = msg.revision || msg.scene.revision || 0;
+    var sceneDoc = msg.scene;
+    var incoming = {};
+    var skipSource =
+      dragging && dragging.kind === 'source' ? dragging.objectId : null;
+
+    function upsert(obj) {
+      if (!obj || !obj.id) return;
+      incoming[obj.id] = true;
+      var mesh = objectsById[obj.id];
+      if (!mesh) mesh = createMeshFor(obj);
+      updateMeshTransform(mesh, obj, skipSource && obj.id === skipSource);
+    }
+
+    upsert(sceneDoc.listener);
+    (sceneDoc.sources || []).forEach(upsert);
+    (sceneDoc.emitters || []).forEach(upsert);
+
+    Object.keys(objectsById).forEach(function (id) {
+      if (incoming[id]) return;
+      var mesh = objectsById[id];
+      scene.remove(mesh);
+      delete objectsById[id];
+      if (source === mesh) source = null;
+      if (listener === mesh) listener = null;
+    });
+
+    formatPose();
+    onResize();
+    if (selectedObjectId && objectsById[selectedObjectId]) {
+      showSelectionHud(objectsById[selectedObjectId]);
+    } else if (!selectedObjectId) {
+      showSelectionHud(null);
+    }
+    needsRender = true;
+  }
+
+  function applyPlaybackTelemetry(next) {
+    if (!next) return;
+    if (typeof next.envelopment === 'number') state.envelopment = next.envelopment;
+    if (typeof next.playhead === 'number') state.playhead = next.playhead;
+    if (typeof next.playing === 'boolean') state.playing = next.playing;
+    if (typeof next.active === 'boolean') state.active = next.active;
+    if (typeof next.orbiting === 'boolean') state.orbiting = next.orbiting;
+    decorateSourceVisual(source);
+    needsRender = true;
+  }
+
+  function applyUiState(next) {
+    if (!next) return;
+    selectedObjectId = next.selectedObjectId || null;
+    if (selectedObjectId && objectsById[selectedObjectId]) {
+      showSelectionHud(objectsById[selectedObjectId]);
+    } else {
+      showSelectionHud(null);
+    }
+  }
+
+  function postToHost(payload) {
+    if (window.chrome && window.chrome.webview && typeof window.chrome.webview.postMessage === 'function') {
+      window.chrome.webview.postMessage(payload);
+      return;
+    }
+    var msg = JSON.stringify(payload);
+    if (window.YinweiPose && typeof window.YinweiPose.postMessage === 'function') {
+      window.YinweiPose.postMessage(msg);
+    }
+  }
+
+  function postSourceIntent(type, force) {
+    if (!source) return;
+    var now = performance.now();
+    if (!force && type === 'sourcePosePreview' && now - lastPosePost < POSE_MS) return;
+    lastPosePost = now;
     postToHost({
-      type: 'speaker',
-      id: spec.id,
-      channel: spec.channel,
-      azimuth: p.azimuth,
-      elevation: p.elevation,
-      distance: p.distance,
-      x: xyz.x,
-      y: xyz.y,
-      z: xyz.z,
+      type: type,
+      objectId: source.userData.id,
+      worldPosition: {
+        x: source.position.x,
+        y: source.position.y,
+        z: source.position.z,
+      },
+      basedOnRevision: authoritativeRevision,
     });
   }
 
@@ -429,15 +517,26 @@
     pointer.y = -((ev.clientY - r.top) / r.height) * 2 + 1;
   }
 
+  function pickableMeshes() {
+    return Object.keys(objectsById).map(function (id) {
+      return objectsById[id];
+    });
+  }
+
   function pick(ev) {
     ndcFromEvent(ev);
     raycaster.setFromCamera(pointer, camera);
-    var objs = speakerMeshes.concat([source]);
-    var hits = raycaster.intersectObjects(objs, true);
+    var hits = raycaster.intersectObjects(pickableMeshes(), true);
     if (!hits.length) return null;
-    var obj = hits[0].object;
-    while (obj && !obj.userData.kind) obj = obj.parent;
-    return obj;
+    var first = null;
+    for (var i = 0; i < hits.length; i++) {
+      var obj = hits[i].object;
+      while (obj && !obj.userData.kind) obj = obj.parent;
+      if (!obj) continue;
+      if (!first) first = obj;
+      if (obj.userData.kind === 'source') return obj;
+    }
+    return first;
   }
 
   renderer.domElement.addEventListener('contextmenu', function (e) {
@@ -450,18 +549,19 @@
     lastPtr.y = e.clientY;
     var obj = pick(e);
     if (e.button === 0 && obj && obj.userData.kind === 'source') {
-      dragging = { kind: 'source' };
-      dragPlane.setFromNormalAndCoplanarPoint(new THREE.Vector3(0, 1, 0), source.position);
-      selectedSpeaker = null;
-      showSpeakerHud(null);
+      dragging = { kind: 'source', objectId: obj.userData.id };
+      dragPlane.setFromNormalAndCoplanarPoint(new THREE.Vector3(0, 1, 0), obj.position);
+      selectedObjectId = obj.userData.id;
+      postToHost({ type: 'selectObject', objectId: obj.userData.id });
+      showSelectionHud(obj);
       renderer.domElement.setPointerCapture(e.pointerId);
       return;
     }
-    if (e.button === 0 && obj && obj.userData.kind === 'speaker') {
-      dragging = { kind: 'speaker', mesh: obj };
-      selectedSpeaker = obj;
-      dragPlane.setFromNormalAndCoplanarPoint(new THREE.Vector3(0, 1, 0), obj.position);
-      showSpeakerHud(obj);
+    if (e.button === 0 && obj && obj.userData.kind === 'emitter') {
+      // Visual-only until Phase 3. Selection is UI state, not SceneContract.
+      selectedObjectId = obj.userData.id;
+      postToHost({ type: 'selectObject', objectId: obj.userData.id });
+      showSelectionHud(obj);
       renderer.domElement.setPointerCapture(e.pointerId);
       return;
     }
@@ -470,12 +570,14 @@
     } else if (e.button === 0 && viewMode === 'free') {
       orbitingCam = true;
     }
-    if (obj && obj.userData.kind === 'speaker') {
-      selectedSpeaker = obj;
-      showSpeakerHud(obj);
+    if (obj && obj.userData.id) {
+      selectedObjectId = obj.userData.id;
+      postToHost({ type: 'selectObject', objectId: obj.userData.id });
+      showSelectionHud(obj);
     } else if (!obj) {
-      selectedSpeaker = null;
-      showSpeakerHud(null);
+      selectedObjectId = null;
+      postToHost({ type: 'selectObject', objectId: null });
+      showSelectionHud(null);
     }
     renderer.domElement.setPointerCapture(e.pointerId);
   });
@@ -485,29 +587,23 @@
     var dy = e.clientY - lastPtr.y;
     lastPtr.x = e.clientX;
     lastPtr.y = e.clientY;
-    if (dragging) {
+    if (dragging && dragging.kind === 'source' && source) {
       ndcFromEvent(e);
       raycaster.setFromCamera(pointer, camera);
       if (e.shiftKey) {
-        dragPlane.setFromNormalAndCoplanarPoint(camera.getWorldDirection(new THREE.Vector3()).cross(camera.up).normalize().cross(camera.up).normalize(), dragging.kind === 'source' ? source.position : dragging.mesh.position);
+        dragPlane.setFromNormalAndCoplanarPoint(
+          camera.getWorldDirection(new THREE.Vector3()).cross(camera.up).normalize().cross(camera.up).normalize(),
+          source.position
+        );
       }
       if (raycaster.ray.intersectPlane(dragPlane, dragHit)) {
         dragHit.x = THREE.MathUtils.clamp(dragHit.x, -ROOM * 0.42, ROOM * 0.42);
         dragHit.z = THREE.MathUtils.clamp(dragHit.z, -ROOM * 0.42, ROOM * 0.42);
         dragHit.y = THREE.MathUtils.clamp(dragHit.y, 0.12, WALL_H - 0.3);
-        if (dragging.kind === 'source') {
-          var pose = xyzToPose(dragHit);
-          state.azimuth = pose.azimuth;
-          state.elevation = pose.elevation;
-          state.distance = pose.distance;
-          applySourcePose();
-          formatPose();
-          postSourcePose(false);
-        } else {
-          dragging.mesh.position.copy(dragHit);
-          dragging.mesh.lookAt(new THREE.Vector3(0, dragHit.y, 0));
-          showSpeakerHud(dragging.mesh);
-        }
+        source.position.copy(dragHit);
+        decorateSourceVisual(source);
+        formatPose();
+        postSourceIntent('sourcePosePreview', false);
         needsRender = true;
       }
       return;
@@ -532,7 +628,9 @@
   });
 
   renderer.domElement.addEventListener('pointerup', function () {
-    if (dragging && dragging.kind === 'source') postSourcePose(true);
+    if (dragging && dragging.kind === 'source') {
+      postSourceIntent('sourcePoseCommit', true);
+    }
     dragging = null;
     orbitingCam = false;
     panningCam = false;
@@ -542,11 +640,13 @@
     'wheel',
     function (e) {
       e.preventDefault();
-      if (dragging && dragging.kind === 'source') {
-        state.distance = THREE.MathUtils.clamp(state.distance + (e.deltaY > 0 ? 0.12 : -0.12), 0.5, 10);
-        applySourcePose();
+      if (dragging && dragging.kind === 'source' && source) {
+        var len = Math.max(1e-6, source.position.length());
+        var next = THREE.MathUtils.clamp(len + (e.deltaY > 0 ? 0.12 : -0.12), 0.12, 8);
+        source.position.setLength(next);
+        decorateSourceVisual(source);
         formatPose();
-        postSourcePose(false);
+        postSourceIntent('sourcePosePreview', false);
         needsRender = true;
         return;
       }
@@ -592,6 +692,7 @@
   });
 
   function spawnWave() {
+    if (!source) return;
     for (var i = 0; i < waves.length; i++) {
       if (waves[i].userData.age > 1.35) {
         waves[i].userData.age = 0;
@@ -613,6 +714,7 @@
       spawnWave();
     }
     var spread = 0.9 + state.envelopment * 1.4;
+    var dist = source ? source.position.length() : 1;
     waves.forEach(function (w) {
       w.userData.age += dt;
       var t = w.userData.age / 1.4;
@@ -620,14 +722,14 @@
         w.material.opacity = 0;
         return;
       }
-      var sc = 0.25 + t * (1.1 + state.distance * 0.15) * spread;
+      var sc = 0.25 + t * (1.1 + dist * 0.15) * spread;
       w.scale.set(sc, sc, sc);
       w.material.opacity = (1 - t) * 0.28;
     });
   }
 
   function updateTrail() {
-    if (!state.orbiting || !state.playing) {
+    if (!source || !state.orbiting || !state.playing) {
       if (trail.length) {
         trail = [];
         trailLine.geometry.dispose();
@@ -667,7 +769,7 @@
         updateWaves(dt * 3);
         updateTrail();
       }
-      source.rotation.y += dt * 0.4;
+      if (source) source.rotation.y += dt * 0.4;
       needsRender = true;
     } else if (waveGroup.visible) {
       waveGroup.visible = false;
@@ -681,33 +783,20 @@
   }
   requestAnimationFrame(tick);
 
-  function applyState(next) {
-    if (!next) return;
-    if (dragging && dragging.kind === 'source') return;
-    if (typeof next.azimuth === 'number') state.azimuth = next.azimuth;
-    if (typeof next.elevation === 'number') state.elevation = next.elevation;
-    if (typeof next.distance === 'number') state.distance = next.distance;
-    if (typeof next.envelopment === 'number') state.envelopment = next.envelopment;
-    if (typeof next.playhead === 'number') state.playhead = next.playhead;
-    if (typeof next.playing === 'boolean') state.playing = next.playing;
-    if (typeof next.active === 'boolean') state.active = next.active;
-    if (typeof next.orbiting === 'boolean') state.orbiting = next.orbiting;
-    if (next.speakers && next.speakers.length) {
-      rebuildSpeakers(next.speakers);
-    }
-    applySourcePose();
-    formatPose();
-    needsRender = true;
-  }
-
   window.YinweiWorkspace = {
-    applyState: applyState,
-    init: function (cfg) {
-      if (cfg && cfg.speakers) rebuildSpeakers(cfg.speakers);
-      applyState(cfg || {});
+    applySceneSnapshot: applySceneSnapshot,
+    applyPlaybackTelemetry: applyPlaybackTelemetry,
+    applyUiState: applyUiState,
+    init: function () {
       postToHost({ type: 'ready' });
     },
   };
 
-  postToHost({ type: 'ready' });
+  formatPose();
+  renderer.render(scene, camera);
+  postToHost({
+    type: 'ready',
+    width: window.innerWidth,
+    height: window.innerHeight,
+  });
 })();
