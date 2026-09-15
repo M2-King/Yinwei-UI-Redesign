@@ -80,6 +80,7 @@ class _SpatialWorkspaceState extends State<SpatialWorkspace> {
   int? _lastSceneRevision;
   String? _lastTelemetry;
   String? _lastUi;
+  var _phase3SmokeStarted = false;
 
   bool get _arrayOn =>
       widget.arraySpeakers != null && widget.arraySpeakers!.isNotEmpty;
@@ -155,6 +156,7 @@ window.YinweiPose = {
       }
       debugPrint('[SpatialWorkspace] WebView2 controller ready');
       setState(() => _web = controller);
+      _maybeStartPhase3Smoke();
     } catch (e) {
       debugPrint('[SpatialWorkspace] WebView2 boot failed: $e');
       if (mounted) setState(() => _failed = true);
@@ -164,7 +166,7 @@ window.YinweiPose = {
   void _onWinMessage(dynamic message) {
     final raw = message is String ? message : jsonEncode(message);
     debugPrint(
-      '[SpatialWorkspace] js ${raw.length > 120 ? raw.substring(0, 120) : raw}',
+      '[SpatialWorkspace] js ${raw.length > 240 ? raw.substring(0, 240) : raw}',
     );
     final handler = widget.onSceneIntent;
     if (handler != null) {
@@ -175,6 +177,7 @@ window.YinweiPose = {
         return;
       }
       _sendOutgoing(result.outgoing);
+      _maybeStartPhase3Smoke();
       return;
     }
     Map<String, dynamic>? data;
@@ -188,6 +191,7 @@ window.YinweiPose = {
     if ((data['type'] as String? ?? '') == 'ready') {
       _pageReady = true;
       _pushAll(force: true);
+      _maybeStartPhase3Smoke();
     }
   }
 
@@ -275,6 +279,82 @@ window.YinweiPose = {
     _pushScene(force: force);
     _pushTelemetry(force: force);
     _pushUi(force: force);
+    _maybeStartPhase3Smoke();
+  }
+
+  void _maybeStartPhase3Smoke() {
+    if (_phase3SmokeStarted) return;
+    if (Platform.environment.containsKey('FLUTTER_TEST')) return;
+    if (Platform.environment['YINWEI_PHASE3_SMOKE'] != '1') return;
+    if (!_pageReady || _web == null) return;
+    _phase3SmokeStarted = true;
+    unawaited(_runPhase3Smoke());
+  }
+
+  Future<dynamic> _js(String expr) async {
+    final web = _web;
+    if (web == null || !_pageReady) return null;
+    return web.executeScript(expr);
+  }
+
+  Future<void> _runPhase3Smoke() async {
+    debugPrint('[Phase3Smoke] workspace start');
+    Map<String, dynamic>? inspect;
+    for (var i = 0; i < 25; i++) {
+      await Future<void>.delayed(const Duration(milliseconds: 200));
+      final raw = await _js(
+        'window.YinweiWorkspace&&YinweiWorkspace.debug.inspect()',
+      );
+      if (raw is Map) {
+        inspect = Map<String, dynamic>.from(raw);
+        final ids = inspect['ids'];
+        if (ids is List &&
+            ids.contains('source-main') &&
+            ids.contains('listener-0')) {
+          break;
+        }
+      }
+    }
+    debugPrint('[Phase3Smoke] inspect=$inspect');
+
+    Future<void> step(String name, String expr) async {
+      final result = await _js(expr);
+      debugPrint('[Phase3Smoke] $name $result');
+      await Future<void>.delayed(const Duration(milliseconds: 280));
+    }
+
+    await step('click-listener', 'YinweiWorkspace.debug.click("listener-0")');
+    await step('click-emitter', 'YinweiWorkspace.debug.click("emitter-L")');
+    await step('click-source', 'YinweiWorkspace.debug.click("source-main")');
+    await step('drag-xz', 'YinweiWorkspace.debug.dragSource("xz", 80)');
+    await step('drag-y', 'YinweiWorkspace.debug.dragSource("y", 55)');
+    await step('set-free', 'YinweiWorkspace.debug.setView("free")');
+    await Future<void>.delayed(const Duration(milliseconds: 500));
+    await step('orbit', 'YinweiWorkspace.debug.orbit()');
+    await step('pan', 'YinweiWorkspace.debug.pan()');
+    await step('zoom', 'YinweiWorkspace.debug.zoom()');
+    await step('top', 'YinweiWorkspace.debug.setView("top")');
+    await step('front', 'YinweiWorkspace.debug.setView("front")');
+    await step('listener-view', 'YinweiWorkspace.debug.setView("listener")');
+    await step('fit', 'YinweiWorkspace.debug.setView("fit")');
+    await step('inspect-final', 'YinweiWorkspace.debug.inspect()');
+    try {
+      final png = await _js('YinweiWorkspace.debug.capture()');
+      if (png is String && png.startsWith('data:image/png;base64,')) {
+        final bytes = base64Decode(png.split(',').last);
+        final out = File('test/goldens/phase3_functional_runtime.png');
+        await out.parent.create(recursive: true);
+        await out.writeAsBytes(bytes);
+        debugPrint(
+          '[Phase3Smoke] captured ${out.absolute.path} bytes=${bytes.length}',
+        );
+      } else {
+        debugPrint('[Phase3Smoke] capture type=${png.runtimeType}');
+      }
+    } catch (e) {
+      debugPrint('[Phase3Smoke] capture failed $e');
+    }
+    debugPrint('[Phase3Smoke] workspace done');
   }
 
   @override

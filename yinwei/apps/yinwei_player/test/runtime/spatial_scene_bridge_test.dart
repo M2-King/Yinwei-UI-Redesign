@@ -305,6 +305,29 @@ void main() {
     );
   });
 
+  test('Phase 3 listener and emitter selection do not mutate scene', () {
+    final bridge = boot();
+    final rev = bridge.adapter.appliedRevision;
+    final listener = bridge.handleMessage(jsonEncode({
+      'type': 'selectObject',
+      'objectId': kSpatialListenerIdV1,
+    }));
+    expect(listener.shouldWriteEngine, isFalse);
+    expect(listener.sceneMutated, isFalse);
+    expect(bridge.adapter.appliedRevision, rev);
+    expect(bridge.selectedObjectId, kSpatialListenerIdV1);
+    final emitters = bridge.adapter.snapshot()!['emitters'] as List;
+    final emitterId = (emitters.first as Map)['id'] as String;
+    final emitter = bridge.handleMessage(jsonEncode({
+      'type': 'selectObject',
+      'objectId': emitterId,
+    }));
+    expect(emitter.shouldWriteEngine, isFalse);
+    expect(emitter.sceneMutated, isFalse);
+    expect(bridge.adapter.appliedRevision, rev);
+    expect(bridge.selectedObjectId, emitterId);
+  });
+
   test('20 playback telemetry produces zero engine writes', () {
     final bridge = boot();
     final rev = bridge.adapter.appliedRevision;

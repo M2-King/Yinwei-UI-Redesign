@@ -99,6 +99,15 @@ class _PlayerScreenState extends State<PlayerScreen> {
     unawaited(_smtc.start());
     unawaited(_audioRoute.recoverIfDirty());
     _live.refreshDevices();
+    final smoke = Platform.environment.containsKey('FLUTTER_TEST')
+        ? null
+        : Platform.environment['YINWEI_OPEN'];
+    if (smoke != null && smoke.isNotEmpty) {
+      debugPrint('[Player] YINWEI_OPEN=$smoke');
+      unawaited(_openMediaPath(smoke).then((_) => _maybeRunPhase3EngineSmoke()));
+    } else {
+      unawaited(_maybeRunPhase3EngineSmoke());
+    }
     _islandAnim = Timer.periodic(const Duration(milliseconds: 80), (_) {
       final wasRunning = _live.running;
       if (wasRunning) {
@@ -146,10 +155,15 @@ class _PlayerScreenState extends State<PlayerScreen> {
     debugPrint(
       '[SceneBridge] accepted=${result.accepted} mutated=${result.sceneMutated} '
       'write=${result.shouldWriteEngine} rev=${_spatial.appliedRevision} '
-      'reason=${result.reason}',
+      'reason=${result.reason} sel=${result.selectedObjectId}',
     );
     if (result.shouldWriteEngine) {
-      _commitEnginePose(result.engineParams!);
+      final p = result.engineParams!;
+      debugPrint(
+        '[SceneBridge] engineWrite az=${p.azimuthDeg.toStringAsFixed(2)} '
+        'el=${p.elevationDeg.toStringAsFixed(2)} d=${p.distanceM.toStringAsFixed(2)}',
+      );
+      _commitEnginePose(p);
     }
     return result;
   }
@@ -644,6 +658,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
                         onChanged: (p) => _applySpatialFromUi(p),
                         onArrayChanged: _applyArrayFromUi,
                         onArrayMode: (m) {
+                          debugPrint('[Player] arrayMode=$m');
                           unawaited(() async {
                             await c.applyArrayMode(m);
                             if (_live.running) {
@@ -789,6 +804,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
   Future<void> _openMediaPath(String path) async {
     try {
       await _ctrl.openPath(path);
+      debugPrint('[Player] opened path=$path backend=$_backend');
       if (!mounted) return;
       final label = _backend == EngineBackend.native ? '真引擎' : '演示引擎 Mock';
       final name = path.split(RegExp(r'[\\/]')).last.toLowerCase();
@@ -814,6 +830,71 @@ class _PlayerScreenState extends State<PlayerScreen> {
         SnackBar(content: Text('$e'), behavior: SnackBarBehavior.floating),
       );
     }
+  }
+
+  Future<void> _maybeRunPhase3EngineSmoke() async {
+    if (Platform.environment.containsKey('FLUTTER_TEST')) return;
+    if (Platform.environment['YINWEI_PHASE3_SMOKE'] != '1') return;
+    await Future<void>.delayed(const Duration(seconds: 14));
+    debugPrint(
+      '[Phase3Smoke] engine start backend=$_backend playing=${_ctrl.playing} '
+      'opened=${_ctrl.hasOpenedFile}',
+    );
+    try {
+      await _ctrl.play();
+      debugPrint(
+        '[Phase3Smoke] play playing=${_ctrl.playing} err=${_ctrl.lastError}',
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 450));
+      await _ctrl.seek(const Duration(seconds: 1));
+      debugPrint('[Phase3Smoke] seek pos=${_ctrl.position}');
+      await _ctrl.setMode(PlaybackMode.original);
+      debugPrint('[Phase3Smoke] original mode=${_ctrl.mode}');
+      await Future<void>.delayed(const Duration(milliseconds: 200));
+      await _ctrl.setMode(PlaybackMode.spatial);
+      debugPrint('[Phase3Smoke] spatial mode=${_ctrl.mode}');
+      for (final preset in [
+        PositionPreset.front,
+        PositionPreset.right,
+        PositionPreset.left,
+        PositionPreset.leftRear,
+        PositionPreset.overhead,
+      ]) {
+        final next = _ctrl.params.copy()..applyPreset(preset);
+        _applySpatialFromUi(next);
+        debugPrint(
+          '[Phase3Smoke] preset=${preset.name} az=${_ctrl.params.azimuthDeg} '
+          'el=${_ctrl.params.elevationDeg} d=${_ctrl.params.distanceM} '
+          'sceneRev=${_spatial.appliedRevision}',
+        );
+        await Future<void>.delayed(const Duration(milliseconds: 220));
+      }
+      final out =
+          '${Directory.systemTemp.path}${Platform.pathSeparator}yinwei_phase3_export.wav';
+      await _ctrl.exportWav(out);
+      final exported = File(out);
+      debugPrint(
+        '[Phase3Smoke] export path=$out exists=${exported.existsSync()} '
+        'bytes=${exported.existsSync() ? exported.lengthSync() : 0} '
+        'err=${_ctrl.lastError}',
+      );
+      await _ctrl.applyArrayMode(ArrayMode.stereo2);
+      debugPrint(
+        '[Phase3Smoke] arrayOn=${_ctrl.array.enabled} '
+        'speakers=${_ctrl.array.speakers.length} mode=${_ctrl.array.mode}',
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 700));
+      await _ctrl.applyArrayMode(ArrayMode.off);
+      debugPrint(
+        '[Phase3Smoke] arrayOff enabled=${_ctrl.array.enabled} '
+        'mode=${_ctrl.array.mode}',
+      );
+      await _ctrl.pause();
+      debugPrint('[Phase3Smoke] pause playing=${_ctrl.playing}');
+    } catch (e) {
+      debugPrint('[Phase3Smoke] engine failed $e');
+    }
+    debugPrint('[Phase3Smoke] engine done');
   }
 
   Future<void> _onExport() async {
