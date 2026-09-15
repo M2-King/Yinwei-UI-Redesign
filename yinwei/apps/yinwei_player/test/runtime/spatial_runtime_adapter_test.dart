@@ -98,11 +98,14 @@ void main() {
     expect(adapter.appliedRevision, 2);
   });
 
-  test('6 elevation update creates correct XYZ', () {
+  test('6 elevation update creates revision +1 and correct XYZ', () {
     final adapter = SpatialRuntimeAdapter()..bootstrap(SpatialParams());
-    adapter.adoptPointParams(
+    expect(adapter.appliedRevision, 1);
+    final result = adapter.adoptPointParams(
       SpatialParams(azimuthDeg: 0, elevationDeg: 90, distanceM: 1),
     );
+    expect(result.sceneMutated, isTrue);
+    expect(adapter.appliedRevision, 2);
     final world = sphericalToLocal(const SphericalV1(
       azimuthDeg: 0,
       elevationDeg: 90,
@@ -114,11 +117,14 @@ void main() {
     expect(got.z, closeTo(world.z, trig));
   });
 
-  test('7 distance update preserves Scene geometric distance', () {
+  test('7 distance update creates revision +1 and preserves geometric distance', () {
     final adapter = SpatialRuntimeAdapter()..bootstrap(SpatialParams());
-    adapter.adoptPointParams(
+    expect(adapter.appliedRevision, 1);
+    final result = adapter.adoptPointParams(
       SpatialParams(azimuthDeg: 0, elevationDeg: 0, distanceM: 4),
     );
+    expect(result.sceneMutated, isTrue);
+    expect(adapter.appliedRevision, 2);
     expect(_geometric(adapter.snapshot()!), closeTo(4, trig));
   });
 

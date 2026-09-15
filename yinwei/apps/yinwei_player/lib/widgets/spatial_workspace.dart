@@ -144,7 +144,9 @@ class _SpatialWorkspaceState extends State<SpatialWorkspace> {
         widget.onPoseChanged?.call(az, el);
       }
       if (dist != null) {
-        widget.onDistanceChanged?.call(dist.clamp(0.5, 10.0));
+        // Scene V1 keeps unclamped geometric metres. DSP clamp happens in
+        // AudioProjectionV1 after SpatialSceneStore accepts the snapshot.
+        widget.onDistanceChanged?.call(dist);
       }
     }
     // speaker messages: visual HUD only — do not call the engine.

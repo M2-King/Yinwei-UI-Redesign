@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:yinwei_player/theme/yinwei_theme.dart';
@@ -47,5 +49,20 @@ void main() {
     expect(html.contains('WebGLRenderer') || html.contains('THREE'), isTrue);
     expect(html.contains('data-view="listener"'), isTrue);
     expect(html.contains('visual layout'), isTrue);
+  });
+
+  test('Three.js source poses post to Flutter host only', () async {
+    final scene = await File('assets/spatial_workspace/scene.js').readAsString();
+    expect(scene.contains('YinweiPose.postMessage'), isTrue);
+    expect(scene.contains('yinwei_set_params'), isFalse);
+    expect(scene.contains('EngineApi'), isFalse);
+    expect(scene.contains('spatial_core'), isFalse);
+  });
+
+  test('Flutter host does not DSP-clamp Three.js distance before Scene Store', () async {
+    final dart = await File('lib/widgets/spatial_workspace.dart').readAsString();
+    expect(dart.contains('YinweiPose'), isTrue);
+    expect(dart.contains('dist.clamp(0.5, 10.0)'), isFalse);
+    expect(dart.contains('onDistanceChanged?.call(dist)'), isTrue);
   });
 }
