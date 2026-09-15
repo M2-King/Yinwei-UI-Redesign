@@ -221,28 +221,64 @@ void main() {
     expect(result.engineParams!.azimuthDeg, closeTo(45, 1e-4));
   });
 
-  test('15 missing configured source does not fall back', () {
-    final adapter = SpatialRuntimeAdapter(pointSourceId: 'no-such-source')
-      ..bootstrap(SpatialParams());
-    final writes = <SpatialParams>[];
-    final result = _write(
-      adapter,
-      SpatialParams(azimuthDeg: 0, distanceM: 1),
-      writes,
+  test('custom pointSourceId appears in scene and projects', () {
+    final adapter = SpatialRuntimeAdapter(pointSourceId: 'custom-source');
+    adapter.bootstrap(
+      SpatialParams(azimuthDeg: 90, elevationDeg: 0, distanceM: 1.5),
     );
-    expect(result.pointSourceStatus, PointSourceStatusV1.sourceMissing);
-    expect(result.shouldWriteEngine, isFalse);
-    expect(writes, isEmpty);
     expect(
       (adapter.snapshot()!['sources'] as List).first['id'],
-      kSpatialPointSourceIdV1,
+      'custom-source',
     );
+    expect(adapter.config.pointSourceId, 'custom-source');
+    final result = adapter.adoptPointParams(
+      SpatialParams(azimuthDeg: 0, elevationDeg: 0, distanceM: 2),
+    );
+    expect(result.shouldWriteEngine, isTrue);
+    expect(result.pointSourceStatus, PointSourceStatusV1.projected);
+    expect(result.engineParams!.azimuthDeg, closeTo(0, trig));
+    expect(result.engineParams!.distanceM, closeTo(2, trig));
+    expect(
+      (adapter.snapshot()!['sources'] as List).first['id'],
+      'custom-source',
+    );
+  });
+
+  test('15 missing configured source does not fall back', () {
+    final adapter = SpatialRuntimeAdapter(pointSourceId: 'configured-source')
+      ..bootstrap(SpatialParams());
+    final next = Map<String, dynamic>.from(adapter.snapshot()!);
+    next['revision'] = 2;
+    next['sources'] = [
+      {
+        'id': 'other-source',
+        'type': 'source',
+        'worldPosition': {'x': 0, 'y': 0, 'z': -1},
+        'enabled': true,
+        'active': true,
+      },
+    ];
+    final result = adapter.tryApplyScene(next);
+    expect(result.sceneAccepted, isTrue);
+    expect(result.pointSourceStatus, PointSourceStatusV1.sourceMissing);
+    expect(result.shouldWriteEngine, isFalse);
   });
 
   test('16 wrong source ID produces no engine write', () {
     final adapter = SpatialRuntimeAdapter(pointSourceId: 'source-other')
       ..bootstrap(SpatialParams());
-    expect(adapter.adoptPointParams(SpatialParams()).shouldWriteEngine, isFalse);
+    final next = Map<String, dynamic>.from(adapter.snapshot()!);
+    next['revision'] = 2;
+    next['sources'] = [
+      {
+        'id': kSpatialPointSourceIdV1,
+        'type': 'source',
+        'worldPosition': {'x': 1, 'y': 0, 'z': 0},
+        'enabled': true,
+        'active': true,
+      },
+    ];
+    expect(adapter.tryApplyScene(next).shouldWriteEngine, isFalse);
   });
 
   test('17 visual emitter role cannot affect Point routing', () {

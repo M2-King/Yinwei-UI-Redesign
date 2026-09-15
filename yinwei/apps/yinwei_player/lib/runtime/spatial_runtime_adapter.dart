@@ -63,6 +63,7 @@ class SpatialRuntimeAdapter {
   final SpatialSceneStore store = SpatialSceneStore();
 
   SphericalV1? _lastIntentPose;
+  SpatialParams _lastParams = SpatialParams();
 
   bool get hasScene => store.hasScene;
 
@@ -78,6 +79,7 @@ class SpatialRuntimeAdapter {
     final result = store.apply(scene);
     if (result.accepted) {
       _lastIntentPose = _poseOf(params);
+      _lastParams = params;
     }
     return result;
   }
@@ -114,6 +116,77 @@ class SpatialRuntimeAdapter {
     return _applyScene(scene, intent: null);
   }
 
+  /// Three.js world-XYZ intent. Flutter allocates the next revision.
+  /// Ignores any caller-supplied `newRevision`.
+  SpatialAdoptionResult adoptSourceWorld({
+    required String objectId,
+    required Vec3V1 world,
+    required int basedOnRevision,
+  }) {
+    if (!hasScene) {
+      return const SpatialAdoptionResult(reason: 'no_scene');
+    }
+    if (basedOnRevision != store.appliedRevision) {
+      return const SpatialAdoptionResult(
+        applyStatus: SceneApplyStatusV1.rejectedStale,
+        reason: 'stale_revision',
+      );
+    }
+    if (!world.x.isFinite || !world.y.isFinite || !world.z.isFinite) {
+      return const SpatialAdoptionResult(
+        applyStatus: SceneApplyStatusV1.rejectedInvalid,
+        reason: 'invalid_coordinates',
+      );
+    }
+    final previous = store.snapshot()!;
+    final sources = (previous['sources'] as List).cast<Map>();
+    Map? current;
+    for (final source in sources) {
+      if (source['id'] == objectId) {
+        current = source;
+        break;
+      }
+    }
+    if (current == null) {
+      return const SpatialAdoptionResult(
+        applyStatus: SceneApplyStatusV1.rejectedInvalid,
+        reason: 'unknown_object',
+      );
+    }
+    final pos = current['worldPosition'] as Map;
+    final existing = Vec3V1(
+      (pos['x'] as num).toDouble(),
+      (pos['y'] as num).toDouble(),
+      (pos['z'] as num).toDouble(),
+    );
+    if (_sameWorld(existing, world)) {
+      return SpatialAdoptionResult(
+        applyStatus: SceneApplyStatusV1.applied,
+        sceneAccepted: true,
+      );
+    }
+    final applied = store.apply(
+      _buildSceneFromWorld(
+        revision: store.appliedRevision + 1,
+        objectId: objectId,
+        world: world,
+        previous: previous,
+      ),
+    );
+    if (!applied.accepted) {
+      return SpatialAdoptionResult(
+        applyStatus: applied.status,
+        reason: applied.reason,
+      );
+    }
+    _lastIntentPose = localToSpherical(world);
+    return _projectFor(
+      _lastParams,
+      applyStatus: applied.status,
+      sceneMutated: true,
+    );
+  }
+
   /// Engine/playback pose readbacks are telemetry. They must not allocate
   /// SceneContract revisions or write the engine.
   void observePlaybackTelemetry({
@@ -134,6 +207,7 @@ class SpatialRuntimeAdapter {
     }
     if (intent != null) {
       _lastIntentPose = _poseOf(intent);
+      _lastParams = intent;
     }
     return _projectFor(
       intent,
@@ -203,12 +277,36 @@ class SpatialRuntimeAdapter {
       'listener': listener,
       'sources': [
         _object(
-          id: kSpatialPointSourceIdV1,
+          id: pointSourceId,
           type: 'source',
           world: sourceWorld,
         ),
       ],
       'emitters': emitters,
+    };
+  }
+
+  Map<String, dynamic> _buildSceneFromWorld({
+    required int revision,
+    required String objectId,
+    required Vec3V1 world,
+    required Map<String, dynamic> previous,
+  }) {
+    final sources = (previous['sources'] as List).map((item) {
+      final mapped = _cloneMap(item as Map);
+      if (mapped['id'] == objectId) {
+        mapped['worldPosition'] = {'x': world.x, 'y': world.y, 'z': world.z};
+      }
+      return mapped;
+    }).toList();
+    return {
+      'schemaVersion': 1,
+      'revision': revision,
+      'listener': _cloneMap(previous['listener'] as Map),
+      'sources': sources,
+      'emitters': (previous['emitters'] as List)
+          .map((item) => _cloneMap(item as Map))
+          .toList(),
     };
   }
 
@@ -240,6 +338,12 @@ class SpatialRuntimeAdapter {
     return a.azimuthDeg == b.azimuthDeg &&
         a.elevationDeg == b.elevationDeg &&
         a.distanceM == b.distanceM;
+  }
+
+  static bool _sameWorld(Vec3V1 a, Vec3V1 b) {
+    return (a.x - b.x).abs() < 1e-9 &&
+        (a.y - b.y).abs() < 1e-9 &&
+        (a.z - b.z).abs() < 1e-9;
   }
 
   static Map<String, dynamic> _cloneMap(Map map) {

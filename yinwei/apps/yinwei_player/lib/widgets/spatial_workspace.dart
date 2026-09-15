@@ -4,20 +4,20 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:webview_flutter/webview_flutter.dart';
-import 'package:yinwei_player/models/spatial_math.dart';
+import 'package:webview_flutter_windows/webview_flutter_windows.dart';
 import 'package:yinwei_player/models/spatial_params.dart';
+import 'package:yinwei_player/runtime/spatial_scene_bridge.dart';
 import 'package:yinwei_player/theme/yinwei_theme.dart';
 import 'package:yinwei_player/widgets/orbit_visualizer.dart';
 import 'package:yinwei_player/widgets/spatial_workspace_html.dart';
 
 /// Left-pane Spatial Audio Workspace.
 ///
-/// Windows: local Three.js scene in WebView2 (true XYZ meshes).
-/// Tests / non-Windows: existing [OrbitVisualizer] so CI and audio wiring stay intact.
+/// Windows Point mode: local Three.js scene in WebView2.
+/// Tests / Array / non-Windows: [OrbitVisualizer].
 ///
-/// Audio: Point mode posts Source az/el/dist to Dart. Discrete 2.0 speakers
-/// use [OrbitVisualizer] so extra points / matrix stay on the native HRTF path.
+/// Three.js proposes world-XYZ intents. Flutter Scene Store is authoritative.
+/// Array speakers keep the native OrbitVisualizer path.
 class SpatialWorkspace extends StatefulWidget {
   const SpatialWorkspace({
     super.key,
@@ -31,6 +31,9 @@ class SpatialWorkspace extends StatefulWidget {
     this.playing = false,
     this.arraySpeakers,
     this.selectedSpeakerIndex = 0,
+    this.sceneSnapshot,
+    this.selectedObjectId,
+    this.onSceneIntent,
     this.onPoseChanged,
     this.onDistanceChanged,
     this.onSpeakerSelected,
@@ -51,6 +54,9 @@ class SpatialWorkspace extends StatefulWidget {
   final bool playing;
   final List<ArraySpeaker>? arraySpeakers;
   final int selectedSpeakerIndex;
+  final Map<String, dynamic>? sceneSnapshot;
+  final String? selectedObjectId;
+  final SceneBridgeResult Function(String message)? onSceneIntent;
   final void Function(double azimuthDeg, double elevationDeg)? onPoseChanged;
   final ValueChanged<double>? onDistanceChanged;
   final ValueChanged<int>? onSpeakerSelected;
@@ -67,10 +73,13 @@ class SpatialWorkspace extends StatefulWidget {
 }
 
 class _SpatialWorkspaceState extends State<SpatialWorkspace> {
-  WebViewController? _web;
+  WebviewController? _web;
+  final _subs = <StreamSubscription>[];
   var _pageReady = false;
   var _failed = false;
-  String? _lastJs;
+  int? _lastSceneRevision;
+  String? _lastTelemetry;
+  String? _lastUi;
 
   bool get _arrayOn =>
       widget.arraySpeakers != null && widget.arraySpeakers!.isNotEmpty;
@@ -87,6 +96,12 @@ class _SpatialWorkspaceState extends State<SpatialWorkspace> {
   @override
   void initState() {
     super.initState();
+    debugPrint(
+      '[SpatialWorkspace] windows=${Platform.isWindows} '
+      'flutterTest=${Platform.environment.containsKey('FLUTTER_TEST')} '
+      'array=$_arrayOn forceFallback=${widget.forceFallback} '
+      'useWebView=$_useWebView',
+    );
     if (_useWebView) {
       unawaited(_bootWebView());
     }
@@ -94,93 +109,190 @@ class _SpatialWorkspaceState extends State<SpatialWorkspace> {
 
   Future<void> _bootWebView() async {
     try {
+      final version = await WebviewController.getWebViewVersion();
+      debugPrint('[SpatialWorkspace] WebView2 runtime=$version');
+      if (version == null) {
+        throw StateError('WebView2 runtime missing');
+      }
       final html = await SpatialWorkspaceHtml.load();
-      final controller = WebViewController()
-        ..setJavaScriptMode(JavaScriptMode.unrestricted)
-        ..setBackgroundColor(YinweiColors.background)
-        ..setNavigationDelegate(
-          NavigationDelegate(
-            onPageFinished: (_) {
-              _pageReady = true;
-              _pushState(force: true);
-            },
-            onWebResourceError: (_) {
-              if (mounted) setState(() => _failed = true);
-            },
-          ),
-        )
-        ..addJavaScriptChannel(
-          'YinweiPose',
-          onMessageReceived: _onJsMessage,
+      final controller = WebviewController();
+      await controller.initialize();
+      _subs.add(controller.webMessage.listen(_onWinMessage));
+      _subs.add(
+        controller.loadingState.listen((state) {
+          if (state == LoadingState.navigationCompleted) {
+            _pageReady = true;
+            _pushAll(force: true);
+          }
+        }),
+      );
+      _subs.add(
+        controller.onLoadError.listen((status) {
+          debugPrint('[SpatialWorkspace] load error $status');
+        }),
+      );
+      await controller.setBackgroundColor(YinweiColors.background);
+      await controller.setPopupWindowPolicy(WebviewPopupWindowPolicy.deny);
+      await controller.addScriptToExecuteOnDocumentCreated('''
+window.YinweiPose = {
+  postMessage: function (msg) {
+    if (window.chrome && window.chrome.webview) {
+      try {
+        window.chrome.webview.postMessage(
+          typeof msg === 'string' ? JSON.parse(msg) : msg
         );
-      await controller.loadHtmlString(html);
-      if (!mounted) return;
+      } catch (e) {
+        window.chrome.webview.postMessage(msg);
+      }
+    }
+  }
+};
+''');
+      await controller.loadStringContent(html);
+      if (!mounted) {
+        await controller.dispose();
+        return;
+      }
+      debugPrint('[SpatialWorkspace] WebView2 controller ready');
       setState(() => _web = controller);
-    } catch (_) {
+    } catch (e) {
+      debugPrint('[SpatialWorkspace] WebView2 boot failed: $e');
       if (mounted) setState(() => _failed = true);
     }
   }
 
-  void _onJsMessage(JavaScriptMessage message) {
+  void _onWinMessage(dynamic message) {
+    final raw = message is String ? message : jsonEncode(message);
+    debugPrint(
+      '[SpatialWorkspace] js ${raw.length > 120 ? raw.substring(0, 120) : raw}',
+    );
+    final handler = widget.onSceneIntent;
+    if (handler != null) {
+      SceneBridgeResult result;
+      try {
+        result = handler(raw);
+      } catch (_) {
+        return;
+      }
+      _sendOutgoing(result.outgoing);
+      return;
+    }
     Map<String, dynamic>? data;
     try {
-      final decoded = jsonDecode(message.message);
+      final decoded = jsonDecode(raw);
       if (decoded is Map<String, dynamic>) data = decoded;
     } catch (_) {
       return;
     }
     if (data == null) return;
-    final type = data['type'] as String? ?? '';
-    if (type == 'ready') {
+    if ((data['type'] as String? ?? '') == 'ready') {
       _pageReady = true;
-      _pushState(force: true);
-      return;
+      _pushAll(force: true);
     }
-    if (type == 'source') {
-      final az = (data['azimuth'] as num?)?.toDouble();
-      final el = (data['elevation'] as num?)?.toDouble();
-      final dist = (data['distance'] as num?)?.toDouble();
-      if (az != null && el != null) {
-        widget.onPoseChanged?.call(az, el);
-      }
-      if (dist != null) {
-        // Scene V1 keeps unclamped geometric metres. DSP clamp happens in
-        // AudioProjectionV1 after SpatialSceneStore accepts the snapshot.
-        widget.onDistanceChanged?.call(dist);
-      }
-    }
-    // speaker messages: visual HUD only — do not call the engine.
   }
 
-  Map<String, Object?> _statePayload() => {
-        'azimuth': widget.azimuthDeg,
-        'elevation': widget.elevationDeg,
-        'distance': widget.distanceM,
-        'envelopment': widget.envelopment,
+  Map<String, dynamic> _sceneMessage() {
+    final scene = widget.sceneSnapshot ?? const <String, dynamic>{};
+    return {
+      'type': 'sceneSnapshot',
+      'schemaVersion': scene['schemaVersion'] ?? 1,
+      'revision': scene['revision'] ?? 0,
+      'scene': scene,
+    };
+  }
+
+  Map<String, dynamic> _telemetryMessage() => {
+        'type': 'playbackTelemetry',
         'playhead': widget.playhead,
         'playing': widget.playing,
-        'active': widget.active,
         'orbiting': widget.orbiting,
-        'speakers': VisualSpeaker.itu8.map((s) => s.toJson()).toList(),
+        'envelopment': widget.envelopment,
+        'active': widget.active,
       };
 
-  void _pushState({bool force = false}) {
+  Map<String, dynamic> _uiMessage() => {
+        'type': 'uiState',
+        'selectedObjectId': widget.selectedObjectId,
+      };
+
+  void _sendOutgoing(List<Map<String, dynamic>> messages) {
+    for (final msg in messages) {
+      final type = msg['type'];
+      if (type == 'sceneSnapshot') {
+        _run('applySceneSnapshot', msg);
+        _lastSceneRevision = msg['revision'] as int?;
+      } else if (type == 'playbackTelemetry') {
+        final payload = jsonEncode(msg);
+        _lastTelemetry = payload;
+        _runRaw('applyPlaybackTelemetry', payload);
+      } else if (type == 'uiState') {
+        final payload = jsonEncode(msg);
+        _lastUi = payload;
+        _runRaw('applyUiState', payload);
+      }
+    }
+  }
+
+  void _run(String fn, Map<String, dynamic> msg) {
+    _runRaw(fn, jsonEncode(msg));
+  }
+
+  void _runRaw(String fn, String payload) {
     final web = _web;
     if (web == null || !_pageReady) return;
-    final payload = jsonEncode(_statePayload());
-    if (!force && payload == _lastJs) return;
-    _lastJs = payload;
     unawaited(
-      web.runJavaScript(
-        'window.YinweiWorkspace&&YinweiWorkspace.applyState($payload)',
+      web.executeScript(
+        'window.YinweiWorkspace&&YinweiWorkspace.$fn($payload)',
       ),
     );
+  }
+
+  void _pushScene({bool force = false}) {
+    final scene = widget.sceneSnapshot;
+    if (scene == null) return;
+    final revision = scene['revision'];
+    if (!force && revision == _lastSceneRevision) return;
+    debugPrint('[SpatialWorkspace] applySceneSnapshot revision=$revision');
+    _lastSceneRevision = revision is int ? revision : null;
+    _run('applySceneSnapshot', _sceneMessage());
+  }
+
+  void _pushTelemetry({bool force = false}) {
+    final payload = jsonEncode(_telemetryMessage());
+    if (!force && payload == _lastTelemetry) return;
+    _lastTelemetry = payload;
+    _runRaw('applyPlaybackTelemetry', payload);
+  }
+
+  void _pushUi({bool force = false}) {
+    final payload = jsonEncode(_uiMessage());
+    if (!force && payload == _lastUi) return;
+    _lastUi = payload;
+    _runRaw('applyUiState', payload);
+  }
+
+  void _pushAll({bool force = false}) {
+    _pushScene(force: force);
+    _pushTelemetry(force: force);
+    _pushUi(force: force);
   }
 
   @override
   void didUpdateWidget(covariant SpatialWorkspace old) {
     super.didUpdateWidget(old);
-    if (_useWebView) _pushState();
+    if (_useWebView) _pushAll();
+  }
+
+  @override
+  void dispose() {
+    for (final sub in _subs) {
+      unawaited(sub.cancel());
+    }
+    final web = _web;
+    if (web != null) {
+      unawaited(web.dispose());
+    }
+    super.dispose();
   }
 
   @override
@@ -222,7 +334,7 @@ class _SpatialWorkspaceState extends State<SpatialWorkspace> {
       borderRadius: BorderRadius.circular(16),
       child: ColoredBox(
         color: YinweiColors.background,
-        child: WebViewWidget(controller: web),
+        child: Webview(web),
       ),
     );
   }
