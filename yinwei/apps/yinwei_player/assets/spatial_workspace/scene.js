@@ -12,7 +12,7 @@
 
   var DEG = Math.PI / 180;
   var FLOOR_Y = -1.18;
-  var FLOOR_SIZE = 16;
+  var FLOOR_SIZE = 18;
   var MAX_DPR = 1.5;
   var POSE_MS = 32;
   var CAM_FAR = 160;
@@ -56,12 +56,12 @@
 
   var scene = new THREE.Scene();
   scene.background = new THREE.Color(0x0a0a0c);
-  scene.fog = new THREE.Fog(0x0a0a0c, 18, 48);
+  scene.fog = new THREE.Fog(0x141517, 12, 30);
 
-  var camera = new THREE.PerspectiveCamera(40, 1, 0.08, CAM_FAR);
-  var camSph = new THREE.Spherical(5.4, 1.28, -0.58);
+  var camera = new THREE.PerspectiveCamera(44, 1, 0.08, CAM_FAR);
+  var camSph = new THREE.Spherical(7.25, 1.03, -0.07);
   var camSphGoal = camSph.clone();
-  var camTarget = new THREE.Vector3(0, 0.18, -0.35);
+  var camTarget = new THREE.Vector3(0, -0.38, -0.45);
   var camTargetGoal = camTarget.clone();
   var camDamp = 0.16;
 
@@ -86,7 +86,10 @@
   }
   renderer.setClearColor(0x0a0a0c, 1);
   renderer.outputColorSpace = THREE.SRGBColorSpace;
-  renderer.shadowMap.enabled = false;
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 1.18;
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.VSMShadowMap;
   document.body.appendChild(renderer.domElement);
   if (!renderer.getContext()) {
     document.getElementById('hint').textContent = 'WebGL context missing';
@@ -111,94 +114,194 @@
   }
   onResize();
 
-  scene.add(new THREE.HemisphereLight(0xd0d4dc, 0x222226, 1.05));
-  var key = new THREE.DirectionalLight(0xf7f7fa, 0.95);
-  key.position.set(2.4, 6.2, 3.4);
+  scene.add(new THREE.HemisphereLight(0xc9ddf0, 0x20232a, 0.85));
+  var key = new THREE.DirectionalLight(0xf0eeeb, 1.7);
+  key.position.set(-3.2, 6.8, 1.4);
+  key.castShadow = true;
+  key.shadow.mapSize.set(1024, 1024);
+  key.shadow.camera.left = -6;
+  key.shadow.camera.right = 6;
+  key.shadow.camera.top = 6;
+  key.shadow.camera.bottom = -6;
+  key.shadow.camera.near = 0.5;
+  key.shadow.camera.far = 18;
+  key.shadow.bias = -0.0004;
+  key.shadow.normalBias = 0.025;
+  key.shadow.radius = 4;
+  key.shadow.blurSamples = 8;
   scene.add(key);
-  var rim = new THREE.DirectionalLight(0xc5d0dc, 0.32);
-  rim.position.set(-2.6, 2.2, -3.2);
+  var fill = new THREE.DirectionalLight(0xc2c9d2, 0.75);
+  fill.position.set(4.8, 2.6, 2.2);
+  scene.add(fill);
+  var rim = new THREE.DirectionalLight(0xd6e4f0, 1.8);
+  rim.position.set(1.2, 3.8, -5.2);
   scene.add(rim);
-  scene.add(new THREE.AmbientLight(0x404048, 0.35));
+  scene.add(new THREE.AmbientLight(0x3b393d, 0.38));
+
+  // A small, prefiltered studio environment provides broad material highlights.
+  // It is baked once; no reflection probes or extra passes run in the frame loop.
+  var reflectionStudio = new THREE.Scene();
+  reflectionStudio.background = new THREE.Color(0x181a1d);
+  var softboxGeometry = new THREE.PlaneGeometry(1, 1);
+  var softboxes = [];
+  [[-4, 4, 2, 3, 5, 0xc1cedb], [4, 3, -2, 2, 4, 0x829cb6],
+    [0, 6, 0, 5, 2, 0x8b9197]].forEach(function (p) {
+    var material = new THREE.MeshBasicMaterial({ color: p[5], side: THREE.DoubleSide });
+    var box = new THREE.Mesh(softboxGeometry, material);
+    box.position.set(p[0], p[1], p[2]);
+    box.scale.set(p[3], p[4], 1);
+    box.lookAt(0, 0, 0);
+    reflectionStudio.add(box);
+    softboxes.push(material);
+  });
+  var pmrem = new THREE.PMREMGenerator(renderer);
+  var studioEnvironment = pmrem.fromScene(reflectionStudio, 0.08, 0.1, 30);
+  scene.environment = studioEnvironment.texture;
+  pmrem.dispose();
+  softboxGeometry.dispose();
+  softboxes.forEach(function (material) { material.dispose(); });
+  reflectionStudio.clear();
+
+  function roundedCabinet(w, h, d, r) {
+    var shape = new THREE.Shape();
+    var x = -w / 2 + r, y = -h / 2 + r, bw = w - 2 * r, bh = h - 2 * r;
+    shape.moveTo(x, y); shape.lineTo(x + bw, y);
+    shape.lineTo(x + bw, y + bh); shape.lineTo(x, y + bh); shape.closePath();
+    var geometry = new THREE.ExtrudeGeometry(shape, {
+      depth: d - 2 * r, bevelEnabled: true, bevelSegments: 3,
+      steps: 1, bevelSize: r, bevelThickness: r,
+    });
+    geometry.translate(0, 0, -d / 2 + r);
+    geometry.computeVertexNormals();
+    return geometry;
+  }
+
+  // Radiused front corners and rolled edges, instead of a beveled rectangle.
+  // The enclosure stays centered on its existing acoustic/selection anchor.
+  function monitorEnclosure(w, h, d, radius, bevel) {
+    var x = w / 2 - bevel, y = h / 2 - bevel, r = radius;
+    var shape = new THREE.Shape();
+    shape.moveTo(-x + r, -y);
+    shape.lineTo(x - r, -y); shape.quadraticCurveTo(x, -y, x, -y + r);
+    shape.lineTo(x, y - r); shape.quadraticCurveTo(x, y, x - r, y);
+    shape.lineTo(-x + r, y); shape.quadraticCurveTo(-x, y, -x, y - r);
+    shape.lineTo(-x, -y + r); shape.quadraticCurveTo(-x, -y, -x + r, -y);
+    var geometry = new THREE.ExtrudeGeometry(shape, {
+      depth: d - 2 * bevel, steps: 1, curveSegments: 8,
+      bevelEnabled: true, bevelThickness: bevel, bevelSize: bevel, bevelSegments: 4,
+    });
+    geometry.translate(0, 0, -d / 2 + bevel);
+    return geometry;
+  }
 
   var geo = {
     floor: new THREE.PlaneGeometry(FLOOR_SIZE, FLOOR_SIZE),
     shadow: new THREE.CircleGeometry(0.18, 28),
-    ring: new THREE.RingGeometry(0.96, 1.0, 64),
-    halo: new THREE.RingGeometry(0.16, 0.185, 48),
-    sourceCore: new THREE.SphereGeometry(0.09, 24, 18),
-    sourceShell: new THREE.SphereGeometry(0.15, 28, 20),
-    sourceHit: new THREE.SphereGeometry(0.48, 16, 12),
-    sourceField: new THREE.TorusGeometry(0.24, 0.005, 8, 48),
-    handleStem: new THREE.CylinderGeometry(0.01, 0.01, 0.34, 8),
-    handleKnob: new THREE.SphereGeometry(0.038, 14, 10),
-    head: new THREE.SphereGeometry(0.14, 22, 16),
-    ear: new THREE.SphereGeometry(0.032, 10, 8),
-    nose: new THREE.ConeGeometry(0.032, 0.08, 8),
-    shoulder: new THREE.SphereGeometry(0.1, 14, 10),
-    torso: new THREE.CylinderGeometry(0.13, 0.18, 0.48, 18),
-    cabinet: new THREE.BoxGeometry(0.24, 0.38, 0.18),
-    baffle: new THREE.BoxGeometry(0.22, 0.36, 0.014),
-    woofer: new THREE.CylinderGeometry(0.065, 0.065, 0.018, 20),
-    tweeter: new THREE.CylinderGeometry(0.026, 0.026, 0.014, 14),
-    stand: new THREE.CylinderGeometry(0.02, 0.032, 0.26, 10),
-    base: new THREE.CylinderGeometry(0.08, 0.08, 0.022, 12),
+    ring: new THREE.RingGeometry(0.98, 1.0, 72),
+    halo: new THREE.RingGeometry(0.22, 0.235, 64),
+    selection: new THREE.RingGeometry(0.29, 0.305, 64),
+    sourceCore: new THREE.SphereGeometry(0.14, 32, 24),
+    sourceShell: new THREE.SphereGeometry(0.245, 40, 28),
+    sourceHit: new THREE.SphereGeometry(0.52, 18, 14),
+    sourceField: new THREE.TorusGeometry(0.33, 0.006, 8, 64),
+    sourceBand: new THREE.TorusGeometry(0.255, 0.012, 10, 64),
+    handleStem: new THREE.CylinderGeometry(0.009, 0.009, 0.4, 10),
+    handleKnob: new THREE.SphereGeometry(0.043, 16, 12),
+    forwardFin: new THREE.ConeGeometry(0.075, 0.24, 3),
+    cabinet: monitorEnclosure(0.42, 0.65, 0.37, 0.047, 0.014),
+    subCabinet: monitorEnclosure(0.56, 0.62, 0.51, 0.045, 0.014),
+    baffle: monitorEnclosure(0.385, 0.603, 0.022, 0.043, 0.004),
+    subBaffle: monitorEnclosure(0.516, 0.576, 0.022, 0.039, 0.004),
+    wooferTrim: new THREE.RingGeometry(0.101, 0.116, 48),
+    woofer: new THREE.TorusGeometry(0.088, 0.012, 12, 40),
+    cone: new THREE.LatheGeometry([
+      new THREE.Vector2(0.079, 0), new THREE.Vector2(0.064, -0.009),
+      new THREE.Vector2(0.041, -0.022), new THREE.Vector2(0.024, -0.025),
+    ], 40),
+    dustCap: new THREE.SphereGeometry(0.031, 20, 16),
+    tweeterTrim: new THREE.LatheGeometry([
+      new THREE.Vector2(0.065, 0), new THREE.Vector2(0.053, -0.003),
+      new THREE.Vector2(0.04, -0.013), new THREE.Vector2(0.023, -0.02),
+    ], 40),
+    tweeter: new THREE.SphereGeometry(0.026, 24, 16),
+    stand: roundedCabinet(0.07, 0.8, 0.09, 0.008),
+    base: roundedCabinet(0.38, 0.035, 0.34, 0.01),
+    standPlate: roundedCabinet(0.28, 0.026, 0.24, 0.007),
   };
 
   var mat = {
     floor: new THREE.MeshStandardMaterial({
-      color: 0x141416,
-      roughness: 0.92,
-      metalness: 0.04,
+      color: 0x424548,
+      roughness: 1.0,
+      metalness: 0.08,
     }),
     depth: new THREE.MeshStandardMaterial({
-      color: 0x16161a,
-      roughness: 1,
-      metalness: 0,
+      color: 0x151518,
+      roughness: 0.94,
+      metalness: 0.02,
+    }),
+    panel: new THREE.MeshStandardMaterial({
+      color: 0x8b8984,
+      roughness: 1.0,
+      metalness: 0.0,
+    }),
+    panelInset: new THREE.MeshStandardMaterial({
+      color: 0x111114,
+      roughness: 0.96,
+      metalness: 0.02,
     }),
     listener: new THREE.MeshStandardMaterial({
-      color: 0xd8d8de,
-      roughness: 0.42,
+      color: 0x607181,
+      roughness: 0.48,
+      metalness: 0.18,
+    }),
+    listenerDark: new THREE.MeshStandardMaterial({
+      color: 0x394652,
+      roughness: 0.52,
       metalness: 0.18,
     }),
     speaker: new THREE.MeshStandardMaterial({
-      color: 0x3a3a40,
-      roughness: 0.48,
-      metalness: 0.22,
+      color: 0x626568,
+      roughness: 0.7,
+      metalness: 0.14,
     }),
     baffle: new THREE.MeshStandardMaterial({
-      color: 0x2c2c30,
-      roughness: 0.62,
+      color: 0x181b1e,
+      roughness: 0.72,
       metalness: 0.08,
     }),
     driver: new THREE.MeshStandardMaterial({
-      color: 0x6a6a70,
-      roughness: 0.35,
-      metalness: 0.28,
+      color: 0x424649,
+      roughness: 0.46,
+      metalness: 0.45,
+    }),
+    cone: new THREE.MeshStandardMaterial({
+      color: 0x202326,
+      roughness: 0.76,
+      metalness: 0.04,
     }),
     sourceCore: new THREE.MeshStandardMaterial({
-      color: 0xe8eef4,
-      emissive: 0x8fb4d0,
-      emissiveIntensity: 0.42,
-      roughness: 0.28,
-      metalness: 0.12,
+      color: 0xfff8ea,
+      emissive: 0xd9e7f2,
+      emissiveIntensity: 0.38,
+      roughness: 0.16,
+      metalness: 0.42,
     }),
-    sourceShell: new THREE.MeshStandardMaterial({
-      color: 0xb9c8d6,
-      emissive: 0x4a6a82,
-      emissiveIntensity: 0.08,
-      roughness: 0.18,
-      metalness: 0.34,
+    sourceShell: new THREE.ShaderMaterial({
+      uniforms: { tint: { value: new THREE.Color(0x93c7fa) } },
+      vertexShader: 'varying vec3 n; varying vec3 v; void main(){ vec4 p=modelViewMatrix*vec4(position,1.0); n=normalize(normalMatrix*normal); v=normalize(-p.xyz); gl_Position=projectionMatrix*p; }',
+      fragmentShader: 'uniform vec3 tint; varying vec3 n; varying vec3 v; void main(){ float rim=pow(1.0-abs(dot(normalize(n),normalize(v))),3.0); gl_FragColor=vec4(tint,0.06+rim*0.8); }',
       transparent: true,
-      opacity: 0.42,
+      depthWrite: false,
     }),
     field: new THREE.MeshBasicMaterial({
-      color: 0xc5d4e2,
+      color: 0xa8c8e0,
       transparent: true,
-      opacity: 0.22,
+      opacity: 0.2,
       depthWrite: false,
     }),
     handle: new THREE.MeshStandardMaterial({
-      color: 0xcecfd4,
+      color: 0xd9e0e7,
       roughness: 0.4,
       metalness: 0.2,
     }),
@@ -209,16 +312,23 @@
       depthWrite: false,
     }),
     halo: new THREE.MeshBasicMaterial({
-      color: 0xdfe6ee,
+      color: 0xb7cde0,
       transparent: true,
       opacity: 0.0,
       side: THREE.DoubleSide,
       depthWrite: false,
     }),
-    relation: new THREE.LineBasicMaterial({
-      color: 0xa8b8c8,
+    selection: new THREE.MeshBasicMaterial({
+      color: 0xe0ebf2,
       transparent: true,
-      opacity: 0.28,
+      opacity: 0.58,
+      side: THREE.DoubleSide,
+      depthWrite: false,
+    }),
+    relation: new THREE.LineBasicMaterial({
+      color: 0x9bb7cc,
+      transparent: true,
+      opacity: 0.26,
     }),
     drop: new THREE.LineDashedMaterial({
       color: 0x6a6a72,
@@ -228,7 +338,7 @@
       gapSize: 0.04,
     }),
     wave: new THREE.MeshBasicMaterial({
-      color: 0xb7c9d8,
+      color: 0x9dbdd5,
       transparent: true,
       opacity: 0,
       side: THREE.DoubleSide,
@@ -236,13 +346,116 @@
     }),
   };
 
-  function makeLabelSprite(text, scale) {
+  Object.keys(mat).forEach(function (name) {
+    if (mat[name].isMeshStandardMaterial) mat[name].envMapIntensity = 0.55;
+  });
+  mat.floor.envMapIntensity = 0.2;
+  mat.listener.envMapIntensity = 0.95;
+  mat.listenerDark.envMapIntensity = 0.8;
+
+  // Tileable, deterministic albedo / roughness / relief maps. Different spatial
+  // frequencies matter here: cloth weave, mineral aggregate and powder coating
+  // should not all read as the same fine noise. Generated once, shared thereafter.
+  function studioSurface(kind, repeat) {
+    var size = 512;
+    function hash(x, y) {
+      var n = Math.imul(x + 19, 374761393) ^ Math.imul(y + 71, 668265263);
+      n = Math.imul(n ^ (n >>> 13), 1274126177);
+      return ((n ^ (n >>> 16)) >>> 0) / 4294967295;
+    }
+    function noise(x, y, cell) {
+      var count = size / cell;
+      var ix = Math.floor(x / cell), iy = Math.floor(y / cell);
+      var u = x / cell - ix, v = y / cell - iy;
+      u = u * u * (3 - 2 * u); v = v * v * (3 - 2 * v);
+      var a = hash(ix % count, iy % count), b = hash((ix + 1) % count, iy % count);
+      var c = hash(ix % count, (iy + 1) % count), d = hash((ix + 1) % count, (iy + 1) % count);
+      return (a + (b - a) * u) * (1 - v) + (c + (d - c) * u) * v - 0.5;
+    }
+    var contexts = [], pixels = [];
+    for (var m = 0; m < 3; m++) {
+      var canvas = document.createElement('canvas');
+      canvas.width = canvas.height = size;
+      var context = canvas.getContext('2d');
+      contexts.push(context); pixels.push(context.createImageData(size, size));
+    }
+    for (var y = 0; y < size; y++) {
+      for (var x = 0; x < size; x++) {
+        var grain = hash(x, y) - 0.5;
+        var broad = noise(x, y, 64), medium = noise(x, y, 16);
+        var albedo, relief, roughness;
+        if (kind === 'fabric') {
+          var warp = Math.cos(x * Math.PI / 2) * 0.5;
+          var weft = Math.cos(y * Math.PI / 2 + (Math.floor(x / 4) % 2) * Math.PI) * 0.5;
+          var yarn = warp + weft;
+          albedo = 116 + broad * 4 + medium * 3 + yarn * 4 + grain * 7;
+          relief = 128 + yarn * 16 + grain * 10;
+          roughness = 235 + grain * 16;
+        } else if (kind === 'mineral') {
+          albedo = 124 + broad * 17 + medium * 10 + grain * 8;
+          relief = 128 + medium * 25 + grain * 18;
+          roughness = 225 + broad * 22 + grain * 9;
+        } else {
+          albedo = 119 + broad * 3 + grain * 7;
+          relief = 128 + grain * 28;
+          roughness = 219 + grain * 20;
+        }
+        var values = [albedo, roughness, relief];
+        var offset = (y * size + x) * 4;
+        for (var channel = 0; channel < 3; channel++) {
+          var data = pixels[channel].data;
+          data[offset] = data[offset + 1] = data[offset + 2] = values[channel];
+          data[offset + 3] = 255;
+        }
+      }
+    }
+    return contexts.map(function (context, index) {
+      context.putImageData(pixels[index], 0, 0);
+      var texture = new THREE.CanvasTexture(context.canvas);
+      texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
+      texture.repeat.set(repeat, repeat);
+      texture.anisotropy = Math.min(4, renderer.capabilities.getMaxAnisotropy());
+      if (index === 0) texture.colorSpace = THREE.SRGBColorSpace;
+      return texture;
+    });
+  }
+  function applySurface(material, maps, relief) {
+    material.map = maps[0];
+    material.roughnessMap = maps[1];
+    material.bumpMap = maps[2];
+    material.bumpScale = relief;
+  }
+  applySurface(mat.panel, studioSurface('fabric', 1), 0.004);
+  applySurface(mat.floor, studioSurface('mineral', 9), 0.016);
+  applySurface(mat.speaker, studioSurface('coating', 1), 0.0025);
+  mat.panel.envMapIntensity = 0.18;
+  mat.floor.envMapIntensity = 0.08;
+  var wallFabrics = [0x8b8984, 0x858481, 0x91908b].map(function (color) {
+    var material = mat.panel.clone();
+    material.color.setHex(color);
+    return material;
+  });
+  var slatMaterial = new THREE.MeshStandardMaterial({
+    color: 0x26282a, roughness: 0.78, metalness: 0.12, envMapIntensity: 0.25,
+  });
+  var shadowCanvas = document.createElement('canvas');
+  shadowCanvas.width = shadowCanvas.height = 64;
+  var shadowContext = shadowCanvas.getContext('2d');
+  var shadowFalloff = shadowContext.createRadialGradient(32, 32, 0, 32, 32, 32);
+  shadowFalloff.addColorStop(0, '#ffffff');
+  shadowFalloff.addColorStop(0.3, '#b0b0b0');
+  shadowFalloff.addColorStop(1, '#000000');
+  shadowContext.fillStyle = shadowFalloff;
+  shadowContext.fillRect(0, 0, 64, 64);
+  mat.shadow.alphaMap = new THREE.CanvasTexture(shadowCanvas);
+
+  function makeLabelSprite(text, scale, color, alpha) {
     var c = document.createElement('canvas');
     c.width = 256;
     c.height = 64;
     var ctx = c.getContext('2d');
     ctx.clearRect(0, 0, 256, 64);
-    ctx.fillStyle = 'rgba(245,245,247,0.55)';
+    ctx.fillStyle = color || 'rgba(220,230,240,' + (alpha == null ? 0.62 : alpha) + ')';
     ctx.font = '600 28px "SF Pro Text", "Segoe UI", sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
@@ -262,128 +475,198 @@
     return sprite;
   }
 
+  // Visual room only: metres, +X right, +Y up, -Z front. The listener's
+  // ear origin and all host-owned transforms are unchanged; the floor is at -1.18m.
   function buildRoom() {
     var g = new THREE.Group();
     var floor = new THREE.Mesh(geo.floor, mat.floor);
     floor.rotation.x = -Math.PI / 2;
     floor.position.y = FLOOR_Y;
+    floor.receiveShadow = true;
     g.add(floor);
-
-    var grid = new THREE.GridHelper(FLOOR_SIZE, 32, 0x2a2a30, 0x1a1a1e);
-    grid.position.y = FLOOR_Y + 0.003;
-    var gm = grid.material;
-    (Array.isArray(gm) ? gm : [gm]).forEach(function (m) {
-      m.transparent = true;
-      m.opacity = 0.22;
-    });
+    var grid = new THREE.GridHelper(FLOOR_SIZE, 36, 0x777c82, 0x777c82);
+    grid.position.y = FLOOR_Y + 0.006;
+    grid.material.transparent = true;
+    grid.material.opacity = 0.065;
     g.add(grid);
 
-    var back = new THREE.Mesh(new THREE.PlaneGeometry(FLOOR_SIZE, 4.6), mat.depth);
-    back.position.set(0, FLOOR_Y + 2.3, FLOOR_SIZE * 0.48);
-    g.add(back);
+    var rear = new THREE.Mesh(new THREE.BoxGeometry(9.2, 5.2, 0.16), mat.depth);
+    rear.position.set(0, FLOOR_Y + 2.6, -4.8);
+    g.add(rear);
+    var wall = new THREE.Mesh(new THREE.BoxGeometry(0.15, 5.2, 12), mat.panelInset);
+    wall.position.set(-4.55, FLOOR_Y + 2.6, 1.2);
+    var right = wall.clone(); right.position.x = 4.55;
+    g.add(wall, right);
 
-    var axisMat = new THREE.LineBasicMaterial({
-      color: 0x3a3a42,
-      transparent: true,
-      opacity: 0.35,
+    // Staggered acoustic panels and recessed warm coves give the room scale.
+    var panelGeometry = roundedCabinet(1.25, 1.24, 0.13, 0.018);
+    for (var row = 0; row < 3; row++) {
+      for (var col = 0; col < 7; col++) {
+        var panel = new THREE.Mesh(panelGeometry, wallFabrics[(col + row * 2) % wallFabrics.length]);
+        panel.position.set((col - 3) * 1.28, FLOOR_Y + 0.64 + row * 1.28, -4.64);
+        panel.receiveShadow = true;
+        g.add(panel);
+      }
+    }
+    var trim = new THREE.MeshBasicMaterial({color: 0xdac6a7});
+    var cove = new THREE.Mesh(new THREE.BoxGeometry(8.9, 0.016, 0.026), trim);
+    cove.position.set(0, FLOOR_Y + 1.29, -4.54);
+    g.add(cove);
+    [-1, 1].forEach(function(side) {
+      var rail = new THREE.Mesh(new THREE.BoxGeometry(0.025, 0.018, 8.2), trim);
+      rail.position.set(side * 4.44, FLOOR_Y + 0.03, -0.45);
+      g.add(rail);
+      for(var i=0; i<30; i++) {
+        var slat = new THREE.Mesh(new THREE.BoxGeometry(0.14, 3.8, 0.05), slatMaterial);
+        slat.position.set(side * 4.4, FLOOR_Y + 1.9, -4.3 + i * 0.27);
+        g.add(slat);
+      }
+      [-3.6, 0.0, 3.0].forEach(function(z) {
+        var wash = new THREE.PointLight(0xffdfb4, 0.5, 3.5, 2);
+        wash.position.set(side * 4.1, FLOOR_Y + 0.3, z);
+        g.add(wash);
+      });
+      var rearWash = new THREE.PointLight(0xffdfba, 1.6, 4.3, 2);
+      rearWash.position.set(side * 2.8, FLOOR_Y + 1.45, -4.05);
+      g.add(rearWash);
     });
-    g.add(
-      new THREE.Line(
-        new THREE.BufferGeometry().setFromPoints([
-          new THREE.Vector3(-2.6, FLOOR_Y + 0.01, 0),
-          new THREE.Vector3(2.6, FLOOR_Y + 0.01, 0),
-        ]),
-        axisMat
-      )
-    );
-    g.add(
-      new THREE.Line(
-        new THREE.BufferGeometry().setFromPoints([
-          new THREE.Vector3(0, FLOOR_Y + 0.01, -2.6),
-          new THREE.Vector3(0, FLOOR_Y + 0.01, 2.6),
-        ]),
-        axisMat
-      )
-    );
-
-    var ringMat = new THREE.MeshBasicMaterial({
-      color: 0x2e2e34,
-      transparent: true,
-      opacity: 0.35,
-      side: THREE.DoubleSide,
-      depthWrite: false,
+    var ringMaterial = new THREE.MeshBasicMaterial({
+      color: 0x81919f, transparent: true, opacity: 0.1,
+      side: THREE.DoubleSide, depthWrite: false,
     });
-    [1, 2, 3.2].forEach(function (r) {
-      var ring = new THREE.Mesh(geo.ring, ringMat);
+    [1, 2, 3.2].forEach(function(radius) {
+      var ring = new THREE.Mesh(new THREE.RingGeometry(radius - 0.006, radius, 96), ringMaterial);
       ring.rotation.x = -Math.PI / 2;
-      ring.position.y = FLOOR_Y + 0.008;
-      ring.scale.setScalar(r);
+      ring.position.y = FLOOR_Y + 0.009;
       g.add(ring);
     });
-
-    var front = makeLabelSprite('FRONT', 1.4);
-    front.position.set(0, FLOOR_Y + 0.04, -3.35);
-    var right = makeLabelSprite('RIGHT', 1.2);
-    right.position.set(3.35, FLOOR_Y + 0.04, 0);
-    var left = makeLabelSprite('LEFT', 1.2);
-    left.position.set(-3.35, FLOOR_Y + 0.04, 0);
-    var rear = makeLabelSprite('REAR', 1.2);
-    rear.position.set(0, FLOOR_Y + 0.04, 3.35);
-    g.add(front, right, left, rear);
-
     scene.add(g);
   }
   buildRoom();
 
   function makeListenerMesh() {
     var g = new THREE.Group();
-    var head = new THREE.Mesh(geo.head, mat.listener);
-    head.scale.set(0.9, 1.05, 0.94);
-    var earL = new THREE.Mesh(geo.ear, mat.listener);
-    earL.position.set(-0.12, 0.01, 0);
-    var earR = earL.clone();
-    earR.position.x = 0.12;
-    var nose = new THREE.Mesh(geo.nose, mat.listener);
-    nose.rotation.x = -Math.PI / 2;
-    nose.position.set(0, -0.01, -0.13);
-    var torso = new THREE.Mesh(geo.torso, mat.listener);
-    torso.position.y = -0.38;
-    var shL = new THREE.Mesh(geo.shoulder, mat.listener);
-    shL.position.set(-0.14, -0.2, 0);
-    var shR = shL.clone();
-    shR.position.x = 0.14;
-    g.add(head, earL, earR, nose, torso, shL, shR);
+    // A continuous bust, centered on the acoustic ear origin; never move the group.
+    var headGeometry = new THREE.SphereGeometry(1, 40, 32);
+    var headVertices = headGeometry.attributes.position;
+    for (var hi = 0; hi < headVertices.count; hi++) {
+      var hy = headVertices.getY(hi);
+      var chin = 1 - Math.max(0, -hy) * 0.24;
+      headVertices.setX(hi, headVertices.getX(hi) * chin);
+      if (headVertices.getZ(hi) < -0.75) headVertices.setZ(hi, -0.75 + (headVertices.getZ(hi) + 0.75) * 0.55);
+    }
+    headGeometry.computeVertexNormals();
+    var head = new THREE.Mesh(headGeometry, mat.listener);
+    head.scale.set(0.225, 0.30, 0.24);
+    head.position.y = 0.015;
+    var earGeo = new THREE.SphereGeometry(1, 16, 16);
+    var earL = new THREE.Mesh(earGeo, mat.listenerDark);
+    earL.scale.set(0.037, 0.076, 0.048); earL.position.set(-0.224, -0.014, 0);
+    var earR = earL.clone(); earR.position.x = 0.224;
+    var nose = new THREE.Mesh(new THREE.SphereGeometry(1, 16, 12), mat.listener);
+    nose.scale.set(0.043, 0.068, 0.057); nose.position.set(0, 0.005, -0.22);
+    var profile = [
+      [0.34,-1.12], [0.39,-1.04], [0.44,-0.9], [0.47,-0.76],
+      [0.44,-0.65], [0.29,-0.54], [0.16,-0.45], [0.12,-0.36],
+      [0.12,-0.28], [0.135,-0.23],
+    ].map(function(p){ return new THREE.Vector2(p[0],p[1]); });
+    var torso = new THREE.Mesh(new THREE.LatheGeometry(new THREE.SplineCurve(profile).getPoints(40), 48), mat.listenerDark);
+    torso.scale.z = 0.62;
+    var base = new THREE.Mesh(new THREE.CylinderGeometry(0.47, 0.48, 0.035, 64), mat.speaker);
+    base.position.y = FLOOR_Y + 0.025;
+    var rim = new THREE.Mesh(new THREE.TorusGeometry(0.465, 0.006, 8, 80), mat.field);
+    rim.rotation.x = Math.PI / 2; rim.position.y = FLOOR_Y + 0.05;
+    var fin = new THREE.Mesh(geo.forwardFin, mat.field);
+    fin.rotation.x = -Math.PI / 2; fin.position.set(0, FLOOR_Y + 0.03, -0.68);
+    var tag = makeLabelSprite('Listener', 0.9, 'rgba(223,233,244,0.85)');
+    tag.position.set(0, FLOOR_Y + 0.025, 0.61);
+    g.add(head, earL, earR, nose, torso, base, rim, fin, tag);
+    g.traverse(function(child) {if(child.isMesh) child.castShadow = true;});
     g.userData.kind = 'listener';
+    g.userData.label = tag;
     return g;
   }
 
   function makeEmitterMesh(obj) {
     var g = new THREE.Group();
-    var body = new THREE.Mesh(geo.cabinet, mat.speaker);
-    var baffle = new THREE.Mesh(geo.baffle, mat.baffle);
-    baffle.position.z = 0.086;
-    var woofer = new THREE.Mesh(geo.woofer, mat.driver);
-    woofer.rotation.x = Math.PI / 2;
-    woofer.position.set(0, -0.04, 0.095);
+    var role = (obj && obj.visualRole) || '';
+    var isSub = String(role).toUpperCase() === 'LFE';
+    var body = new THREE.Mesh(isSub ? geo.subCabinet : geo.cabinet, mat.speaker);
+    body.position.y = isSub ? 0 : 0.04;
+    var baffle = new THREE.Mesh(isSub ? geo.subBaffle : geo.baffle, mat.baffle);
+    baffle.position.set(0, isSub ? 0 : 0.04, isSub ? 0.265 : 0.194);
+    var wooferTrim = new THREE.Mesh(geo.wooferTrim, mat.driver);
+    wooferTrim.position.set(0, isSub ? -0.02 : -0.05, isSub ? 0.283 : 0.211);
+    wooferTrim.scale.setScalar(isSub ? 1.55 : 1.16);
+    var woofer = new THREE.Mesh(geo.woofer, mat.cone);
+    woofer.position.copy(wooferTrim.position);
+    woofer.position.z += 0.014;
+    woofer.scale.setScalar(isSub ? 1.55 : 1.16);
+    var cone = new THREE.Mesh(geo.cone, mat.cone);
+    cone.rotation.x = Math.PI / 2;
+    cone.position.copy(woofer.position);
+    cone.position.z += 0.014;
+    cone.scale.setScalar(isSub ? 1.45 : 1.16);
+    var dustCap = new THREE.Mesh(geo.dustCap, mat.cone);
+    dustCap.position.copy(cone.position);
+    dustCap.position.z -= 0.019;
+    dustCap.scale.set(isSub ? 1.45 : 1.16, isSub ? 1.45 : 1.16, 0.45);
+    var tweeterTrim = new THREE.Mesh(geo.tweeterTrim, mat.driver);
+    tweeterTrim.rotation.x = Math.PI / 2;
+    tweeterTrim.position.set(0, 0.17, 0.23);
     var tweeter = new THREE.Mesh(geo.tweeter, mat.driver);
-    tweeter.rotation.x = Math.PI / 2;
-    tweeter.position.set(0, 0.08, 0.094);
+    tweeter.scale.z = 0.48;
+    tweeter.position.set(0, 0.17, 0.223);
     var stand = new THREE.Mesh(geo.stand, mat.speaker);
-    stand.position.y = -0.27;
+    stand.position.y = -0.69;
     var base = new THREE.Mesh(geo.base, mat.speaker);
-    base.position.y = -0.39;
-    g.add(body, baffle, woofer, tweeter, stand, base);
+    base.position.y = FLOOR_Y + 0.03;
+    var standPlate = new THREE.Mesh(geo.standPlate, mat.baffle);
+    standPlate.position.y = -0.29;
+    standPlate.visible = !isSub;
+    stand.visible = !isSub;
+    base.visible = !isSub;
+    var shadow = new THREE.Mesh(geo.shadow, mat.shadow.clone());
+    shadow.rotation.x = -Math.PI / 2;
+    shadow.scale.setScalar(isSub ? 2.1 : 1.85);
+    shadow.renderOrder = -1;
+    g.add(body, baffle, wooferTrim, woofer, cone, dustCap, stand, standPlate, base, shadow);
+    if (!isSub) g.add(tweeterTrim, tweeter);
+    // Small fasteners, rear amplifier plate and vent distinguish a real enclosure
+    // even when the front baffle correctly faces away from the camera.
+    var screwGeometry = new THREE.SphereGeometry(0.009, 8, 6);
+    [-1, 1].forEach(function(x) {
+      [-1, 1].forEach(function(y) {
+        var screw = new THREE.Mesh(screwGeometry, mat.driver);
+        screw.position.set(x * (isSub ? 0.225 : 0.165), y * 0.235 + (isSub ? 0 : 0.04), isSub ? 0.279 : 0.21);
+        g.add(screw);
+      });
+    });
+    var rearPlate = new THREE.Mesh(new THREE.BoxGeometry(0.23, 0.27, 0.012), mat.baffle);
+    rearPlate.position.set(0, -0.015, isSub ? -0.26 : -0.191);
+    g.add(rearPlate);
+    for (var vi=0; vi<5; vi++) {
+      var vent = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.008, 0.007), mat.driver);
+      vent.position.set(0, 0.06 - vi * 0.026, isSub ? -0.269 : -0.20);
+      g.add(vent);
+    }
+    var led = new THREE.Mesh(new THREE.SphereGeometry(0.008, 8, 6), mat.field);
+    led.position.set(0.12, -0.19, 0.214); g.add(led);
+    g.traverse(function (child) {
+      if (child.isMesh && child !== shadow) child.castShadow = true;
+    });
     g.userData.kind = 'emitter';
     g.userData.body = body;
     g.userData.visualRole = obj && obj.visualRole;
-    var role = (obj && obj.visualRole) || '';
     if (role) {
-      var tag = makeLabelSprite(String(role), 0.7);
-      tag.position.y = 0.28;
+      var tag = makeLabelSprite(String(role), 0.52, 'rgba(188,205,222,0.64)');
+      tag.position.y = isSub ? 0.43 : 0.49;
       tag.visible = false;
       g.add(tag);
       g.userData.label = tag;
     }
+    g.userData.shadow = shadow;
+    g.userData.isSub = isSub;
     return g;
   }
 
@@ -391,21 +674,33 @@
     var g = new THREE.Group();
     var core = new THREE.Mesh(geo.sourceCore, mat.sourceCore);
     var shell = new THREE.Mesh(geo.sourceShell, mat.sourceShell);
+    core.scale.setScalar(0.68);
+    shell.scale.setScalar(1.02);
     var field = new THREE.Mesh(geo.sourceField, mat.field);
     field.rotation.x = Math.PI / 2;
+    field.scale.setScalar(1.1);
     var hit = new THREE.Mesh(
       geo.sourceHit,
       new THREE.MeshBasicMaterial({ visible: false })
     );
     var stem = new THREE.Mesh(geo.handleStem, mat.handle);
-    stem.position.y = 0.28;
+    stem.position.y = 0.27;
+    stem.scale.y = 0.55;
     var knob = new THREE.Mesh(geo.handleKnob, mat.handle);
-    knob.position.y = 0.46;
+    knob.position.y = 0.4;
+    knob.scale.setScalar(0.75);
     stem.userData.elevationHandle = true;
     knob.userData.elevationHandle = true;
-    g.add(core, shell, field, hit, stem, knob);
+    var tag = makeLabelSprite('Source', 0.86, 'rgba(220,238,255,0.88)');
+    tag.position.y = -0.43;
+    tag.visible = false;
+    g.add(core, shell, field, hit, stem, knob, tag);
+    core.castShadow = true;
+    shell.castShadow = true;
     g.userData.kind = 'source';
     g.userData.visual = core;
+    g.userData.field = field;
+    g.userData.label = tag;
     return g;
   }
 
@@ -420,6 +715,11 @@
   selectionHalo.visible = false;
   scene.add(selectionHalo);
 
+  var selectionRing = new THREE.Mesh(geo.selection, mat.selection);
+  selectionRing.visible = false;
+  selectionRing.renderOrder = 3;
+  scene.add(selectionRing);
+
   var relationLine = new THREE.Line(
     new THREE.BufferGeometry().setFromPoints([
       new THREE.Vector3(),
@@ -428,6 +728,21 @@
     mat.relation
   );
   scene.add(relationLine);
+
+  var relationDots = [];
+  for (var di = 0; di < 5; di++) {
+    var dot = new THREE.Mesh(
+      new THREE.SphereGeometry(0.018, 10, 8),
+      new THREE.MeshBasicMaterial({
+        color: 0xb6c7d3,
+        transparent: true,
+        opacity: 0.2 - di * 0.02,
+        depthWrite: false,
+      })
+    );
+    scene.add(dot);
+    relationDots.push(dot);
+  }
 
   var dropLine = new THREE.Line(
     new THREE.BufferGeometry().setFromPoints([
@@ -465,6 +780,7 @@
       contactShadow.visible = false;
       relationLine.visible = false;
       dropLine.visible = false;
+      relationDots.forEach(function (dot) { dot.visible = false; });
       return;
     }
     contactShadow.visible = true;
@@ -472,8 +788,8 @@
     var lift = Math.max(0.02, mesh.position.y - FLOOR_Y);
     var s = 0.7 + Math.min(1.4, lift * 0.18);
     contactShadow.scale.set(s, s, s);
-    mat.shadow.opacity = 0.32 / (1 + lift * 0.35);
-    mat.sourceCore.emissiveIntensity = state.active ? 0.36 + state.envelopment * 0.16 : 0.12;
+    mat.shadow.opacity = 0.36 / (1 + lift * 0.32);
+    mat.sourceCore.emissiveIntensity = state.active ? 0.3 + state.envelopment * 0.12 : 0.1;
 
     var ear = listener ? listener.position : new THREE.Vector3();
     relationLine.visible = true;
@@ -482,6 +798,10 @@
       ear.clone(),
       mesh.position.clone(),
     ]);
+    relationDots.forEach(function (dot, index) {
+      dot.visible = true;
+      dot.position.lerpVectors(ear, mesh.position, (index + 1) / 6);
+    });
 
     dropLine.visible = true;
     dropLine.geometry.dispose();
@@ -509,16 +829,25 @@
       ' m';
   }
 
+  function syncObjectLabels(focusMesh) {
+    Object.keys(objectsById).forEach(function (id) {
+      var mesh = objectsById[id];
+      if (!mesh.userData.label) return;
+      mesh.userData.label.visible =
+        mesh.userData.kind !== 'emitter' || mesh === focusMesh || id === selectedObjectId || id === hoveredObjectId;
+    });
+  }
+
   function showSelectionHud(mesh) {
     var el = document.getElementById('sel');
     if (!mesh) {
       el.style.display = 'none';
       selectionHalo.visible = false;
+      selectionRing.visible = false;
+      syncObjectLabels(null);
       return;
     }
     var kind = mesh.userData.kind;
-    var pose = xyzToPose(mesh.position);
-    var xyz = mesh.position;
     var title =
       kind === 'source'
         ? 'SOURCE'
@@ -527,36 +856,22 @@
           : String(mesh.userData.visualRole || mesh.userData.id || 'EMITTER').toUpperCase();
     var note =
       kind === 'emitter'
-        ? 'visual layout · not acoustic Array'
+        ? 'Studio monitor · visual reference'
         : kind === 'source'
-          ? 'Point source · Flutter owns scene'
-          : 'listener-0';
+          ? 'Point source'
+          : 'Listening origin';
     el.style.display = 'block';
-    el.innerHTML =
-      '<div class="ch">' +
-      title +
-      '</div><div class="muted">' +
-      note +
-      '</div>' +
-      '<div>X ' +
-      xyz.x.toFixed(2) +
-      ' m &nbsp; Y ' +
-      xyz.y.toFixed(2) +
-      ' m &nbsp; Z ' +
-      xyz.z.toFixed(2) +
-      ' m</div>' +
-      '<div class="muted">Az ' +
-      Math.round(pose.azimuth) +
-      '° · El ' +
-      Math.round(pose.elevation) +
-      '° · Dist ' +
-      pose.distance.toFixed(2) +
-      ' m</div>';
+    el.innerHTML = '<div class="ch">' + title + '</div><div class="muted">' + note + '</div>';
     selectionHalo.visible = true;
     selectionHalo.position.set(mesh.position.x, FLOOR_Y + 0.014, mesh.position.z);
     var hs = kind === 'source' ? 1.15 : kind === 'listener' ? 1.35 : 0.85;
     selectionHalo.scale.setScalar(hs);
-    mat.halo.opacity = 0.55;
+    mat.halo.opacity = 0.38;
+    selectionRing.visible = true;
+    selectionRing.position.copy(mesh.position);
+    selectionRing.scale.setScalar(kind === 'source' ? 1.45 : kind === 'listener' ? 1.3 : 1.05);
+    selectionRing.lookAt(camera.position);
+    syncObjectLabels(mesh);
     needsRender = true;
   }
 
@@ -583,7 +898,10 @@
       mesh.userData.visualRole = obj.visualRole;
       if (mesh.userData.label) {
         mesh.userData.label.visible =
-          selectedObjectId === obj.id || hoveredObjectId === obj.id;
+          mesh.userData.id === selectedObjectId || mesh.userData.id === hoveredObjectId;
+      }
+      if (mesh.userData.shadow) {
+        mesh.userData.shadow.position.y = FLOOR_Y - mesh.position.y + 0.012;
       }
     }
     if (mesh.userData.kind === 'source') {
@@ -841,7 +1159,7 @@
           var mesh = objectsById[id];
           if (mesh.userData.label) {
             mesh.userData.label.visible =
-              selectedObjectId === id || hoveredObjectId === id;
+              id === selectedObjectId || id === hoveredObjectId;
           }
         });
         renderer.domElement.style.cursor = hover ? 'pointer' : 'default';
@@ -875,6 +1193,12 @@
     panningCam = false;
   });
 
+  renderer.domElement.addEventListener('pointerleave', function () {
+    hoveredObjectId = null;
+    syncObjectLabels(selectedObjectId ? objectsById[selectedObjectId] : null);
+    needsRender = true;
+  });
+
   renderer.domElement.addEventListener(
     'wheel',
     function (e) {
@@ -900,9 +1224,9 @@
   );
 
   var VIEW = {
-    free: { radius: 5.4, phi: 1.28, theta: -0.58, target: new THREE.Vector3(0, 0.18, -0.35) },
-    top: { radius: 8.4, phi: 0.12, theta: 0, target: new THREE.Vector3(0, 0, 0) },
-    front: { radius: 5.8, phi: 1.48, theta: 0, target: new THREE.Vector3(0, 0.2, 0) },
+    free: { radius: 7.25, phi: 1.03, theta: -0.07, target: new THREE.Vector3(0, -0.38, -0.45) },
+    top: { radius: 8.8, phi: 0.1, theta: 0, target: new THREE.Vector3(0, -0.2, -0.2) },
+    front: { radius: 7.2, phi: 1.42, theta: 0, target: new THREE.Vector3(0, -0.12, -0.55) },
     listener: { radius: 1.35, phi: 1.48, theta: 0, target: new THREE.Vector3(0, 0.08, -1.6) },
   };
 
@@ -917,10 +1241,10 @@
     var size = box.getSize(new THREE.Vector3());
     var center = box.getCenter(new THREE.Vector3());
     return {
-      radius: THREE.MathUtils.clamp(size.length() * 0.72, 3.4, 18),
-      phi: 1.26,
-      theta: -0.48,
-      target: center,
+      radius: THREE.MathUtils.clamp(size.length() * 1.08, 7.4, 20),
+      phi: 1.1,
+      theta: -0.2,
+      target: center.clone().add(new THREE.Vector3(0, -0.22, -0.36)),
     };
   }
 
@@ -1032,13 +1356,15 @@
       updateWaves(dt);
       if (source) {
         mat.sourceCore.emissiveIntensity =
-          0.34 + 0.12 * Math.sin(now * 0.004) + state.envelopment * 0.1;
+          0.28 + 0.06 * Math.sin(now * 0.004) + state.envelopment * 0.1;
       }
       needsRender = true;
     } else if (waveGroup.visible) {
       waveGroup.visible = false;
       needsRender = true;
     }
+
+    if (selectionRing.visible) selectionRing.lookAt(camera.position);
 
     if (needsRender) {
       renderer.render(scene, camera);

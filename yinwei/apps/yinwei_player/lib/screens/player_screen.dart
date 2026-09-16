@@ -522,7 +522,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
                       Expanded(
-                        flex: wide ? 7 : 5,
+                          flex: wide ? 10 : 5,
                         child: Padding(
                           padding: const EdgeInsets.fromLTRB(22, 8, 10, 16),
                           child: SpatialWorkspace(
@@ -623,7 +623,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
                         ),
                       ),
                       Expanded(
-                        flex: wide ? 4 : 5,
+                        flex: wide ? 3 : 5,
                         child: Padding(
                           padding: const EdgeInsets.symmetric(
                               horizontal: 12, vertical: 24),

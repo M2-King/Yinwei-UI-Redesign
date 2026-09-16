@@ -21,17 +21,35 @@
       inset: 0;
       pointer-events: none;
     }
+    #workspace-title {
+      position: absolute;
+      top: 14px;
+      left: 16px;
+      letter-spacing: -0.02em;
+      font-size: 15px;
+      font-weight: 650;
+      color: rgba(235, 241, 247, 0.88);
+      text-shadow: 0 1px 18px rgba(0, 0, 0, 0.7);
+    }
+    #workspace-title small {
+      display: block;
+      margin-top: 5px;
+      color: rgba(148, 163, 180, 0.68);
+      font-size: 10px;
+      font-weight: 400;
+      letter-spacing: 0;
+    }
     #views {
       position: absolute;
       top: 12px;
-      left: 12px;
+      right: 14px;
       display: flex;
       flex-wrap: wrap;
       gap: 2px;
       padding: 3px;
-      border-radius: 11px;
-      background: rgba(16, 16, 18, 0.86);
-      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 12px;
+      background: rgba(12, 17, 23, 0.82);
+      border: 1px solid rgba(174, 202, 230, 0.12);
       backdrop-filter: blur(16px);
       pointer-events: auto;
     }
@@ -48,17 +66,21 @@
       cursor: pointer;
     }
     #views button.on {
-      background: rgba(255, 255, 255, 0.1);
+      background: rgba(133, 148, 165, 0.24);
       color: #F5F5F7;
+      box-shadow: inset 0 0 0 1px rgba(202, 222, 241, 0.08);
     }
+    #views button:hover { color: #F5F5F7; background-color: rgba(133, 148, 165, 0.15); }
+    #views button:focus-visible { outline: 1px solid #9dbdd5; outline-offset: 1px; }
     #pose {
+      display: none;
       position: absolute;
-      top: 12px;
-      right: 12px;
+      bottom: 32px;
+      right: 14px;
       padding: 8px 12px;
       border-radius: 11px;
-      background: rgba(16, 16, 18, 0.86);
-      border: 1px solid rgba(255, 255, 255, 0.08);
+      background: rgba(12, 17, 23, 0.82);
+      border: 1px solid rgba(174, 202, 230, 0.12);
       font-size: 11px;
       letter-spacing: 0.02em;
       color: #F5F5F7;
@@ -71,12 +93,12 @@
       bottom: 36px;
       padding: 12px 14px;
       border-radius: 14px;
-      background: rgba(16, 16, 18, 0.9);
-      border: 1px solid rgba(255, 255, 255, 0.08);
+      background: rgba(10, 15, 21, 0.9);
+      border: 1px solid rgba(174, 202, 230, 0.13);
       font-size: 11px;
       line-height: 1.5;
       display: none;
-      min-width: 176px;
+      min-width: 120px;
       backdrop-filter: blur(16px);
     }
     #sel .ch {
@@ -87,17 +109,36 @@
     #sel .muted { color: #8E8E93; }
     #hint {
       position: absolute;
-      left: 0;
-      right: 0;
+      left: 16px;
+      right: auto;
       bottom: 10px;
-      text-align: center;
-      font-size: 10px;
-      color: rgba(142, 142, 147, 0.82);
+      text-align: left;
+      font-size: 9px;
+      color: rgba(158, 174, 190, 0.7);
+    }
+    #frame-note {
+      display: none;
+      position: absolute;
+      right: 14px;
+      bottom: 10px;
+      text-align: right;
+      font-size: 9px;
+      line-height: 1.45;
+      letter-spacing: 0.035em;
+      color: rgba(153, 171, 190, 0.66);
+    }
+    #frame-note strong { color: rgba(196, 215, 233, 0.78); font-weight: 550; }
+    @media (max-width: 720px) {
+      #workspace-title small, #frame-note { display: none; }
+      #workspace-title { top: 17px; font-size: 12px; }
+      #pose { padding: 5px 8px; font-size: 10px; }
+      #views button { padding: 6px 8px; }
     }
   </style>
 </head>
 <body>
   <div id="hud">
+    <div id="workspace-title">Spatial Workspace<small>Drag the source to place sound in space</small></div>
     <div id="views">
       <button data-view="free" class="on">Free</button>
       <button data-view="top">Top</button>
@@ -107,7 +148,8 @@
     </div>
     <div id="pose"><span>Az</span>— <span>El</span>— <span>Dist</span>—</div>
     <div id="sel"></div>
-    <div id="hint">拖动平移 · Shift 升降 · 右键平移 · 滚轮缩放</div>
+    <div id="hint">拖动声源 · Shift 调整高度 · 滚轮缩放</div>
+    <div id="frame-note">+X Right &nbsp; +Y Up &nbsp; −Z Front</div>
   </div>
   <script src="vendor/three.min.js"></script>
   <script src="scene.js"></script>

@@ -48,7 +48,7 @@ void main() {
     expect(html.contains('YinweiWorkspace'), isTrue);
     expect(html.contains('WebGLRenderer') || html.contains('THREE'), isTrue);
     expect(html.contains('data-view="listener"'), isTrue);
-    expect(html.contains('visual layout'), isTrue);
+    expect(html.contains('Studio monitor'), isTrue);
   });
 
   test('Three.js source poses post intents to Flutter host only', () async {
@@ -79,10 +79,11 @@ void main() {
     expect(scene.contains('contactShadow'), isTrue);
     expect(scene.contains('relationLine'), isTrue);
     expect(scene.contains('camDamp'), isTrue);
-    expect(scene.contains('FRONT'), isTrue);
-    expect(scene.contains('RIGHT'), isTrue);
-    expect(scene.contains('LEFT'), isTrue);
-    expect(scene.contains('REAR'), isTrue);
+    expect(scene.contains("makeLabelSprite('FRONT"), isFalse);
+    expect(scene.contains("makeLabelSprite('RIGHT"), isFalse);
+    expect(scene.contains("makeLabelSprite('LEFT"), isFalse);
+    expect(scene.contains("makeLabelSprite('REAR"), isFalse);
+    expect(scene.contains('syncObjectLabels'), isTrue);
     expect(scene.contains('ROOM * 0.42'), isFalse);
     expect(scene.contains('yinwei_set_params'), isFalse);
     expect(scene.contains('EngineApi'), isFalse);
@@ -109,8 +110,8 @@ void main() {
 
   test('Phase 3 workspace is more prominent than Now Playing', () async {
     final dart = await File('lib/screens/player_screen.dart').readAsString();
-    expect(dart.contains('flex: wide ? 7 : 5'), isTrue);
-    expect(dart.contains('flex: wide ? 4 : 5'), isTrue);
+    expect(dart.contains('flex: wide ? 10 : 5'), isTrue);
+    expect(dart.contains('flex: wide ? 3 : 5'), isTrue);
     expect(dart.contains('maxWidth >= 1100'), isTrue);
   });
 }
