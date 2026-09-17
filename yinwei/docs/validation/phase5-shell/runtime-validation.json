@@ -1,0 +1,21 @@
+{
+  "phase": "phase5-shell",
+  "uiBuild": "ui-50-shell",
+  "bridgeBuild": "p2.4.32-matrix",
+  "window": { "width": 1440, "height": 900 },
+  "workspaceJs": { "width": 915, "height": 716, "ready": true },
+  "sceneRevision": 1,
+  "webview": "153.0.4234.32",
+  "tests": { "flutterTest": 224, "failed": 0 },
+  "console": {
+    "axTreeWarning": true,
+    "sceneBridgeErrors": false,
+    "engineErrors": false
+  },
+  "frozen": [
+    "SpatialSceneStore",
+    "SpatialRuntimeAdapter",
+    "scene.js",
+    "audio pipeline"
+  ]
+}

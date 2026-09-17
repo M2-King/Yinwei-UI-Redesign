@@ -5,14 +5,34 @@ abstract final class YinweiColors {
   static const background = Color(0xFF0B0B0D);
   static const panel = Color(0xFF121214);
   static const panelElevated = Color(0xFF1A1A1C);
+  static const well = Color(0xFF161618);
+  static const shellRail = Color(0xFF101012);
+  static const inspectorRail = Color(0xF0111113);
+  static const inspectorCardTop = Color(0xFF1F1F23);
+  static const inspectorCard = Color(0xFF17171A);
+  static const valueWell = Color(0xFF101012);
   static const hairline = Color(0x18FFFFFF);
+  static const hairlineStrong = Color(0x28FFFFFF);
   static const accent = Color(0xFF0A84FF);
   static const textPrimary = Color(0xFFF5F5F7);
   static const textSecondary = Color(0xFF8E8E93);
+  static const textTertiary = Color(0xFF636366);
   static const success = Color(0xFF30D158);
   static const islandPill = Color(0xF0141416);
   static const islandBorder = Color(0x28FFFFFF);
   static const islandRadius = 22.0;
+}
+
+/// Product-shell metrics. Visual composition only — not engine/scene state.
+abstract final class YinweiLayout {
+  static const railWidth = 188.0;
+  static const railCompactWidth = 64.0;
+  static const topBarHeight = 48.0;
+  static const transportHeight = 56.0;
+  static const workspaceRadius = 12.0;
+  static const shellGutter = 14.0;
+  static const wideBreakpoint = 1180.0;
+  static const compactRailBreakpoint = 980.0;
 }
 
 abstract final class YinweiTheme {
@@ -38,6 +58,12 @@ abstract final class YinweiTheme {
           fontWeight: FontWeight.w600,
           color: YinweiColors.textPrimary,
           letterSpacing: -0.3,
+        ),
+        titleSmall: TextStyle(
+          fontSize: 13,
+          fontWeight: FontWeight.w600,
+          color: YinweiColors.textPrimary,
+          letterSpacing: -0.1,
         ),
         titleMedium: TextStyle(
           fontSize: 15,

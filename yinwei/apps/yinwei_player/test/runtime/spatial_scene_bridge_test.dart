@@ -592,6 +592,7 @@ void main() {
 
   test('30 source drag preview reaches Flutter', () {
     final bridge = boot();
+    final before = _sourceWorld(bridge.adapter.snapshot()!);
     final result = bridge.handleMessage(jsonEncode(_poseIntent(
       type: 'sourcePosePreview',
       objectId: kSpatialPointSourceIdV1,
@@ -602,8 +603,11 @@ void main() {
     )));
     expect(result.accepted, isTrue);
     expect(result.shouldWriteEngine, isTrue);
+    expect(result.sceneMutated, isFalse);
+    expect(bridge.adapter.appliedRevision, 1);
     final world = _sourceWorld(bridge.adapter.snapshot()!);
-    expect(world.x, closeTo(0.2, trig));
+    expect(world.x, closeTo(before.x, trig));
+    expect(result.engineParams!.azimuthDeg, isNot(90));
   });
 
   test('31 source drag commit reaches Flutter', () {
@@ -692,18 +696,19 @@ void main() {
       basedOnRevision: 1,
     )));
     expect(first.accepted, isTrue);
-    expect(bridge.adapter.appliedRevision, 2);
+    expect(first.sceneMutated, isFalse);
+    expect(bridge.adapter.appliedRevision, 1);
     final second = bridge.handleMessage(jsonEncode(_poseIntent(
       type: 'sourcePosePreview',
       objectId: kSpatialPointSourceIdV1,
       x: 0,
       y: 0,
       z: -1,
-      basedOnRevision: 2,
+      basedOnRevision: 1,
     )));
     expect(second.accepted, isTrue);
     expect(second.sceneMutated, isFalse);
-    expect(bridge.adapter.appliedRevision, 2);
+    expect(bridge.adapter.appliedRevision, 1);
   });
 
   test('invalid coordinates reject without engine write', () {

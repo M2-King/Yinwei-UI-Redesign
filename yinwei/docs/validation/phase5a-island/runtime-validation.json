@@ -1,0 +1,34 @@
+{
+  "phase": "5A",
+  "title": "Island reliability and Windows integration",
+  "dpi": "150%",
+  "displays": 1,
+  "window": {
+    "full": "2160x1350 at 200,89",
+    "islandCollapsed": "630x96 at 965,15",
+    "islandExpanded": "630x180 at 965,15",
+    "logicalCollapsed": "420x64",
+    "logicalExpanded": "420x120",
+    "scale": 1.5
+  },
+  "hitRegion": {
+    "collapsed": "COMPLEXREGION box=12,9-618,87",
+    "full": "no region (GetWindowRgn=0)"
+  },
+  "clickThrough": {
+    "insidePill": "yinwei pid 40920",
+    "leftOfPill": "other process (not yinwei)",
+    "belowPill": "other process (not yinwei)"
+  },
+  "restore": {
+    "size": "2160x1350",
+    "position": "200,89",
+    "matchesOriginal": true,
+    "rapidRepeats": 4
+  },
+  "media": {
+    "source": "SMTC",
+    "titleContinuity": true,
+    "falseLiveFlag": false
+  }
+}

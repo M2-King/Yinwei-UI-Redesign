@@ -42,6 +42,8 @@ class PlaybackTelemetryV1 {
     this.orbiting = false,
     this.envelopment = 0,
     this.active = true,
+    this.azimuthDeg = 0,
+    this.elevationDeg = 0,
   });
 
   final double playhead;
@@ -49,6 +51,31 @@ class PlaybackTelemetryV1 {
   final bool orbiting;
   final double envelopment;
   final bool active;
+  final double azimuthDeg;
+  final double elevationDeg;
+
+  @override
+  bool operator ==(Object other) {
+    return other is PlaybackTelemetryV1 &&
+        playhead == other.playhead &&
+        playing == other.playing &&
+        orbiting == other.orbiting &&
+        envelopment == other.envelopment &&
+        active == other.active &&
+        azimuthDeg == other.azimuthDeg &&
+        elevationDeg == other.elevationDeg;
+  }
+
+  @override
+  int get hashCode => Object.hash(
+        playhead,
+        playing,
+        orbiting,
+        envelopment,
+        active,
+        azimuthDeg,
+        elevationDeg,
+      );
 }
 
 class SceneBridgeResult {
@@ -141,6 +168,8 @@ class SpatialSceneBridge {
     bool orbiting = false,
     double envelopment = 0,
     bool active = true,
+    double azimuthDeg = 0,
+    double elevationDeg = 0,
   }) {
     telemetry = PlaybackTelemetryV1(
       playhead: playhead,
@@ -148,6 +177,8 @@ class SpatialSceneBridge {
       orbiting: orbiting,
       envelopment: envelopment,
       active: active,
+      azimuthDeg: azimuthDeg,
+      elevationDeg: elevationDeg,
     );
   }
 
@@ -213,14 +244,18 @@ class SpatialSceneBridge {
       case 'playbackTelemetry':
         return const SceneBridgeResult(accepted: true);
       case 'sourcePosePreview':
+        return _handleSourcePose(data, commit: false);
       case 'sourcePoseCommit':
-        return _handleSourcePose(data);
+        return _handleSourcePose(data, commit: true);
       default:
         return const SceneBridgeResult(reason: 'unknown_type');
     }
   }
 
-  SceneBridgeResult _handleSourcePose(Map<String, dynamic> data) {
+  SceneBridgeResult _handleSourcePose(
+    Map<String, dynamic> data, {
+    required bool commit,
+  }) {
     // JS may include newRevision/revision; Flutter ignores them.
     final objectId = data['objectId'] as String? ?? '';
     final basedOn = data['basedOnRevision'];
@@ -249,6 +284,7 @@ class SpatialSceneBridge {
       objectId: objectId,
       world: Vec3V1(x, y, z),
       basedOnRevision: basedOnRevision,
+      commit: commit,
     );
     if (adopted.reason == 'stale_revision' ||
         adopted.applyStatus == SceneApplyStatusV1.rejectedStale) {
@@ -274,6 +310,14 @@ class SpatialSceneBridge {
       return _reject(
         reason: adopted.reason ?? 'rejected',
         status: adopted.applyStatus,
+      );
+    }
+    if (!commit) {
+      return SceneBridgeResult(
+        accepted: true,
+        sceneMutated: false,
+        applyStatus: adopted.applyStatus,
+        engineParams: adopted.engineParams,
       );
     }
     return SceneBridgeResult(

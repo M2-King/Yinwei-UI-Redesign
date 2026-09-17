@@ -47,72 +47,66 @@ class IslandBar extends StatelessWidget {
         ? '首次加载 WinRT（后台）'
         : (err != null && !liveTransfer.running ? err : now.subtitle);
 
-    return MouseRegion(
-      onEnter: (_) => windowMode.setPillHovered(true),
-      onExit: (_) => windowMode.setPillHovered(false),
-      child: ColoredBox(
-        color: Colors.transparent,
-        child: Center(
-          child: Material(
-            color: Colors.transparent,
-            child: InkWell(
-              borderRadius: BorderRadius.circular(YinweiColors.islandRadius),
-              onTap: expanded
-                  ? null
-                  : () {
-                      windowMode.setPillHovered(true);
-                      windowMode.expandIsland();
-                    },
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 180),
-                curve: Curves.easeOutCubic,
-                width: IslandGeometry.width - 16,
-                height: expanded
-                    ? IslandGeometry.expandedHeight - 12
-                    : IslandGeometry.collapsedHeight - 12,
-                padding: EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: expanded ? 8 : 6,
-                ),
-                decoration: BoxDecoration(
-                  color: YinweiColors.islandPill,
-                  borderRadius:
-                      BorderRadius.circular(YinweiColors.islandRadius),
-                  border: Border.all(
-                    color: now.liveTransfer
-                        ? YinweiColors.accent.withValues(alpha: 0.65)
-                        : (now.yinweiSpatial
-                            ? YinweiColors.success.withValues(alpha: 0.45)
-                            : YinweiColors.islandBorder),
-                  ),
-                  boxShadow: const [
-                    BoxShadow(
-                      color: Color(0x66000000),
-                      blurRadius: 18,
-                      offset: Offset(0, 6),
-                    ),
-                  ],
-                ),
-                child: expanded
-                    ? _ExpandedBody(
-                        now: now,
-                        displayTitle: displayTitle,
-                        displaySubtitle: displaySubtitle,
-                        controller: controller,
-                        windowMode: windowMode,
-                        systemMedia: systemMedia,
-                        liveTransfer: liveTransfer,
-                        onToggleLiveHrtf: onToggleLiveHrtf,
-                      )
-                    : _CollapsedBody(
-                        now: now,
-                        displayTitle: displayTitle,
-                        displaySubtitle: displaySubtitle,
-                        controller: controller,
-                        windowMode: windowMode,
-                        systemMedia: systemMedia,
-                      ),
+    final pill = IslandGeometry.pillSizeFor(
+      expanded ? WindowMode.islandExpanded : WindowMode.islandCollapsed,
+    );
+    return ColoredBox(
+      color: Colors.transparent,
+      child: Center(
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            borderRadius: BorderRadius.circular(IslandGeometry.pillRadius),
+            onTap: expanded
+                ? null
+                : () {
+                    windowMode.setPillHovered(true);
+                    windowMode.expandIsland();
+                  },
+            child: Container(
+              width: pill.width,
+              height: pill.height,
+              padding: EdgeInsets.symmetric(
+                horizontal: 12,
+                vertical: expanded ? 8 : 6,
               ),
+              decoration: BoxDecoration(
+                color: YinweiColors.islandPill,
+                borderRadius: BorderRadius.circular(IslandGeometry.pillRadius),
+                border: Border.all(
+                  color: now.liveTransfer
+                      ? YinweiColors.accent.withValues(alpha: 0.65)
+                      : (now.yinweiSpatial
+                          ? YinweiColors.success.withValues(alpha: 0.45)
+                          : YinweiColors.islandBorder),
+                ),
+                boxShadow: const [
+                  BoxShadow(
+                    color: Color(0x66000000),
+                    blurRadius: 18,
+                    offset: Offset(0, 6),
+                  ),
+                ],
+              ),
+              child: expanded
+                  ? _ExpandedBody(
+                      now: now,
+                      displayTitle: displayTitle,
+                      displaySubtitle: displaySubtitle,
+                      controller: controller,
+                      windowMode: windowMode,
+                      systemMedia: systemMedia,
+                      liveTransfer: liveTransfer,
+                      onToggleLiveHrtf: onToggleLiveHrtf,
+                    )
+                  : _CollapsedBody(
+                      now: now,
+                      displayTitle: displayTitle,
+                      displaySubtitle: displaySubtitle,
+                      controller: controller,
+                      windowMode: windowMode,
+                      systemMedia: systemMedia,
+                    ),
             ),
           ),
         ),
@@ -208,9 +202,7 @@ class _CollapsedBody extends StatelessWidget {
             );
           },
           icon: Icon(
-            now.playing
-                ? CupertinoIcons.pause_fill
-                : CupertinoIcons.play_fill,
+            now.playing ? CupertinoIcons.pause_fill : CupertinoIcons.play_fill,
             size: 17,
             color: YinweiColors.textPrimary,
           ),

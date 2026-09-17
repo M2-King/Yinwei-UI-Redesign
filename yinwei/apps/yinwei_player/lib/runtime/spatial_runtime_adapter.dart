@@ -116,12 +116,14 @@ class SpatialRuntimeAdapter {
     return _applyScene(scene, intent: null);
   }
 
-  /// Three.js world-XYZ intent. Flutter allocates the next revision.
+  /// Three.js world-XYZ intent. Flutter allocates the next revision on commit.
+  /// Preview projects engine params without mutating the Scene Store.
   /// Ignores any caller-supplied `newRevision`.
   SpatialAdoptionResult adoptSourceWorld({
     required String objectId,
     required Vec3V1 world,
     required int basedOnRevision,
+    bool commit = true,
   }) {
     if (!hasScene) {
       return const SpatialAdoptionResult(reason: 'no_scene');
@@ -163,6 +165,15 @@ class SpatialRuntimeAdapter {
       return SpatialAdoptionResult(
         applyStatus: SceneApplyStatusV1.applied,
         sceneAccepted: true,
+      );
+    }
+    if (!commit) {
+      return _projectWorld(
+        objectId: objectId,
+        world: world,
+        previous: previous,
+        sceneMutated: false,
+        applyStatus: SceneApplyStatusV1.applied,
       );
     }
     final applied = store.apply(
@@ -213,6 +224,48 @@ class SpatialRuntimeAdapter {
       intent,
       applyStatus: applied.status,
       sceneMutated: true,
+    );
+  }
+
+  SpatialAdoptionResult _projectWorld({
+    required String objectId,
+    required Vec3V1 world,
+    required Map<String, dynamic> previous,
+    required bool sceneMutated,
+    SceneApplyStatusV1? applyStatus,
+  }) {
+    final projection = AudioProjectionV1.project(
+      scene: _buildSceneFromWorld(
+        revision: store.appliedRevision,
+        objectId: objectId,
+        world: world,
+        previous: previous,
+      ),
+      config: config,
+    );
+    if (projection.pointSourceStatus != PointSourceStatusV1.projected ||
+        projection.pointSource == null) {
+      return SpatialAdoptionResult(
+        applyStatus: applyStatus,
+        sceneAccepted: true,
+        sceneMutated: sceneMutated,
+        pointSourceStatus: projection.pointSourceStatus,
+        reason: projection.reason,
+        projection: projection,
+      );
+    }
+    final posed = projection.pointSource!;
+    final engine = _lastParams.copy()
+      ..azimuthDeg = posed.azimuthDeg
+      ..elevationDeg = posed.elevationDeg
+      ..distanceM = posed.dspDistanceM;
+    return SpatialAdoptionResult(
+      applyStatus: applyStatus,
+      sceneAccepted: true,
+      sceneMutated: sceneMutated,
+      pointSourceStatus: projection.pointSourceStatus,
+      engineParams: engine,
+      projection: projection,
     );
   }
 

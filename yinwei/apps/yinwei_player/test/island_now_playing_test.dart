@@ -202,4 +202,111 @@ void main() {
     expect(now.subtitle, contains('打开文件'));
     engine.dispose();
   });
+
+  test('paused Yinwei file keeps the file session when SMTC is idle', () {
+    final engine = EngineController();
+    engine.hasOpenedFile = true;
+    engine.playing = false;
+    engine.track = const TrackMeta(
+      title: 'Local Wav',
+      artist: 'Me',
+      album: 'Demo',
+      duration: Duration(minutes: 3),
+    );
+    final now = IslandNowPlaying.resolve(
+      engine: engine,
+      system: SystemMediaState.empty,
+      now: DateTime.now(),
+    );
+    expect(now.source, IslandMediaSource.yinwei);
+    expect(now.playing, isFalse);
+    expect(now.title, 'Local Wav');
+    engine.dispose();
+  });
+
+  test('paused SMTC keeps system metadata without claiming LIVE', () {
+    final engine = EngineController();
+    const system = SystemMediaState(
+      active: true,
+      title: 'Paused Track',
+      artist: 'Artist',
+      playing: false,
+      sourceApp: 'SodaMusic.exe',
+    );
+    final now = IslandNowPlaying.resolve(
+      engine: engine,
+      system: system,
+      now: DateTime.now(),
+    );
+    expect(now.source, IslandMediaSource.system);
+    expect(now.playing, isFalse);
+    expect(now.title, 'Paused Track');
+    expect(now.liveTransfer, isFalse);
+    expect(now.subtitle, contains('paused'));
+    engine.dispose();
+  });
+
+  test('source application change updates the SMTC subtitle app', () {
+    final engine = EngineController();
+    const soda = SystemMediaState(
+      active: true,
+      title: 'Song A',
+      artist: 'Artist',
+      playing: true,
+      sourceApp: 'SodaMusic.exe',
+    );
+    const chrome = SystemMediaState(
+      active: true,
+      title: 'Song B',
+      artist: 'YouTube',
+      playing: true,
+      sourceApp: 'chrome',
+    );
+    final fromSoda = IslandNowPlaying.resolve(
+      engine: engine,
+      system: soda,
+      now: DateTime.now(),
+    );
+    final fromChrome = IslandNowPlaying.resolve(
+      engine: engine,
+      system: chrome,
+      now: DateTime.now(),
+    );
+    expect(fromSoda.title, 'Song A');
+    expect(fromSoda.subtitle, contains('汽水音乐'));
+    expect(fromChrome.title, 'Song B');
+    expect(fromChrome.subtitle, contains('chrome'));
+    engine.dispose();
+  });
+
+  test('live HRTF stopping drops LIVE and returns to SMTC metadata', () {
+    final engine = EngineController();
+    const system = SystemMediaState(
+      active: true,
+      title: 'Loopback Song',
+      artist: 'Artist',
+      playing: true,
+      sourceApp: 'SodaMusic.exe',
+      pid: 99,
+    );
+    final live = IslandNowPlaying.resolve(
+      engine: engine,
+      system: system,
+      now: DateTime.now(),
+      liveHrtfRunning: true,
+      liveHrtfHealthy: true,
+    );
+    final stopped = IslandNowPlaying.resolve(
+      engine: engine,
+      system: system,
+      now: DateTime.now(),
+    );
+    expect(live.liveTransfer, isTrue);
+    expect(live.subtitle, contains('HRTF LIVE'));
+    expect(stopped.liveTransfer, isFalse);
+    expect(stopped.source, IslandMediaSource.system);
+    expect(stopped.title, 'Loopback Song');
+    expect(stopped.subtitle, isNot(contains('HRTF LIVE')));
+    engine.dispose();
+  });
 }

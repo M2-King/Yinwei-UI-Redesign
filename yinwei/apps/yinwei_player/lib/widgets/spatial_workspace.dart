@@ -29,6 +29,7 @@ class SpatialWorkspace extends StatefulWidget {
     this.active = true,
     this.orbiting = false,
     this.playing = false,
+    this.playbackTelemetry,
     this.arraySpeakers,
     this.selectedSpeakerIndex = 0,
     this.sceneSnapshot,
@@ -52,6 +53,7 @@ class SpatialWorkspace extends StatefulWidget {
   final bool active;
   final bool orbiting;
   final bool playing;
+  final ValueListenable<PlaybackTelemetryV1>? playbackTelemetry;
   final List<ArraySpeaker>? arraySpeakers;
   final int selectedSpeakerIndex;
   final Map<String, dynamic>? sceneSnapshot;
@@ -81,6 +83,7 @@ class _SpatialWorkspaceState extends State<SpatialWorkspace> {
   String? _lastTelemetry;
   String? _lastUi;
   var _phase3SmokeStarted = false;
+  var _phase6SmokeStarted = false;
 
   bool get _arrayOn =>
       widget.arraySpeakers != null && widget.arraySpeakers!.isNotEmpty;
@@ -106,6 +109,29 @@ class _SpatialWorkspaceState extends State<SpatialWorkspace> {
     if (_useWebView) {
       unawaited(_bootWebView());
     }
+    widget.playbackTelemetry?.addListener(_onTelemetry);
+  }
+
+  PlaybackTelemetryV1 get _tel =>
+      widget.playbackTelemetry?.value ??
+      PlaybackTelemetryV1(
+        playhead: widget.playhead,
+        playing: widget.playing,
+        orbiting: widget.orbiting,
+        envelopment: widget.envelopment,
+        active: widget.active,
+        azimuthDeg: widget.azimuthDeg,
+        elevationDeg: widget.elevationDeg,
+      );
+
+  void _onTelemetry() {
+    if (!mounted) return;
+    if (_useWebView) {
+      if (!TickerMode.of(context)) return;
+      _pushTelemetry();
+      return;
+    }
+    setState(() {});
   }
 
   Future<void> _bootWebView() async {
@@ -205,14 +231,16 @@ window.YinweiPose = {
     };
   }
 
-  Map<String, dynamic> _telemetryMessage() => {
-        'type': 'playbackTelemetry',
-        'playhead': widget.playhead,
-        'playing': widget.playing,
-        'orbiting': widget.orbiting,
-        'envelopment': widget.envelopment,
-        'active': widget.active,
-      };
+  Map<String, dynamic> _telemetryMessage() {
+    final tel = _tel;
+    return {
+      'type': 'playbackTelemetry',
+      'playing': tel.playing,
+      'orbiting': tel.orbiting,
+      'envelopment': tel.envelopment,
+      'active': tel.active,
+    };
+  }
 
   Map<String, dynamic> _uiMessage() => {
         'type': 'uiState',
@@ -243,7 +271,8 @@ window.YinweiPose = {
 
   void _runRaw(String fn, String payload) {
     final web = _web;
-    if (web == null || !_pageReady) return;
+    if (web == null || !_pageReady || !mounted) return;
+    if (!TickerMode.of(context)) return;
     unawaited(
       web.executeScript(
         'window.YinweiWorkspace&&YinweiWorkspace.$fn($payload)',
@@ -280,6 +309,68 @@ window.YinweiPose = {
     _pushTelemetry(force: force);
     _pushUi(force: force);
     _maybeStartPhase3Smoke();
+    _maybeStartPhase6Smoke();
+  }
+
+  void _maybeStartPhase6Smoke() {
+    if (_phase6SmokeStarted) return;
+    if (Platform.environment.containsKey('FLUTTER_TEST')) return;
+    if (Platform.environment['YINWEI_PHASE6_SMOKE'] != '1') return;
+    if (!_pageReady || _web == null) return;
+    _phase6SmokeStarted = true;
+    unawaited(_runPhase6Smoke());
+  }
+
+  Future<void> _runPhase6Smoke() async {
+    debugPrint('[Phase6] workspace start');
+    Map<String, dynamic>? inspect;
+    for (var i = 0; i < 30; i++) {
+      await Future<void>.delayed(const Duration(milliseconds: 200));
+      final raw = await _js(
+        'window.YinweiWorkspace&&YinweiWorkspace.debug.inspect()',
+      );
+      if (raw is Map) {
+        inspect = Map<String, dynamic>.from(raw);
+        final ids = inspect['ids'];
+        if (ids is List &&
+            ids.contains('source-main') &&
+            ids.contains('listener-0')) {
+          break;
+        }
+      }
+    }
+    debugPrint('[Phase6] inspect-before=$inspect');
+    await Future<void>.delayed(const Duration(seconds: 3));
+    Future<void> step(String name, String expr) async {
+      final result = await _js(expr);
+      debugPrint('[Phase6] $name $result');
+      await Future<void>.delayed(const Duration(milliseconds: 180));
+    }
+
+    await step('click-listener', 'YinweiWorkspace.debug.click("listener-0")');
+    await step('click-source', 'YinweiWorkspace.debug.click("source-main")');
+    await step('click-emitter', 'YinweiWorkspace.debug.click("emitter-L")');
+    for (var i = 0; i < 10; i++) {
+      await step(
+        'nudge-xz-$i',
+        'YinweiWorkspace.debug.nudgeSource(0.08, 0, -0.04, false)',
+      );
+    }
+    await step('nudge-xz-commit', 'YinweiWorkspace.debug.nudgeSource(0.05, 0, 0, true)');
+    for (var i = 0; i < 4; i++) {
+      await step('nudge-y-$i', 'YinweiWorkspace.debug.nudgeSource(0, 0.06, 0, false)');
+    }
+    await step('nudge-y-commit', 'YinweiWorkspace.debug.nudgeSource(0, 0.04, 0, true)');
+    await step('set-free', 'YinweiWorkspace.debug.setView("free")');
+    await step('orbit', 'YinweiWorkspace.debug.orbit()');
+    await step('pan', 'YinweiWorkspace.debug.pan()');
+    await step('zoom', 'YinweiWorkspace.debug.zoom()');
+    await step('top', 'YinweiWorkspace.debug.setView("top")');
+    await step('front', 'YinweiWorkspace.debug.setView("front")');
+    await step('listener-view', 'YinweiWorkspace.debug.setView("listener")');
+    await step('fit', 'YinweiWorkspace.debug.setView("fit")');
+    await step('inspect-final', 'YinweiWorkspace.debug.inspect()');
+    debugPrint('[Phase6] workspace done');
   }
 
   void _maybeStartPhase3Smoke() {
@@ -360,11 +451,16 @@ window.YinweiPose = {
   @override
   void didUpdateWidget(covariant SpatialWorkspace old) {
     super.didUpdateWidget(old);
+    if (old.playbackTelemetry != widget.playbackTelemetry) {
+      old.playbackTelemetry?.removeListener(_onTelemetry);
+      widget.playbackTelemetry?.addListener(_onTelemetry);
+    }
     if (_useWebView) _pushAll();
   }
 
   @override
   void dispose() {
+    widget.playbackTelemetry?.removeListener(_onTelemetry);
     for (final sub in _subs) {
       unawaited(sub.cancel());
     }
@@ -380,13 +476,13 @@ window.YinweiPose = {
     final Widget viewport;
     if (!_useWebView) {
       viewport = OrbitVisualizer(
-        playhead: widget.playhead,
-        azimuthDeg: widget.azimuthDeg,
-        elevationDeg: widget.elevationDeg,
+        playhead: _tel.playhead,
+        azimuthDeg: _tel.azimuthDeg,
+        elevationDeg: _tel.elevationDeg,
         distanceM: widget.distanceM,
-        envelopment: widget.envelopment,
-        active: widget.active,
-        orbiting: widget.orbiting,
+        envelopment: _tel.envelopment,
+        active: _tel.active,
+        orbiting: _tel.orbiting,
         arraySpeakers: widget.arraySpeakers,
         selectedSpeakerIndex: widget.selectedSpeakerIndex,
         onPoseChanged: widget.onPoseChanged,
@@ -416,28 +512,9 @@ window.YinweiPose = {
             );
     }
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        const Padding(
-          padding: EdgeInsets.fromLTRB(6, 0, 6, 8),
-          child: Text(
-            'SPATIAL WORKSPACE',
-            style: TextStyle(
-              color: YinweiColors.textSecondary,
-              fontSize: 11,
-              letterSpacing: 1.2,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-        ),
-        Expanded(
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(18),
-            child: viewport,
-          ),
-        ),
-      ],
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(YinweiLayout.workspaceRadius),
+      child: SizedBox.expand(child: viewport),
     );
   }
 }

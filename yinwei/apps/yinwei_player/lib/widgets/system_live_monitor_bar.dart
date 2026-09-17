@@ -16,6 +16,7 @@ class SystemLiveMonitorBar extends StatelessWidget {
     required this.onToggleLiveHrtf,
     this.onTogglePlayPause,
     this.onSelectOutput,
+    this.compact = false,
   });
 
   final SystemMediaService systemMedia;
@@ -23,6 +24,7 @@ class SystemLiveMonitorBar extends StatelessWidget {
   final VoidCallback onToggleLiveHrtf;
   final VoidCallback? onTogglePlayPause;
   final ValueChanged<String>? onSelectOutput;
+  final bool compact;
 
   @override
   Widget build(BuildContext context) {
@@ -66,17 +68,21 @@ class SystemLiveMonitorBar extends StatelessWidget {
     final accentLive = running || starting;
 
     return Container(
-      margin: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-      decoration: BoxDecoration(
-        color: YinweiColors.panelElevated,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: accentLive
-              ? YinweiColors.accent.withValues(alpha: 0.7)
-              : YinweiColors.hairline,
-        ),
-      ),
+      margin: compact ? EdgeInsets.zero : const EdgeInsets.fromLTRB(16, 0, 16, 8),
+      padding: compact
+          ? const EdgeInsets.symmetric(horizontal: 8, vertical: 4)
+          : const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: compact
+          ? null
+          : BoxDecoration(
+              color: YinweiColors.panelElevated,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: accentLive
+                    ? YinweiColors.accent.withValues(alpha: 0.7)
+                    : YinweiColors.hairline,
+              ),
+            ),
       child: Row(
         children: [
           Icon(
@@ -85,42 +91,55 @@ class SystemLiveMonitorBar extends StatelessWidget {
                 : (s.playing
                     ? Icons.graphic_eq_rounded
                     : Icons.sensors_rounded),
-            size: 22,
+            size: compact ? 18 : 22,
             color: accentLive
                 ? YinweiColors.accent
                 : (s.playing
                     ? YinweiColors.success
                     : YinweiColors.textSecondary),
           ),
-          const SizedBox(width: 12),
+          SizedBox(width: compact ? 8 : 12),
           Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: theme.textTheme.titleSmall?.copyWith(
-                    fontWeight: FontWeight.w600,
+            child: compact
+                ? Text(
+                    s.hasTrack
+                        ? '$title  ·  $subtitle'
+                        : (warming ? title : '系统媒体待机'),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      color: (err != null && !running)
+                          ? const Color(0xFFFF8A80)
+                          : YinweiColors.textTertiary,
+                    ),
+                  )
+                : Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.titleSmall?.copyWith(
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        subtitle,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.labelSmall?.copyWith(
+                          color: (err != null && !running)
+                              ? const Color(0xFFFF8A80)
+                              : (accentLive
+                                  ? YinweiColors.accent
+                                  : YinweiColors.textSecondary),
+                          height: 1.25,
+                        ),
+                      ),
+                    ],
                   ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  subtitle,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: theme.textTheme.labelSmall?.copyWith(
-                    color: (err != null && !running)
-                        ? const Color(0xFFFF8A80)
-                        : (accentLive
-                            ? YinweiColors.accent
-                            : YinweiColors.textSecondary),
-                    height: 1.25,
-                  ),
-                ),
-              ],
-            ),
           ),
           if (s.hasTrack) ...[
             _WetOutputPicker(
@@ -130,11 +149,12 @@ class SystemLiveMonitorBar extends StatelessWidget {
             IconButton(
               tooltip: '系统播放/暂停',
               onPressed: onTogglePlayPause,
+              visualDensity: VisualDensity.compact,
               icon: Icon(
                 s.playing
                     ? CupertinoIcons.pause_fill
                     : CupertinoIcons.play_fill,
-                size: 18,
+                size: compact ? 16 : 18,
                 color: YinweiColors.textPrimary,
               ),
             ),
@@ -148,8 +168,9 @@ class SystemLiveMonitorBar extends StatelessWidget {
                 foregroundColor:
                     accentLive ? Colors.black : YinweiColors.textPrimary,
                 visualDensity: VisualDensity.compact,
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                padding: compact
+                    ? const EdgeInsets.symmetric(horizontal: 10, vertical: 6)
+                    : const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
               ),
               child: Text(
                 liveTransfer.toggleLabel(idle: '真实Transfer'),

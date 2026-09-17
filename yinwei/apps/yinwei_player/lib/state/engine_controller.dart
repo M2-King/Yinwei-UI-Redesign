@@ -7,7 +7,7 @@ import 'package:yinwei_player/models/spatial_params.dart';
 
 /// Bumped when UI wiring changes — shown in status bar so Windows hosts
 /// can confirm they pulled the latest build.
-const String kYinweiUiBuild = 'ui-36-matrix';
+const String kYinweiUiBuild = 'ui-52-sync';
 const String kYinweiBridgeBuild = 'p2.4.32-matrix';
 
 /// App state for the locked Player UI (IMPLEMENTATION_P2 §5.1).
@@ -15,7 +15,7 @@ class EngineController extends ChangeNotifier {
   EngineController({EngineApi? engine, this.backendLabel = 'Mock'})
       : _engine = engine ?? MockEngine() {
     // Keep engine params aligned with UI defaults immediately.
-    unawaited(_engine.setParams(params));
+    unawaited(_pushNativeParams(params));
   }
 
   final EngineApi _engine;
@@ -43,6 +43,9 @@ class EngineController extends ChangeNotifier {
   ArrayLayout? _pendingArray;
   Timer? _arrayThrottle;
   int _arrayGen = 0;
+  var _tickInFlight = false;
+  int spatialSetParamsCalls = 0;
+  int nativeSpatialWrites = 0;
 
   bool get arraySupported => _engine.supportsArray;
 
@@ -57,18 +60,19 @@ class EngineController extends ChangeNotifier {
   Future<void> openPath(String path) async {
     _liveRebuild?.cancel();
     await _run(() async {
-      track = await _engine.open(path);
+      track =       await _engine.open(path);
       hasOpenedFile = true;
       position = Duration.zero;
       playing = false;
       _tick?.cancel();
-      await _engine.setParams(params);
+      await _pushNativeParams(params);
       // No full-song rebuild — native open() loads dry PCM for streaming DSP.
       _syncAzimuth();
     });
   }
 
   Future<void> setParams(SpatialParams next) async {
+    spatialSetParamsCalls++;
     params = next.copy();
     _syncAzimuth();
     notifyListeners(); // UI follows every frame
@@ -82,7 +86,7 @@ class EngineController extends ChangeNotifier {
       _pendingParams = null;
       final gen = ++_paramsGen;
       unawaited(() async {
-        await _engine.setParams(pending);
+        await _pushNativeParams(pending);
         if (gen != _paramsGen) return;
       }());
     });
@@ -165,7 +169,7 @@ class EngineController extends ChangeNotifier {
     _paramsThrottle = null;
     _pendingParams = null;
     final gen = ++_paramsGen;
-    await _engine.setParams(params);
+    await _pushNativeParams(params);
     if (gen != _paramsGen) return;
   }
 
@@ -180,7 +184,7 @@ class EngineController extends ChangeNotifier {
     _paramsThrottle = null;
     _pendingParams = null;
     final gen = ++_paramsGen;
-    await _engine.setParams(params);
+    await _pushNativeParams(params);
     if (gen != _paramsGen) return;
   }
 
@@ -268,16 +272,55 @@ class EngineController extends ChangeNotifier {
 
   void _startTick() {
     _tick?.cancel();
+    _tickInFlight = false;
     _tick = Timer.periodic(const Duration(milliseconds: 33), (_) async {
-      if (!playing) return;
-      final pos = await _engine.position();
-      final still = await _engine.isPlaying();
-      position = pos;
-      await _syncLivePose();
-      playing = still;
-      if (!playing) _tick?.cancel();
-      notifyListeners();
+      if (!playing || _tickInFlight) return;
+      _tickInFlight = true;
+      try {
+        final pos = await _engine.position();
+        if (!playing) return;
+        final still = await _engine.isPlaying();
+        position = pos;
+        await _syncLivePose();
+        playing = still;
+        if (!playing) _tick?.cancel();
+        notifyListeners();
+      } finally {
+        _tickInFlight = false;
+      }
     });
+  }
+
+  Future<void> _pushNativeParams(SpatialParams next) async {
+    nativeSpatialWrites++;
+    await _engine.setParams(next);
+  }
+
+  Map<String, Object?> runtimeAudioDiag() {
+    return {
+      'uiBuild': kYinweiUiBuild,
+      'bridgeBuild': kYinweiBridgeBuild,
+      'backend': backendLabel,
+      'playbackMode': mode.name,
+      'arrayEnabled': array.enabled,
+      'arrayMode': array.mode.name,
+      'matrixLinked': array.matrixLinked,
+      'speakers': [
+        for (final s in array.speakers)
+          {
+            'label': s.label,
+            'az': s.azimuthDeg,
+            'el': s.elevationDeg,
+            'dist': s.distanceM,
+            'feed': s.feed.name,
+          },
+      ],
+      'pointAz': params.azimuthDeg,
+      'pointEl': params.elevationDeg,
+      'pointDist': params.distanceM,
+      'nativeSpatialWrites': nativeSpatialWrites,
+      'spatialSetParamsCalls': spatialSetParamsCalls,
+    };
   }
 
   Future<void> _run(Future<void> Function() job) async {

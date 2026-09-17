@@ -28,6 +28,7 @@
   var viewMode = 'free';
   var dragging = null;
   var lastPosePost = 0;
+  var gestureBasedOnRevision = null;
   var needsRender = true;
   var waveAcc = 0;
   var viewTween = null;
@@ -55,13 +56,13 @@
   }
 
   var scene = new THREE.Scene();
-  scene.background = new THREE.Color(0x0a0a0c);
-  scene.fog = new THREE.Fog(0x141517, 12, 30);
+  scene.background = new THREE.Color(0x0b0c0e);
+  scene.fog = new THREE.Fog(0x121417, 16, 38);
 
-  var camera = new THREE.PerspectiveCamera(44, 1, 0.08, CAM_FAR);
-  var camSph = new THREE.Spherical(7.25, 1.03, -0.07);
+  var camera = new THREE.PerspectiveCamera(38, 1, 0.08, CAM_FAR);
+  var camSph = new THREE.Spherical(6.05, 1.12, 0.08);
   var camSphGoal = camSph.clone();
-  var camTarget = new THREE.Vector3(0, -0.38, -0.45);
+  var camTarget = new THREE.Vector3(0.02, -0.1, -0.22);
   var camTargetGoal = camTarget.clone();
   var camDamp = 0.16;
 
@@ -84,10 +85,10 @@
     document.getElementById('hint').textContent = 'WebGL unavailable: ' + err;
     throw err;
   }
-  renderer.setClearColor(0x0a0a0c, 1);
+  renderer.setClearColor(0x0b0c0e, 1);
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
-  renderer.toneMappingExposure = 1.18;
+  renderer.toneMappingExposure = 1.32;
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.VSMShadowMap;
   document.body.appendChild(renderer.domElement);
@@ -114,38 +115,41 @@
   }
   onResize();
 
-  scene.add(new THREE.HemisphereLight(0xc9ddf0, 0x20232a, 0.85));
-  var key = new THREE.DirectionalLight(0xf0eeeb, 1.7);
-  key.position.set(-3.2, 6.8, 1.4);
+  scene.add(new THREE.HemisphereLight(0xe8e4dc, 0x2e2a26, 0.82));
+  var key = new THREE.DirectionalLight(0xf6f2ea, 2.12);
+  key.position.set(-1.6, 5.2, 4.4);
   key.castShadow = true;
   key.shadow.mapSize.set(1024, 1024);
-  key.shadow.camera.left = -6;
-  key.shadow.camera.right = 6;
-  key.shadow.camera.top = 6;
-  key.shadow.camera.bottom = -6;
+  key.shadow.camera.left = -4.4;
+  key.shadow.camera.right = 4.4;
+  key.shadow.camera.top = 4.4;
+  key.shadow.camera.bottom = -4.4;
   key.shadow.camera.near = 0.5;
-  key.shadow.camera.far = 18;
+  key.shadow.camera.far = 16;
   key.shadow.bias = -0.0004;
   key.shadow.normalBias = 0.025;
-  key.shadow.radius = 4;
+  key.shadow.radius = 3.5;
   key.shadow.blurSamples = 8;
   scene.add(key);
-  var fill = new THREE.DirectionalLight(0xc2c9d2, 0.75);
-  fill.position.set(4.8, 2.6, 2.2);
+  var fill = new THREE.DirectionalLight(0xd7dee6, 1.32);
+  fill.position.set(3.4, 2.35, 4.8);
   scene.add(fill);
-  var rim = new THREE.DirectionalLight(0xd6e4f0, 1.8);
-  rim.position.set(1.2, 3.8, -5.2);
+  var rim = new THREE.DirectionalLight(0xeee8dc, 1.08);
+  rim.position.set(0.45, 2.7, -4.7);
   scene.add(rim);
-  scene.add(new THREE.AmbientLight(0x3b393d, 0.38));
+  scene.add(new THREE.AmbientLight(0x434044, 0.5));
+  var canopy = new THREE.PointLight(0xf4eee4, 1.18, 6.4, 1.8);
+  canopy.position.set(0.12, 2.28, 0.08);
+  scene.add(canopy);
 
   // A small, prefiltered studio environment provides broad material highlights.
   // It is baked once; no reflection probes or extra passes run in the frame loop.
   var reflectionStudio = new THREE.Scene();
-  reflectionStudio.background = new THREE.Color(0x181a1d);
+  reflectionStudio.background = new THREE.Color(0x1c1e22);
   var softboxGeometry = new THREE.PlaneGeometry(1, 1);
   var softboxes = [];
-  [[-4, 4, 2, 3, 5, 0xc1cedb], [4, 3, -2, 2, 4, 0x829cb6],
-    [0, 6, 0, 5, 2, 0x8b9197]].forEach(function (p) {
+  [[-3.4, 4.2, 3.2, 3.2, 4.6, 0xd6dee8], [3.6, 3.2, 2.6, 2.5, 3.8, 0xd2c8b6],
+    [0.2, 6.3, 1.6, 6.4, 2.6, 0xf2eee6]].forEach(function (p) {
     var material = new THREE.MeshBasicMaterial({ color: p[5], side: THREE.DoubleSide });
     var box = new THREE.Mesh(softboxGeometry, material);
     box.position.set(p[0], p[1], p[2]);
@@ -188,9 +192,30 @@
     shape.lineTo(-x, -y + r); shape.quadraticCurveTo(-x, -y, -x + r, -y);
     var geometry = new THREE.ExtrudeGeometry(shape, {
       depth: d - 2 * bevel, steps: 1, curveSegments: 8,
-      bevelEnabled: true, bevelThickness: bevel, bevelSize: bevel, bevelSegments: 4,
+      bevelEnabled: true, bevelThickness: bevel, bevelSize: bevel, bevelSegments: 6,
     });
     geometry.translate(0, 0, -d / 2 + bevel);
+    // ExtrudeGeometry duplicates triangle vertices. Average the side/bevel normals
+    // at coincident positions so the rolled edge is continuous, keeping caps flat.
+    var positions = geometry.attributes.position;
+    var normals = geometry.attributes.normal;
+    var sideGroup = geometry.groups[1];
+    var edgeNormals = new Map();
+    function vertexKey(i) {
+      return Math.round(positions.getX(i) * 1e6) + ',' +
+        Math.round(positions.getY(i) * 1e6) + ',' + Math.round(positions.getZ(i) * 1e6);
+    }
+    for (var i = sideGroup.start; i < sideGroup.start + sideGroup.count; i++) {
+      var key = vertexKey(i);
+      var normal = edgeNormals.get(key) || new THREE.Vector3();
+      normal.add(new THREE.Vector3(normals.getX(i), normals.getY(i), normals.getZ(i)));
+      edgeNormals.set(key, normal);
+    }
+    edgeNormals.forEach(function (normal) { normal.normalize(); });
+    for (var j = sideGroup.start; j < sideGroup.start + sideGroup.count; j++) {
+      var smooth = edgeNormals.get(vertexKey(j));
+      normals.setXYZ(j, smooth.x, smooth.y, smooth.z);
+    }
     return geometry;
   }
 
@@ -208,9 +233,9 @@
     handleStem: new THREE.CylinderGeometry(0.009, 0.009, 0.4, 10),
     handleKnob: new THREE.SphereGeometry(0.043, 16, 12),
     forwardFin: new THREE.ConeGeometry(0.075, 0.24, 3),
-    cabinet: monitorEnclosure(0.42, 0.65, 0.37, 0.047, 0.014),
+    cabinet: monitorEnclosure(0.44, 0.65, 0.37, 0.065, 0.018),
     subCabinet: monitorEnclosure(0.56, 0.62, 0.51, 0.045, 0.014),
-    baffle: monitorEnclosure(0.385, 0.603, 0.022, 0.043, 0.004),
+    baffle: monitorEnclosure(0.405, 0.603, 0.022, 0.059, 0.004),
     subBaffle: monitorEnclosure(0.516, 0.576, 0.022, 0.039, 0.004),
     wooferTrim: new THREE.RingGeometry(0.101, 0.116, 48),
     woofer: new THREE.TorusGeometry(0.088, 0.012, 12, 40),
@@ -224,66 +249,77 @@
       new THREE.Vector2(0.04, -0.013), new THREE.Vector2(0.023, -0.02),
     ], 40),
     tweeter: new THREE.SphereGeometry(0.026, 24, 16),
-    stand: roundedCabinet(0.07, 0.8, 0.09, 0.008),
-    base: roundedCabinet(0.38, 0.035, 0.34, 0.01),
+    stand: monitorEnclosure(0.085, 0.8, 0.095, 0.019, 0.005),
+    base: monitorEnclosure(0.38, 0.035, 0.34, 0.006, 0.006),
     standPlate: roundedCabinet(0.28, 0.026, 0.24, 0.007),
+    isolationPad: new THREE.CylinderGeometry(0.027, 0.029, 0.018, 16),
+    standCollar: monitorEnclosure(0.13, 0.075, 0.14, 0.026, 0.005),
+    rearPlate: monitorEnclosure(0.23, 0.27, 0.012, 0.018, 0.003),
+    rearFin: new THREE.BoxGeometry(0.008, 0.13, 0.012),
+    driverFastener: new THREE.CylinderGeometry(0.006, 0.006, 0.003, 6),
   };
 
   var mat = {
     floor: new THREE.MeshStandardMaterial({
-      color: 0x424548,
-      roughness: 1.0,
-      metalness: 0.08,
+      color: 0x3c4044,
+      roughness: 0.9,
+      metalness: 0.05,
     }),
     depth: new THREE.MeshStandardMaterial({
-      color: 0x151518,
+      color: 0x16161a,
       roughness: 0.94,
       metalness: 0.02,
     }),
     panel: new THREE.MeshStandardMaterial({
-      color: 0x8b8984,
+      color: 0x97938c,
       roughness: 1.0,
       metalness: 0.0,
     }),
     panelInset: new THREE.MeshStandardMaterial({
-      color: 0x111114,
+      color: 0x141418,
       roughness: 0.96,
       metalness: 0.02,
     }),
     listener: new THREE.MeshStandardMaterial({
-      color: 0x607181,
-      roughness: 0.48,
-      metalness: 0.18,
+      color: 0x8e98a0,
+      roughness: 0.3,
+      metalness: 0.64,
     }),
     listenerDark: new THREE.MeshStandardMaterial({
-      color: 0x394652,
-      roughness: 0.52,
-      metalness: 0.18,
+      color: 0x3a4248,
+      roughness: 0.48,
+      metalness: 0.22,
     }),
     speaker: new THREE.MeshStandardMaterial({
-      color: 0x626568,
-      roughness: 0.7,
-      metalness: 0.14,
+      color: 0x6c7074,
+      roughness: 0.46,
+      metalness: 0.2,
     }),
     baffle: new THREE.MeshStandardMaterial({
-      color: 0x181b1e,
-      roughness: 0.72,
-      metalness: 0.08,
+      color: 0x3c4146,
+      roughness: 0.5,
+      metalness: 0.1,
     }),
     driver: new THREE.MeshStandardMaterial({
-      color: 0x424649,
-      roughness: 0.46,
-      metalness: 0.45,
+      color: 0x7c858e,
+      roughness: 0.3,
+      metalness: 0.7,
     }),
     cone: new THREE.MeshStandardMaterial({
-      color: 0x202326,
-      roughness: 0.76,
+      color: 0x2a2e32,
+      roughness: 0.62,
       metalness: 0.04,
+    }),
+    chassis: new THREE.MeshStandardMaterial({
+      color: 0x4a5056, roughness: 0.42, metalness: 0.58,
+    }),
+    rubber: new THREE.MeshStandardMaterial({
+      color: 0x101214, roughness: 0.94, metalness: 0,
     }),
     sourceCore: new THREE.MeshStandardMaterial({
       color: 0xfff8ea,
       emissive: 0xd9e7f2,
-      emissiveIntensity: 0.38,
+      emissiveIntensity: 0.5,
       roughness: 0.16,
       metalness: 0.42,
     }),
@@ -308,7 +344,7 @@
     shadow: new THREE.MeshBasicMaterial({
       color: 0x000000,
       transparent: true,
-      opacity: 0.28,
+      opacity: 0.34,
       depthWrite: false,
     }),
     halo: new THREE.MeshBasicMaterial({
@@ -347,11 +383,15 @@
   };
 
   Object.keys(mat).forEach(function (name) {
-    if (mat[name].isMeshStandardMaterial) mat[name].envMapIntensity = 0.55;
+    if (mat[name].isMeshStandardMaterial) mat[name].envMapIntensity = 0.62;
   });
-  mat.floor.envMapIntensity = 0.2;
-  mat.listener.envMapIntensity = 0.95;
-  mat.listenerDark.envMapIntensity = 0.8;
+  mat.floor.envMapIntensity = 0.16;
+  mat.listener.envMapIntensity = 1.05;
+  mat.listenerDark.envMapIntensity = 0.85;
+  mat.speaker.envMapIntensity = 0.74;
+  mat.baffle.envMapIntensity = 0.42;
+  mat.driver.envMapIntensity = 0.88;
+  mat.chassis.envMapIntensity = 0.8;
 
   // Tileable, deterministic albedo / roughness / relief maps. Different spatial
   // frequencies matter here: cloth weave, mineral aggregate and powder coating
@@ -388,15 +428,15 @@
           var warp = Math.cos(x * Math.PI / 2) * 0.5;
           var weft = Math.cos(y * Math.PI / 2 + (Math.floor(x / 4) % 2) * Math.PI) * 0.5;
           var yarn = warp + weft;
-          albedo = 116 + broad * 4 + medium * 3 + yarn * 4 + grain * 7;
+          albedo = 128 + broad * 4 + medium * 3 + yarn * 4 + grain * 7;
           relief = 128 + yarn * 16 + grain * 10;
           roughness = 235 + grain * 16;
         } else if (kind === 'mineral') {
-          albedo = 124 + broad * 17 + medium * 10 + grain * 8;
+          albedo = 126 + broad * 9 + medium * 6 + grain * 6;
           relief = 128 + medium * 25 + grain * 18;
-          roughness = 225 + broad * 22 + grain * 9;
+          roughness = 228 + broad * 22 + grain * 9;
         } else {
-          albedo = 119 + broad * 3 + grain * 7;
+          albedo = 198 + broad * 3 + grain * 5;
           relief = 128 + grain * 28;
           roughness = 219 + grain * 20;
         }
@@ -426,17 +466,17 @@
     material.bumpScale = relief;
   }
   applySurface(mat.panel, studioSurface('fabric', 1), 0.004);
-  applySurface(mat.floor, studioSurface('mineral', 9), 0.016);
-  applySurface(mat.speaker, studioSurface('coating', 1), 0.0025);
-  mat.panel.envMapIntensity = 0.18;
-  mat.floor.envMapIntensity = 0.08;
-  var wallFabrics = [0x8b8984, 0x858481, 0x91908b].map(function (color) {
+  applySurface(mat.floor, studioSurface('mineral', 9), 0.008);
+  applySurface(mat.speaker, studioSurface('coating', 1), 0.0012);
+  mat.panel.envMapIntensity = 0.22;
+  mat.floor.envMapIntensity = 0.16;
+  var wallFabrics = [0x97938c, 0x908c86, 0x9d9891].map(function (color) {
     var material = mat.panel.clone();
     material.color.setHex(color);
     return material;
   });
   var slatMaterial = new THREE.MeshStandardMaterial({
-    color: 0x26282a, roughness: 0.78, metalness: 0.12, envMapIntensity: 0.25,
+    color: 0x3c3b37, roughness: 0.62, metalness: 0.1, envMapIntensity: 0.34,
   });
   var shadowCanvas = document.createElement('canvas');
   shadowCanvas.width = shadowCanvas.height = 64;
@@ -487,7 +527,7 @@
     var grid = new THREE.GridHelper(FLOOR_SIZE, 36, 0x777c82, 0x777c82);
     grid.position.y = FLOOR_Y + 0.006;
     grid.material.transparent = true;
-    grid.material.opacity = 0.065;
+    grid.material.opacity = 0.05;
     g.add(grid);
 
     var rear = new THREE.Mesh(new THREE.BoxGeometry(9.2, 5.2, 0.16), mat.depth);
@@ -522,16 +562,16 @@
         g.add(slat);
       }
       [-3.6, 0.0, 3.0].forEach(function(z) {
-        var wash = new THREE.PointLight(0xffdfb4, 0.5, 3.5, 2);
+        var wash = new THREE.PointLight(0xffdfb4, 0.72, 3.8, 2);
         wash.position.set(side * 4.1, FLOOR_Y + 0.3, z);
         g.add(wash);
       });
-      var rearWash = new THREE.PointLight(0xffdfba, 1.6, 4.3, 2);
+      var rearWash = new THREE.PointLight(0xffdfba, 1.85, 4.6, 2);
       rearWash.position.set(side * 2.8, FLOOR_Y + 1.45, -4.05);
       g.add(rearWash);
     });
     var ringMaterial = new THREE.MeshBasicMaterial({
-      color: 0x81919f, transparent: true, opacity: 0.1,
+      color: 0x8a9aaa, transparent: true, opacity: 0.13,
       side: THREE.DoubleSide, depthWrite: false,
     });
     [1, 2, 3.2].forEach(function(radius) {
@@ -546,42 +586,63 @@
 
   function makeListenerMesh() {
     var g = new THREE.Group();
-    // A continuous bust, centered on the acoustic ear origin; never move the group.
-    var headGeometry = new THREE.SphereGeometry(1, 40, 32);
-    var headVertices = headGeometry.attributes.position;
-    for (var hi = 0; hi < headVertices.count; hi++) {
-      var hy = headVertices.getY(hi);
-      var chin = 1 - Math.max(0, -hy) * 0.24;
-      headVertices.setX(hi, headVertices.getX(hi) * chin);
-      if (headVertices.getZ(hi) < -0.75) headVertices.setZ(hi, -0.75 + (headVertices.getZ(hi) + 0.75) * 0.55);
-    }
-    headGeometry.computeVertexNormals();
-    var head = new THREE.Mesh(headGeometry, mat.listener);
-    head.scale.set(0.225, 0.30, 0.24);
-    head.position.y = 0.015;
-    var earGeo = new THREE.SphereGeometry(1, 16, 16);
-    var earL = new THREE.Mesh(earGeo, mat.listenerDark);
-    earL.scale.set(0.037, 0.076, 0.048); earL.position.set(-0.224, -0.014, 0);
-    var earR = earL.clone(); earR.position.x = 0.224;
-    var nose = new THREE.Mesh(new THREE.SphereGeometry(1, 16, 12), mat.listener);
-    nose.scale.set(0.043, 0.068, 0.057); nose.position.set(0, 0.005, -0.22);
-    var profile = [
-      [0.34,-1.12], [0.39,-1.04], [0.44,-0.9], [0.47,-0.76],
-      [0.44,-0.65], [0.29,-0.54], [0.16,-0.45], [0.12,-0.36],
-      [0.12,-0.28], [0.135,-0.23],
-    ].map(function(p){ return new THREE.Vector2(p[0],p[1]); });
-    var torso = new THREE.Mesh(new THREE.LatheGeometry(new THREE.SplineCurve(profile).getPoints(40), 48), mat.listenerDark);
-    torso.scale.z = 0.62;
-    var base = new THREE.Mesh(new THREE.CylinderGeometry(0.47, 0.48, 0.035, 64), mat.speaker);
-    base.position.y = FLOOR_Y + 0.025;
-    var rim = new THREE.Mesh(new THREE.TorusGeometry(0.465, 0.006, 8, 80), mat.field);
-    rim.rotation.x = Math.PI / 2; rim.position.y = FLOOR_Y + 0.05;
+    // Abstract acoustic reference instrument. The acoustic origin stays at (0,0,0).
+    // Opposed capsules express the left/right baseline; the inlay points to -Z.
+    var profile = [[0,-0.28],[0.13,-0.27],[0.22,-0.20],[0.25,-0.08],
+      [0.25,0.10],[0.21,0.22],[0.12,0.27],[0,0.28]];
+    var shell = new THREE.Mesh(new THREE.LatheGeometry(
+      new THREE.SplineCurve(profile.map(function(p){return new THREE.Vector2(p[0],p[1]);})).getPoints(48),64),mat.listener);
+    shell.scale.z = 0.72;
+    // Fine assembly seam and machined end caps identify an acoustic instrument.
+    // These are local visual details; the acoustic origin and orientation stay fixed.
+    var shellSeam = new THREE.Mesh(new THREE.TorusGeometry(0.2505, 0.0025, 6, 64), mat.chassis);
+    shellSeam.rotation.x = Math.PI / 2;
+    shellSeam.scale.y = 0.72;
+    g.add(shellSeam);
+    var capsuleGeo = new THREE.CylinderGeometry(0.095,0.095,0.018,48);
+    [-1,1].forEach(function(side){
+      var capsule=new THREE.Mesh(capsuleGeo,mat.listenerDark);
+      capsule.rotation.z=Math.PI/2; capsule.position.x=side*0.249;
+      var rim=new THREE.Mesh(new THREE.TorusGeometry(0.099,0.005,8,48),mat.driver);
+      rim.rotation.y=Math.PI/2; rim.position.x=side*0.261;
+      var inset = new THREE.Mesh(new THREE.CircleGeometry(0.077, 40), mat.rubber);
+      inset.rotation.y = side * Math.PI / 2; inset.position.x = side * 0.260;
+      var innerRim = new THREE.Mesh(new THREE.TorusGeometry(0.077, 0.002, 6, 40), mat.chassis);
+      innerRim.rotation.y = Math.PI / 2; innerRim.position.x = side * 0.263;
+      // One instanced draw for each capsule's acoustic grille.
+      var grille = new THREE.InstancedMesh(new THREE.CircleGeometry(0.005, 8), mat.driver, 19);
+      var pin = new THREE.Object3D();
+      pin.rotation.y = side * Math.PI / 2;
+      for (var gi = 0; gi < 19; gi++) {
+        var gr = gi === 0 ? 0 : gi < 7 ? 0.025 : 0.05;
+        var ga = gi < 7 ? (gi - 1) * Math.PI / 3 : (gi - 7) * Math.PI / 6;
+        pin.position.set(side * 0.264, Math.cos(ga) * gr, Math.sin(ga) * gr);
+        pin.updateMatrix(); grille.setMatrixAt(gi, pin.matrix);
+      }
+      g.add(capsule,rim,inset,innerRim,grille);
+    });
+    var stem = new THREE.Mesh(monitorEnclosure(0.09,0.77,0.10,0.025,0.008),mat.listenerDark);
+    stem.position.y=-0.67;
+    var baseProfile=[[0,FLOOR_Y+0.018],[0.34,FLOOR_Y+0.018],[0.36,FLOOR_Y+0.04],
+      [0.34,FLOOR_Y+0.075],[0.19,FLOOR_Y+0.09],[0.07,FLOOR_Y+0.16]];
+    var base=new THREE.Mesh(new THREE.LatheGeometry(baseProfile.map(function(p){return new THREE.Vector2(p[0],p[1]);}),64),mat.listenerDark);
+    var rim=new THREE.Mesh(new THREE.TorusGeometry(0.343,0.005,8,80),mat.handle);
+    rim.rotation.x=Math.PI/2;rim.position.y=FLOOR_Y+0.066;
+    var inlay=new THREE.Mesh(monitorEnclosure(0.022,0.25,0.009,0.008,0.002),mat.handle);
+    inlay.position.set(0,0,-0.181);
+    var spine = new THREE.Mesh(monitorEnclosure(0.038, 0.53, 0.006, 0.009, 0.001), mat.chassis);
+    spine.position.set(0, -0.68, 0.052);
+    var rearInlay = new THREE.Mesh(monitorEnclosure(0.025, 0.10, 0.006, 0.009, 0.001), mat.chassis);
+    rearInlay.position.set(0, 0.025, 0.181);
+    g.add(spine, rearInlay);
     var fin = new THREE.Mesh(geo.forwardFin, mat.field);
-    fin.rotation.x = -Math.PI / 2; fin.position.set(0, FLOOR_Y + 0.03, -0.68);
-    var tag = makeLabelSprite('Listener', 0.9, 'rgba(223,233,244,0.85)');
-    tag.position.set(0, FLOOR_Y + 0.025, 0.61);
-    g.add(head, earL, earR, nose, torso, base, rim, fin, tag);
-    g.traverse(function(child) {if(child.isMesh) child.castShadow = true;});
+    fin.rotation.x=-Math.PI/2;fin.position.set(0,FLOOR_Y+0.03,-0.50);
+    var tag=makeLabelSprite('Listener',0.9,'rgba(223,233,244,0.85)');
+    tag.position.set(0,FLOOR_Y+0.025,0.51);
+    var shadow=new THREE.Mesh(geo.shadow,mat.shadow);
+    shadow.rotation.x=-Math.PI/2;shadow.position.y=FLOOR_Y+0.011;shadow.scale.setScalar(2.6);
+    g.add(shell,stem,base,rim,inlay,fin,tag,shadow);
+    g.traverse(function(child){if(child.isMesh && child!==shadow)child.castShadow=true;});
     g.userData.kind = 'listener';
     g.userData.label = tag;
     return g;
@@ -597,29 +658,30 @@
     baffle.position.set(0, isSub ? 0 : 0.04, isSub ? 0.265 : 0.194);
     var wooferTrim = new THREE.Mesh(geo.wooferTrim, mat.driver);
     wooferTrim.position.set(0, isSub ? -0.02 : -0.05, isSub ? 0.283 : 0.211);
-    wooferTrim.scale.setScalar(isSub ? 1.55 : 1.16);
-    var woofer = new THREE.Mesh(geo.woofer, mat.cone);
+    wooferTrim.scale.setScalar(isSub ? 1.75 : 1.40);
+    var woofer = new THREE.Mesh(geo.woofer, mat.rubber);
     woofer.position.copy(wooferTrim.position);
     woofer.position.z += 0.014;
-    woofer.scale.setScalar(isSub ? 1.55 : 1.16);
+    woofer.scale.setScalar(isSub ? 1.75 : 1.40);
     var cone = new THREE.Mesh(geo.cone, mat.cone);
     cone.rotation.x = Math.PI / 2;
     cone.position.copy(woofer.position);
     cone.position.z += 0.014;
-    cone.scale.setScalar(isSub ? 1.45 : 1.16);
+    cone.scale.setScalar(isSub ? 1.65 : 1.40);
     var dustCap = new THREE.Mesh(geo.dustCap, mat.cone);
     dustCap.position.copy(cone.position);
     dustCap.position.z -= 0.019;
-    dustCap.scale.set(isSub ? 1.45 : 1.16, isSub ? 1.45 : 1.16, 0.45);
+    dustCap.scale.set(isSub ? 1.65 : 1.40, isSub ? 1.65 : 1.40, 0.45);
     var tweeterTrim = new THREE.Mesh(geo.tweeterTrim, mat.driver);
     tweeterTrim.rotation.x = Math.PI / 2;
+    tweeterTrim.scale.set(1.55,1,1.22);
     tweeterTrim.position.set(0, 0.17, 0.23);
     var tweeter = new THREE.Mesh(geo.tweeter, mat.driver);
     tweeter.scale.z = 0.48;
     tweeter.position.set(0, 0.17, 0.223);
-    var stand = new THREE.Mesh(geo.stand, mat.speaker);
+    var stand = new THREE.Mesh(geo.stand, mat.chassis);
     stand.position.y = -0.69;
-    var base = new THREE.Mesh(geo.base, mat.speaker);
+    var base = new THREE.Mesh(geo.base, mat.chassis);
     base.position.y = FLOOR_Y + 0.03;
     var standPlate = new THREE.Mesh(geo.standPlate, mat.baffle);
     standPlate.position.y = -0.29;
@@ -632,6 +694,38 @@
     shadow.renderOrder = -1;
     g.add(body, baffle, wooferTrim, woofer, cone, dustCap, stand, standPlate, base, shadow);
     if (!isSub) g.add(tweeterTrim, tweeter);
+    // A layered driver seat makes the baffle read as assembled hardware.
+    // The recessed cone remains forward of the solid baffle, avoiding occlusion.
+    var driverSeat = new THREE.Mesh(new THREE.TorusGeometry(0.113, 0.0035, 8, 48), mat.chassis);
+    driverSeat.position.copy(wooferTrim.position);
+    driverSeat.position.z += 0.004;
+    driverSeat.scale.setScalar(isSub ? 1.75 : 1.40);
+    g.add(driverSeat);
+    var fasteners = new THREE.InstancedMesh(geo.driverFastener, mat.chassis, 6);
+    var fastener = new THREE.Object3D();
+    fastener.rotation.x = Math.PI / 2;
+    for (var fi = 0; fi < 6; fi++) {
+      var fa = (fi + 0.5) * Math.PI / 3;
+      var fr = 0.108 * (isSub ? 1.75 : 1.40);
+      fastener.position.set(Math.sin(fa) * fr, wooferTrim.position.y + Math.cos(fa) * fr, wooferTrim.position.z + 0.005);
+      fastener.updateMatrix(); fasteners.setMatrixAt(fi, fastener.matrix);
+    }
+    g.add(fasteners);
+    if (!isSub) {
+      var collar = new THREE.Mesh(geo.standCollar, mat.chassis);
+      collar.position.y = FLOOR_Y + 0.073;
+      var baseInset = new THREE.Mesh(geo.base, mat.rubber);
+      baseInset.scale.set(0.92, 0.24, 0.91);
+      baseInset.position.y = FLOOR_Y + 0.010;
+      g.add(collar, baseInset);
+      [-1, 1].forEach(function (sx) {
+        [-1, 1].forEach(function (sz) {
+          var pad = new THREE.Mesh(geo.isolationPad, mat.rubber);
+          pad.position.set(sx * 0.10, -0.266, sz * 0.08);
+          g.add(pad);
+        });
+      });
+    }
     // Small fasteners, rear amplifier plate and vent distinguish a real enclosure
     // even when the front baffle correctly faces away from the camera.
     var screwGeometry = new THREE.SphereGeometry(0.009, 8, 6);
@@ -642,14 +736,30 @@
         g.add(screw);
       });
     });
-    var rearPlate = new THREE.Mesh(new THREE.BoxGeometry(0.23, 0.27, 0.012), mat.baffle);
+    var rearPlate = new THREE.Mesh(geo.rearPlate, mat.chassis);
     rearPlate.position.set(0, -0.015, isSub ? -0.26 : -0.191);
     g.add(rearPlate);
+    var fins = new THREE.InstancedMesh(geo.rearFin, mat.baffle, 9);
+    var finTransform = new THREE.Object3D();
+    for (var ri = 0; ri < 9; ri++) {
+      finTransform.position.set((ri - 4) * 0.019, 0.017, isSub ? -0.272 : -0.205);
+      finTransform.updateMatrix(); fins.setMatrixAt(ri, finTransform.matrix);
+    }
+    g.add(fins);
     for (var vi=0; vi<5; vi++) {
       var vent = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.008, 0.007), mat.driver);
       vent.position.set(0, 0.06 - vi * 0.026, isSub ? -0.269 : -0.20);
       g.add(vent);
     }
+    // Recessed bass port, a machined badge and rear connector well.
+    var port=new THREE.Mesh(monitorEnclosure(0.22,0.025,0.012,0.01,0.002),mat.rubber);
+    port.position.set(0,-0.207,isSub?0.282:0.212);g.add(port);
+    var badge=new THREE.Mesh(monitorEnclosure(0.052,0.012,0.005,0.003,0.001),mat.handle);
+    badge.position.set(0,-0.245,isSub?0.284:0.214);g.add(badge);
+    [-0.056,0.056].forEach(function(x){
+      var socket=new THREE.Mesh(new THREE.TorusGeometry(0.022,0.004,8,20),mat.driver);
+      socket.position.set(x,-0.11,isSub?-0.27:-0.202);g.add(socket);
+    });
     var led = new THREE.Mesh(new THREE.SphereGeometry(0.008, 8, 6), mat.field);
     led.position.set(0.12, -0.19, 0.214); g.add(led);
     g.traverse(function (child) {
@@ -674,8 +784,26 @@
     var g = new THREE.Group();
     var core = new THREE.Mesh(geo.sourceCore, mat.sourceCore);
     var shell = new THREE.Mesh(geo.sourceShell, mat.sourceShell);
-    core.scale.setScalar(0.68);
-    shell.scale.setScalar(1.02);
+    // Split satin shell around a restrained luminous equator: a Yinwei acoustic lens.
+    core.scale.set(1.55,0.10,1.55);
+    var shellMaterial=new THREE.MeshStandardMaterial({color:0x8c969e,metalness:0.7,roughness:0.28,envMapIntensity:0.95});
+    shell.geometry=new THREE.SphereGeometry(0.235,48,24,0,Math.PI*2,0,Math.PI/2);
+    shell.material=shellMaterial; shell.scale.y=0.72; shell.position.y=0.012;
+    var lower=shell.clone();lower.rotation.z=Math.PI;lower.position.y=-0.012;
+    lower.material = mat.chassis;
+    var seam=new THREE.Mesh(new THREE.TorusGeometry(0.234,0.006,10,80),mat.sourceCore);
+    seam.rotation.x=Math.PI/2;
+    var cap=new THREE.Mesh(new THREE.CylinderGeometry(0.058,0.058,0.008,40),mat.listenerDark);
+    cap.position.y=0.184;
+    g.add(lower,seam,cap);
+    // Two engraved arcs on the crown echo the acoustic lens without a new effect.
+    var engravingGeometry = new THREE.TorusGeometry(0.105, 0.002, 6, 36, Math.PI * 0.72);
+    [0, Math.PI].forEach(function (angle) {
+      var engraving = new THREE.Mesh(engravingGeometry, mat.chassis);
+      engraving.rotation.set(Math.PI / 2, 0, angle);
+      engraving.position.y = 0.164;
+      g.add(engraving);
+    });
     var field = new THREE.Mesh(geo.sourceField, mat.field);
     field.rotation.x = Math.PI / 2;
     field.scale.setScalar(1.1);
@@ -775,6 +903,28 @@
     mesh.quaternion.set(q.x, q.y, q.z, q.w);
   }
 
+  var _lineA = new THREE.Vector3();
+  var _lineB = new THREE.Vector3();
+  var _ear = new THREE.Vector3();
+
+  function setLinePositions(line, a, b) {
+    var attr = line.geometry.getAttribute('position');
+    if (!attr || attr.count !== 2) {
+      line.geometry.dispose();
+      line.geometry = new THREE.BufferGeometry().setFromPoints([a, b]);
+      return;
+    }
+    var arr = attr.array;
+    arr[0] = a.x;
+    arr[1] = a.y;
+    arr[2] = a.z;
+    arr[3] = b.x;
+    arr[4] = b.y;
+    arr[5] = b.z;
+    attr.needsUpdate = true;
+    line.geometry.computeBoundingSphere();
+  }
+
   function decorateSourceVisual(mesh) {
     if (!mesh) {
       contactShadow.visible = false;
@@ -791,24 +941,19 @@
     mat.shadow.opacity = 0.36 / (1 + lift * 0.32);
     mat.sourceCore.emissiveIntensity = state.active ? 0.3 + state.envelopment * 0.12 : 0.1;
 
-    var ear = listener ? listener.position : new THREE.Vector3();
+    if (listener) _ear.copy(listener.position);
+    else _ear.set(0, 0, 0);
     relationLine.visible = true;
-    relationLine.geometry.dispose();
-    relationLine.geometry = new THREE.BufferGeometry().setFromPoints([
-      ear.clone(),
-      mesh.position.clone(),
-    ]);
+    setLinePositions(relationLine, _ear, mesh.position);
     relationDots.forEach(function (dot, index) {
       dot.visible = true;
-      dot.position.lerpVectors(ear, mesh.position, (index + 1) / 6);
+      dot.position.lerpVectors(_ear, mesh.position, (index + 1) / 6);
     });
 
     dropLine.visible = true;
-    dropLine.geometry.dispose();
-    dropLine.geometry = new THREE.BufferGeometry().setFromPoints([
-      mesh.position.clone(),
-      new THREE.Vector3(mesh.position.x, FLOOR_Y + 0.02, mesh.position.z),
-    ]);
+    _lineA.copy(mesh.position);
+    _lineB.set(mesh.position.x, FLOOR_Y + 0.02, mesh.position.z);
+    setLinePositions(dropLine, _lineA, _lineB);
     dropLine.computeLineDistances();
   }
 
@@ -941,7 +1086,6 @@
     });
 
     formatPose();
-    onResize();
     if (selectedObjectId && objectsById[selectedObjectId]) {
       showSelectionHud(objectsById[selectedObjectId]);
     } else if (!selectedObjectId) {
@@ -952,11 +1096,20 @@
 
   function applyPlaybackTelemetry(next) {
     if (!next) return;
-    if (typeof next.envelopment === 'number') state.envelopment = next.envelopment;
+    var envelopment = typeof next.envelopment === 'number' ? next.envelopment : state.envelopment;
+    var playing = typeof next.playing === 'boolean' ? next.playing : state.playing;
+    var active = typeof next.active === 'boolean' ? next.active : state.active;
+    var orbiting = typeof next.orbiting === 'boolean' ? next.orbiting : state.orbiting;
     if (typeof next.playhead === 'number') state.playhead = next.playhead;
-    if (typeof next.playing === 'boolean') state.playing = next.playing;
-    if (typeof next.active === 'boolean') state.active = next.active;
-    if (typeof next.orbiting === 'boolean') state.orbiting = next.orbiting;
+    var visualChanged =
+      envelopment !== state.envelopment ||
+      playing !== state.playing ||
+      active !== state.active;
+    state.envelopment = envelopment;
+    state.playing = playing;
+    state.active = active;
+    state.orbiting = orbiting;
+    if (!visualChanged) return;
     decorateSourceVisual(source);
     needsRender = true;
   }
@@ -998,7 +1151,7 @@
         y: source.position.y,
         z: source.position.z,
       },
-      basedOnRevision: authoritativeRevision,
+      basedOnRevision: gestureBasedOnRevision != null ? gestureBasedOnRevision : authoritativeRevision,
     });
   }
 
@@ -1087,6 +1240,7 @@
         objectId: resolved.mesh.userData.id,
         mode: resolved.elevationHandle || e.shiftKey ? 'y' : 'xz',
       };
+      gestureBasedOnRevision = authoritativeRevision;
       if (dragging.mode === 'y') {
         camera.getWorldDirection(_dir);
         _right.crossVectors(_dir, camera.up).normalize();
@@ -1189,6 +1343,7 @@
       postSourceIntent('sourcePoseCommit', true);
     }
     dragging = null;
+    gestureBasedOnRevision = null;
     orbitingCam = false;
     panningCam = false;
   });
@@ -1224,9 +1379,9 @@
   );
 
   var VIEW = {
-    free: { radius: 7.25, phi: 1.03, theta: -0.07, target: new THREE.Vector3(0, -0.38, -0.45) },
-    top: { radius: 8.8, phi: 0.1, theta: 0, target: new THREE.Vector3(0, -0.2, -0.2) },
-    front: { radius: 7.2, phi: 1.42, theta: 0, target: new THREE.Vector3(0, -0.12, -0.55) },
+    free: { radius: 6.05, phi: 1.12, theta: 0.08, target: new THREE.Vector3(0.02, -0.1, -0.22) },
+    top: { radius: 7.2, phi: 0.12, theta: 0, target: new THREE.Vector3(0, -0.06, -0.12) },
+    front: { radius: 5.9, phi: 1.36, theta: 0, target: new THREE.Vector3(0, -0.04, -0.4) },
     listener: { radius: 1.35, phi: 1.48, theta: 0, target: new THREE.Vector3(0, 0.08, -1.6) },
   };
 
@@ -1241,10 +1396,10 @@
     var size = box.getSize(new THREE.Vector3());
     var center = box.getCenter(new THREE.Vector3());
     return {
-      radius: THREE.MathUtils.clamp(size.length() * 1.08, 7.4, 20),
-      phi: 1.1,
-      theta: -0.2,
-      target: center.clone().add(new THREE.Vector3(0, -0.22, -0.36)),
+      radius: THREE.MathUtils.clamp(size.length() * 0.92, 5.6, 16),
+      phi: 1.12,
+      theta: 0.08,
+      target: center.clone().add(new THREE.Vector3(0, -0.1, -0.2)),
     };
   }
 
@@ -1322,6 +1477,7 @@
   var lastT = performance.now();
   function tick(now) {
     requestAnimationFrame(tick);
+    if (typeof document !== 'undefined' && document.hidden) return;
     var dt = Math.min(0.05, (now - lastT) / 1000);
     lastT = now;
 
@@ -1407,6 +1563,7 @@
   function debugInspect() {
     return {
       revision: authoritativeRevision,
+      gestureBasedOnRevision: gestureBasedOnRevision,
       viewMode: viewMode,
       selected: selectedObjectId,
       ids: Object.keys(objectsById),
@@ -1460,6 +1617,39 @@
         firePointer('pointerdown', p.x, p.y, { buttons: 1, shift: shift });
         firePointer('pointermove', nx, ny, { buttons: 1, shift: shift });
         firePointer('pointerup', nx, ny, { buttons: 0, shift: shift });
+        return debugInspect();
+      },
+      dragSourceHold: function (mode, steps, pixels) {
+        if (!source) return { ok: false, reason: 'no-source' };
+        var p = clientXY(source);
+        var shift = mode === 'y';
+        var count = Math.max(1, steps || 8);
+        var delta = pixels || 4;
+        firePointer('pointerdown', p.x, p.y, { buttons: 1, shift: shift });
+        for (var i = 1; i <= count; i++) {
+          firePointer('pointermove', p.x + (shift ? 0 : delta * i), p.y + (shift ? -delta * i : 0), {
+            buttons: 1,
+            shift: shift,
+          });
+        }
+        firePointer('pointerup', p.x + (shift ? 0 : delta * count), p.y + (shift ? -delta * count : 0), {
+          buttons: 0,
+          shift: shift,
+        });
+        return debugInspect();
+      },
+      nudgeSource: function (dx, dy, dz, commit) {
+        if (!source) return { ok: false, reason: 'no-source' };
+        source.position.x += dx || 0;
+        source.position.y += dy || 0;
+        source.position.z += dz || 0;
+        decorateSourceVisual(source);
+        formatPose();
+        showSelectionHud(source);
+        needsRender = true;
+        if (!gestureBasedOnRevision) gestureBasedOnRevision = authoritativeRevision;
+        postSourceIntent(commit ? 'sourcePoseCommit' : 'sourcePosePreview', !!commit);
+        if (commit) gestureBasedOnRevision = null;
         return debugInspect();
       },
       orbit: function () {

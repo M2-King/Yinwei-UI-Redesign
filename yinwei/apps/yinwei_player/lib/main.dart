@@ -10,8 +10,8 @@ Future<void> main() async {
   await windowManager.ensureInitialized();
 
   const windowOptions = WindowOptions(
-    size: Size(1280, 720),
-    minimumSize: Size(800, 500),
+    size: Size(1440, 900),
+    minimumSize: Size(1024, 640),
     center: true,
     backgroundColor: YinweiColors.background,
     skipTaskbar: false,
@@ -33,7 +33,7 @@ class YinweiApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: '音围 Spatial Player',
+      title: '音围 Yinwei',
       debugShowCheckedModeBanner: false,
       theme: YinweiTheme.dark(),
       // Flutter 3.47's Windows AXTree bridge can crash while dynamic UI and

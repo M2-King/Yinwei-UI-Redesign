@@ -1,0 +1,54 @@
+{
+  "phase": "5B",
+  "title": "Transport / playback integration",
+  "uiBuild": "ui-51-transport",
+  "bridgeBuild": "p2.4.32-matrix",
+  "backend": "EngineBackend.native",
+  "opened": "phase5b-tone.wav",
+  "workspaceJs": { "width": 915, "height": 740, "ready": true },
+  "sceneRevision": 1,
+  "webview": "153.0.4234.32",
+  "tests": { "flutterTest": 247, "failed": 0 },
+  "runtime": {
+    "originalPaused": { "playing": false, "mode": "original", "array": "off", "sceneRev": 1 },
+    "originalPlaying": { "playing": true, "mode": "original", "array": "off", "sceneRev": 1 },
+    "seek": { "positionMs": 4000 },
+    "spatialPlaying": { "playing": true, "mode": "spatial", "array": "off", "sceneRev": 1 },
+    "array20": {
+      "playing": true,
+      "mode": "spatial",
+      "array": "stereo2",
+      "selectedIndex": 0,
+      "matrixLinked": false,
+      "sceneRev": 1
+    },
+    "island": {
+      "mode": "islandCollapsed",
+      "physical": "630x96",
+      "playingThenPausedThenResumed": true,
+      "arrayPreserved": "stereo2",
+      "selectedIndex": 0,
+      "matrixLinked": false
+    },
+    "fullRestored": {
+      "mode": "spatial",
+      "array": "stereo2",
+      "playing": true,
+      "sceneRev": 1
+    }
+  },
+  "console": {
+    "axTreeWarning": true,
+    "sceneBridgeErrors": false,
+    "engineErrors": false
+  },
+  "frozen": [
+    "SpatialSceneStore",
+    "SpatialRuntimeAdapter",
+    "scene.js",
+    "audio pipeline",
+    "2.0 DSP",
+    "WindowModeController",
+    "IslandBar"
+  ]
+}

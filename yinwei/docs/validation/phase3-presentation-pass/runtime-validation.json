@@ -1,0 +1,287 @@
+{
+  "initial": {
+    "revision": 1,
+    "viewMode": "free",
+    "selected": "emitter-Rb",
+    "ids": [
+      "listener-0",
+      "source-main",
+      "emitter-L",
+      "emitter-R",
+      "emitter-C",
+      "emitter-LFE",
+      "emitter-Ls",
+      "emitter-Rs",
+      "emitter-Lb",
+      "emitter-Rb"
+    ],
+    "source": {
+      "x": 1.7726539554219745,
+      "y": -0.3125667198004746,
+      "z": -1.0854374962517079e-16
+    },
+    "hasListener": true,
+    "emitterCount": 8,
+    "camera": {
+      "theta": 0.08,
+      "phi": 1.12,
+      "radius": 6.05,
+      "target": {
+        "x": 0.02,
+        "y": -0.1,
+        "z": -0.22
+      }
+    }
+  },
+  "picks": {
+    "listener-0": {
+      "ok": true,
+      "id": "listener-0",
+      "x": 590.0298246744424,
+      "y": 426.0309722621682
+    },
+    "emitter-L": {
+      "ok": true,
+      "id": "emitter-L",
+      "x": 449.29618911915077,
+      "y": 295.17590522466946
+    },
+    "source-main": {
+      "ok": true,
+      "id": "source-main",
+      "x": 796.9135729335139,
+      "y": 442.36373861590715
+    }
+  },
+  "dragXZ": {
+    "revision": 3,
+    "viewMode": "free",
+    "selected": "source-main",
+    "ids": [
+      "listener-0",
+      "source-main",
+      "emitter-L",
+      "emitter-R",
+      "emitter-C",
+      "emitter-LFE",
+      "emitter-Ls",
+      "emitter-Rs",
+      "emitter-Lb",
+      "emitter-Rb"
+    ],
+    "source": {
+      "x": 1.0409569993839094,
+      "y": 0.3,
+      "z": 0.6886995659676058
+    },
+    "hasListener": true,
+    "emitterCount": 8,
+    "camera": {
+      "theta": 0.08,
+      "phi": 1.12,
+      "radius": 6.05,
+      "target": {
+        "x": 0.02,
+        "y": -0.1,
+        "z": -0.22
+      }
+    }
+  },
+  "dragY": {
+    "revision": 4,
+    "viewMode": "free",
+    "selected": "source-main",
+    "ids": [
+      "listener-0",
+      "source-main",
+      "emitter-L",
+      "emitter-R",
+      "emitter-C",
+      "emitter-LFE",
+      "emitter-Ls",
+      "emitter-Rs",
+      "emitter-Lb",
+      "emitter-Rb"
+    ],
+    "source": {
+      "x": 1.0409569993839094,
+      "y": 0.409099718004319,
+      "z": 0.6886995659676058
+    },
+    "hasListener": true,
+    "emitterCount": 8,
+    "camera": {
+      "theta": 0.08,
+      "phi": 1.12,
+      "radius": 6.05,
+      "target": {
+        "x": 0.02,
+        "y": -0.1,
+        "z": -0.22
+      }
+    }
+  },
+  "camera": {
+    "orbit": {
+      "revision": 4,
+      "viewMode": "free",
+      "selected": null,
+      "ids": [
+        "listener-0",
+        "source-main",
+        "emitter-L",
+        "emitter-R",
+        "emitter-C",
+        "emitter-LFE",
+        "emitter-Ls",
+        "emitter-Rs",
+        "emitter-Lb",
+        "emitter-Rb"
+      ],
+      "source": {
+        "x": 1.0409569993839094,
+        "y": 0.409099718004319,
+        "z": 0.6886995659676058
+      },
+      "hasListener": true,
+      "emitterCount": 8,
+      "camera": {
+        "theta": -0.1499999999999994,
+        "phi": 1.2200000000000002,
+        "radius": 6.05,
+        "target": {
+          "x": 0.02,
+          "y": -0.1,
+          "z": -0.22
+        }
+      }
+    },
+    "pan": {
+      "revision": 4,
+      "viewMode": "free",
+      "selected": null,
+      "ids": [
+        "listener-0",
+        "source-main",
+        "emitter-L",
+        "emitter-R",
+        "emitter-C",
+        "emitter-LFE",
+        "emitter-Ls",
+        "emitter-Rs",
+        "emitter-Lb",
+        "emitter-Rb"
+      ],
+      "source": {
+        "x": 1.0409569993839094,
+        "y": 0.409099718004319,
+        "z": 0.6886995659676058
+      },
+      "hasListener": true,
+      "emitterCount": 8,
+      "camera": {
+        "theta": -0.1499999999999994,
+        "phi": 1.2200000000000002,
+        "radius": 6.05,
+        "target": {
+          "x": -0.6500012099334544,
+          "y": 0.23879999999999998,
+          "z": -0.32119357038718865
+        }
+      }
+    },
+    "zoom": {
+      "before": 6.05,
+      "after": 6.4735000000000005
+    },
+    "top": {
+      "theta": 0,
+      "phi": 0.11999999999999988,
+      "radius": 7.2,
+      "target": {
+        "x": 0,
+        "y": -0.06,
+        "z": -0.12
+      }
+    },
+    "front": {
+      "theta": 0,
+      "phi": 1.36,
+      "radius": 5.9,
+      "target": {
+        "x": 0,
+        "y": -0.04,
+        "z": -0.4
+      }
+    },
+    "listener": {
+      "theta": 0,
+      "phi": 1.48,
+      "radius": 1.4500000000000002,
+      "target": {
+        "x": 0,
+        "y": 0.060000000000000005,
+        "z": -1.8
+      }
+    },
+    "fit": {
+      "theta": 0.08,
+      "phi": 1.12,
+      "radius": 6.3702020980002825,
+      "target": {
+        "x": 0,
+        "y": -0.6182509789398437,
+        "z": -0.42392665793784734
+      }
+    },
+    "free": {
+      "theta": 0.08,
+      "phi": 1.12,
+      "radius": 6.05,
+      "target": {
+        "x": 0.02,
+        "y": -0.09999999999999998,
+        "z": -0.22
+      }
+    }
+  },
+  "final": {
+    "revision": 5,
+    "viewMode": "free",
+    "selected": null,
+    "ids": [
+      "listener-0",
+      "source-main",
+      "emitter-L",
+      "emitter-R",
+      "emitter-C",
+      "emitter-LFE",
+      "emitter-Ls",
+      "emitter-Rs",
+      "emitter-Lb",
+      "emitter-Rb"
+    ],
+    "source": {
+      "x": 1.7726539554219745,
+      "y": -0.3125667198004746,
+      "z": -1.0854374962517079e-16
+    },
+    "hasListener": true,
+    "emitterCount": 8,
+    "camera": {
+      "theta": 0.08,
+      "phi": 1.12,
+      "radius": 6.05,
+      "target": {
+        "x": 0.02,
+        "y": -0.09999999999999998,
+        "z": -0.22
+      }
+    }
+  },
+  "consoleErrors": [],
+  "webgl": {
+    "canvas": true,
+    "hint": "拖动声源 · Shift 调整高度 · 滚轮缩放"
+  }
+}

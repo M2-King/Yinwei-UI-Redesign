@@ -108,10 +108,14 @@ void main() {
     expect(html.contains('id="sel"'), isTrue);
   });
 
-  test('Phase 3 workspace is more prominent than Now Playing', () async {
+  test('Phase 5 shell makes the workspace the primary column', () async {
     final dart = await File('lib/screens/player_screen.dart').readAsString();
-    expect(dart.contains('flex: wide ? 10 : 5'), isTrue);
-    expect(dart.contains('flex: wide ? 3 : 5'), isTrue);
-    expect(dart.contains('maxWidth >= 1100'), isTrue);
+    expect(dart.contains('AppRail('), isTrue);
+    expect(dart.contains('AppTopBar('), isTrue);
+    expect(dart.contains('NowPlayingPanel('), isTrue);
+    expect(dart.contains('flex: wide ? 3 : 5'), isFalse);
+    expect(dart.contains('maxWidth >= 1100'), isFalse);
+    expect(dart.contains('YinweiLayout.compactRailBreakpoint'), isTrue);
+    expect(dart.contains('PositionSidebar('), isTrue);
   });
 }
