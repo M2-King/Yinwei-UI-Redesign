@@ -1,0 +1,64 @@
+import 'package:flutter/material.dart';
+import 'package:yinwei_player/bridge/engine_bootstrap.dart';
+import 'package:yinwei_player/state/engine_controller.dart';
+import 'package:yinwei_player/theme/yinwei_theme.dart';
+
+class MobileNowPlayingHeader extends StatelessWidget {
+  const MobileNowPlayingHeader({
+    super.key,
+    required this.controller,
+    required this.backend,
+    required this.status,
+    this.loadError,
+  });
+
+  final EngineController controller;
+  final EngineBackend backend;
+  final String status;
+  final String? loadError;
+
+  @override
+  Widget build(BuildContext context) {
+    final native = backend == EngineBackend.native;
+    final title = controller.track.title;
+    final subtitle = controller.hasOpenedFile
+        ? controller.track.artist
+        : 'Ready';
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          '音围  Yinwei',
+          style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                letterSpacing: 2.2,
+                color: YinweiColors.textTertiary,
+                fontWeight: FontWeight.w600,
+              ),
+        ),
+        const SizedBox(height: 10),
+        Text(
+          title,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: Theme.of(context).textTheme.headlineMedium,
+        ),
+        const SizedBox(height: 4),
+        Text(
+          '$subtitle  ·  $status',
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: Theme.of(context).textTheme.bodySmall,
+        ),
+        const SizedBox(height: 6),
+        Text(
+          native
+              ? controller.backendLabel
+              : 'Mock · ${loadError ?? 'spatial_core not linked'}',
+          style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                color: native ? YinweiColors.success : YinweiColors.textTertiary,
+              ),
+        ),
+      ],
+    );
+  }
+}
