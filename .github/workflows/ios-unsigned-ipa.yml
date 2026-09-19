@@ -1,0 +1,486 @@
+# Yinwei / 音围 — unsigned iPhone IPA builder
+#
+# BUILD INFRASTRUCTURE ONLY. Does not modify DSP, HRTF, EQ, spatial
+# authority, Windows Island/Live Transfer, or scene.js.
+#
+# Runner: macos-15 (GitHub-hosted Apple Silicon). Default Xcode on this
+# image is currently 16.4, which matches Flutter 3.47.2 better than
+# jumping to macos-latest / Xcode 26.
+#
+# Flutter: 3.47.2 stable — pinned to the current development baseline.
+# Do not silently upgrade.
+#
+# Signing: none. No Apple ID, certificates, profiles, or App Store Connect
+# secrets. The downloaded IPA must be signed before installation.
+#
+# App Clip / Live Activity: preserved if Xcode embeds them. They are not
+# claimed to work after arbitrary third-party re-signing.
+
+name: Yinwei iOS Unsigned IPA
+
+"on":
+  workflow_dispatch:
+  push:
+    branches:
+      - yinwei-ui-redesign
+
+permissions:
+  contents: read
+
+env:
+  LANG: en_US.UTF-8
+  LC_ALL: en_US.UTF-8
+  COPYFILE_DISABLE: "1"
+  FLUTTER_PIN: "3.47.2"
+
+jobs:
+  build_unsigned_ipa:
+    name: Build unsigned iphoneos IPA
+    runs-on: macos-15
+    timeout-minutes: 120
+    env:
+      PLAYER: ${{ github.workspace }}/yinwei/apps/yinwei_player
+      YINWEI_ROOT: ${{ github.workspace }}/yinwei
+      LOG_DIR: ${{ runner.temp }}/yinwei-ios-logs
+      IPA_PATH: ${{ github.workspace }}/Yinwei-unsigned.ipa
+      INFO_PATH: ${{ github.workspace }}/Yinwei-build-info.txt
+      GIT_SHA: ${{ github.sha }}
+      GIT_REF: ${{ github.ref_name }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Install Flutter ${{ env.FLUTTER_PIN }}
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: "3.47.2"
+          channel: stable
+          cache: true
+
+      - name: Install Rust stable and iOS targets
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable
+          targets: aarch64-apple-ios,aarch64-apple-ios-sim
+
+      - name: Environment report
+        run: |
+          set -euo pipefail
+          mkdir -p "$LOG_DIR"
+          {
+            echo "===== sw_vers ====="
+            sw_vers
+            echo
+            echo "===== uname -m ====="
+            uname -m
+            echo
+            echo "===== xcode-select ====="
+            xcode-select -p
+            echo
+            echo "===== xcodebuild -version ====="
+            xcodebuild -version
+            echo
+            echo "===== xcodebuild -showsdks ====="
+            xcodebuild -showsdks
+            echo
+            echo "===== flutter --version ====="
+            flutter --version
+            echo
+            echo "===== dart --version ====="
+            dart --version
+            echo
+            echo "===== rustc --version ====="
+            rustc --version
+            echo
+            echo "===== cargo --version ====="
+            cargo --version
+          } | tee "$LOG_DIR/environment.txt"
+
+      - name: Flutter pub get
+        working-directory: yinwei/apps/yinwei_player
+        run: flutter pub get
+
+      - name: cargo test -p spatial_core
+        working-directory: yinwei
+        run: |
+          set -euo pipefail
+          cargo test -p spatial_core 2>&1 | tee "$LOG_DIR/cargo-test.log"
+          # Windows baseline is 44 tests; 9 live_transfer tests are
+          # cfg(windows) and do not run on this macOS runner.
+          if grep -q 'test result: FAILED' "$LOG_DIR/cargo-test.log"; then
+            echo "ERROR: cargo test reported FAILED" >&2
+            exit 1
+          fi
+          passed="$(
+            grep -E 'test result:' "$LOG_DIR/cargo-test.log" \
+              | sed -n 's/.*ok\. \([0-9][0-9]*\) passed.*/\1/p' \
+              | sort -n \
+              | tail -1
+          )"
+          echo "spatial_core tests passed: ${passed:-unknown}"
+          echo "CARGO_TEST_PASSED=${passed:-0}" >> "$GITHUB_ENV"
+          if [[ -z "${passed}" || "${passed}" -lt 35 ]]; then
+            echo "ERROR: expected at least 35 portable spatial_core tests on macOS (Windows baseline 44 includes cfg(windows) live_transfer)." >&2
+            exit 1
+          fi
+
+      - name: flutter test
+        working-directory: yinwei/apps/yinwei_player
+        run: |
+          set -euo pipefail
+          flutter test 2>&1 | tee "$LOG_DIR/flutter-test.log"
+          if ! grep -q 'All tests passed!' "$LOG_DIR/flutter-test.log"; then
+            echo "ERROR: flutter test did not report All tests passed" >&2
+            exit 1
+          fi
+          passed="$(
+            grep -Eo '\+[0-9]+' "$LOG_DIR/flutter-test.log" \
+              | sed 's/+//' \
+              | sort -n \
+              | tail -1
+          )"
+          echo "flutter tests passed: ${passed:-unknown}"
+          echo "FLUTTER_TEST_PASSED=${passed:-0}" >> "$GITHUB_ENV"
+          if [[ -z "${passed}" || "${passed}" -lt 360 ]]; then
+            echo "ERROR: expected at least 360 flutter tests passing." >&2
+            exit 1
+          fi
+
+      - name: Generate iOS tooling and CocoaPods
+        working-directory: yinwei/apps/yinwei_player
+        run: |
+          set -euo pipefail
+          # Generates Generated.xcconfig / SPM packages. May also write a
+          # Podfile when plugins still require CocoaPods.
+          flutter build ios --config-only --release --no-codesign
+          cd ios
+          echo "Runner.xcworkspace:"
+          cat Runner.xcworkspace/contents.xcworkspacedata
+          if [[ -f Podfile ]]; then
+            echo "Podfile present — running pod install (do not strip Pods integration)."
+            pod install
+          else
+            echo "No Podfile after Flutter config."
+            echo "This project uses Flutter Swift Package Manager"
+            echo "(FlutterGeneratedPluginSwiftPackage) plus Runner.xcworkspace."
+            echo "Skipping pod install because CocoaPods is not integrated."
+            echo "POD_INSTALL_SKIPPED=yes" >> "$GITHUB_ENV"
+          fi
+
+      - name: Build spatial_core for iOS
+        run: |
+          set -euo pipefail
+          # Scripts are committed as 100644; invoke via bash instead of
+          # relying on the executable bit.
+          bash "$YINWEI_ROOT/tools/build_native_ios.sh" all
+          test -f "$PLAYER/ios/Native/libspatial_core.xcframework/Info.plist"
+          test -f "$PLAYER/ios/Flutter/spatial_core_force_load.xcconfig"
+          echo "Native iOS xcframework and force-load xcconfig ready."
+
+      - name: Build real iPhone app (iphoneos)
+        run: |
+          set -euo pipefail
+
+          mkdir -p "$LOG_DIR"
+          BUILD_CMD="flutter build ios --release --no-codesign"
+          flutter_ok=0
+          # Disable pipefail so a Flutter signing/extension failure can fall
+          # back to unsigned xcodebuild instead of aborting the job.
+          set +e +o pipefail
+          (
+            cd "$PLAYER"
+            flutter build ios --release --no-codesign
+          ) 2>&1 | tee "$LOG_DIR/flutter-build-ios.log"
+          flutter_ok=${PIPESTATUS[0]}
+          set -euo pipefail
+
+          find_runner_app() {
+            local candidate found="" p
+            local -a preferred=(
+              "$PLAYER/build/ios/iphoneos/Runner.app"
+              "$PLAYER/build/ios/Release-iphoneos/Runner.app"
+              "$PLAYER/ios/build/Release-iphoneos/Runner.app"
+              "$PLAYER/build/ios_ci_derived/Build/Products/Release-iphoneos/Runner.app"
+            )
+            for candidate in "${preferred[@]}"; do
+              if [[ -f "$candidate/Runner" ]]; then
+                echo "$candidate"
+                return 0
+              fi
+            done
+            while IFS= read -r p; do
+              [[ -z "$p" ]] && continue
+              case "$p" in
+                *iphonesimulator*|*simulator*) continue ;;
+              esac
+              if [[ -f "$p/Runner" ]]; then
+                found="$p"
+                break
+              fi
+            done < <(find "$PLAYER/build" "$PLAYER/ios/build" -name Runner.app -type d 2>/dev/null || true)
+            if [[ -n "$found" ]]; then
+              echo "$found"
+              return 0
+            fi
+            return 1
+          }
+
+          is_iphoneos_binary() {
+            local bin="$1"
+            [[ -f "$bin" ]] || return 1
+            if echo "$bin" | grep -Eqi 'iphonesimulator|simulator'; then
+              return 1
+            fi
+            if vtool -show-build "$bin" 2>/dev/null | grep -qi 'IOSSIMULATOR'; then
+              return 1
+            fi
+            if otool -l "$bin" 2>/dev/null | grep -A8 LC_BUILD_VERSION | grep -qi 'IOSSIMULATOR'; then
+              return 1
+            fi
+            if file "$bin" | grep -qi simulator; then
+              return 1
+            fi
+            file "$bin" | grep -qi 'arm64' || return 1
+            return 0
+          }
+
+          need_xcodebuild=0
+          RUNNER_APP=""
+          if [[ "$flutter_ok" -eq 0 ]]; then
+            if RUNNER_APP="$(find_runner_app)" && is_iphoneos_binary "$RUNNER_APP/Runner"; then
+              echo "Flutter --no-codesign produced an iphoneos Runner.app at $RUNNER_APP"
+            else
+              echo "Flutter --no-codesign succeeded but did not produce a device Runner.app."
+              need_xcodebuild=1
+            fi
+          else
+            echo "Flutter --no-codesign failed (exit $flutter_ok)."
+            echo "Falling back to unsigned xcodebuild for App Clip / Live Activity targets."
+            need_xcodebuild=1
+          fi
+
+          if [[ "$need_xcodebuild" -eq 1 ]]; then
+            BUILD_CMD="xcodebuild -workspace ios/Runner.xcworkspace -scheme Runner -configuration Release -destination generic/platform=iOS CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO build"
+            (
+              cd "$PLAYER/ios"
+              xcodebuild \
+                -workspace Runner.xcworkspace \
+                -scheme Runner \
+                -configuration Release \
+                -destination 'generic/platform=iOS' \
+                -derivedDataPath "$PLAYER/build/ios_ci_derived" \
+                CODE_SIGNING_ALLOWED=NO \
+                CODE_SIGNING_REQUIRED=NO \
+                build
+            ) 2>&1 | tee "$LOG_DIR/xcodebuild-unsigned.log"
+            RUNNER_APP="$(find_runner_app)" || {
+              echo "ERROR: xcodebuild finished but Runner.app was not found." >&2
+              exit 1
+            }
+            if ! is_iphoneos_binary "$RUNNER_APP/Runner"; then
+              echo "ERROR: xcodebuild product is not an iphoneos/device binary: $RUNNER_APP" >&2
+              file "$RUNNER_APP/Runner" || true
+              vtool -show-build "$RUNNER_APP/Runner" || true
+              exit 1
+            fi
+            echo "xcodebuild unsigned device build produced $RUNNER_APP"
+          fi
+
+          echo "RUNNER_APP=$RUNNER_APP" >> "$GITHUB_ENV"
+          echo "RUNNER_BIN=$RUNNER_APP/Runner" >> "$GITHUB_ENV"
+          echo "IOS_BUILD_COMMAND=$BUILD_CMD" >> "$GITHUB_ENV"
+
+      - name: Verify Runner.app product and FFI symbols
+        run: |
+          set -euo pipefail
+          APP="${RUNNER_APP}"
+          BIN="${RUNNER_BIN}"
+
+          if [[ ! -d "$APP" ]]; then
+            echo "ERROR: Runner.app does not exist: $APP" >&2
+            exit 1
+          fi
+          if [[ ! -f "$BIN" ]]; then
+            echo "ERROR: Runner binary does not exist: $BIN" >&2
+            exit 1
+          fi
+
+          echo "===== file Runner.app/Runner ====="
+          file "$BIN"
+          echo
+          echo "===== lipo -info ====="
+          lipo -info "$BIN" || true
+          echo
+          echo "===== vtool -show-build ====="
+          vtool -show-build "$BIN" || true
+          echo
+          echo "===== bundle structure ====="
+          find "$APP" -maxdepth 4 \( -name '*.app' -o -name '*.appex' -o -name 'Frameworks' -o -name 'PlugIns' -o -name 'AppClips' \) -print
+          echo
+          echo "Runner.app/PlugIns/:  $([[ -d "$APP/PlugIns" ]] && echo present || echo absent)"
+          echo "Runner.app/AppClips/: $([[ -d "$APP/AppClips" ]] && echo present || echo absent)"
+          echo "Runner.app/Frameworks/: $([[ -d "$APP/Frameworks" ]] && echo present || echo absent)"
+
+          if echo "$APP" | grep -Eqi 'iphonesimulator|simulator'; then
+            echo "ERROR: refusing simulator product $APP" >&2
+            exit 1
+          fi
+          if vtool -show-build "$BIN" 2>/dev/null | grep -qi IOSSIMULATOR; then
+            echo "ERROR: Runner is an iOS Simulator binary" >&2
+            exit 1
+          fi
+
+          # Linked Runner, not the standalone .a
+          bash "$YINWEI_ROOT/tools/verify_ios_ffi.sh" "$BIN"
+
+          extra_syms=(yinwei_open yinwei_play yinwei_pause yinwei_set_params yinwei_set_array)
+          exports="$(nm -gU "$BIN" 2>/dev/null || nm -g "$BIN")"
+          missing=()
+          for sym in "${extra_syms[@]}"; do
+            if ! grep -q "$sym" <<<"$exports"; then
+              missing+=("$sym")
+            fi
+          done
+          if ((${#missing[@]} > 0)); then
+            echo "ERROR: linked Runner missing required yinwei_* symbols: ${missing[*]}" >&2
+            exit 1
+          fi
+          echo "Required C ABI symbols survived final linkage: ${extra_syms[*]}"
+
+          clip_compiled=no
+          clip_embedded=no
+          live_compiled=no
+          live_embedded=no
+
+          if grep -q . <<<"$(find "$PLAYER/build" "$PLAYER/ios/build" -name YinweiClip.app -type d 2>/dev/null || true)"; then
+            clip_compiled=yes
+          fi
+          if grep -q . <<<"$(find "$PLAYER/build" "$PLAYER/ios/build" -name YinweiClipLiveActivity.appex -type d 2>/dev/null || true)"; then
+            live_compiled=yes
+          fi
+          if [[ -d "$APP/AppClips/YinweiClip.app" ]]; then
+            clip_embedded=yes
+            clip_compiled=yes
+          fi
+          # Live Activity is embedded into the App Clip (Embed Foundation Extensions
+          # is on YinweiClip), not necessarily into Runner.app/PlugIns.
+          if [[ -d "$APP/AppClips/YinweiClip.app/PlugIns/YinweiClipLiveActivity.appex" \
+             || -d "$APP/PlugIns/YinweiClipLiveActivity.appex" ]]; then
+            live_embedded=yes
+            live_compiled=yes
+          fi
+
+          echo "App Clip compiled? $clip_compiled"
+          echo "App Clip embedded? $clip_embedded"
+          echo "Live Activity extension compiled? $live_compiled"
+          echo "Live Activity extension embedded? $live_embedded"
+          echo "Signing/entitlement validation is outside this unsigned workflow."
+
+          echo "YINWEI_FFI_OK=yes" >> "$GITHUB_ENV"
+          echo "APP_CLIP_COMPILED=$clip_compiled" >> "$GITHUB_ENV"
+          echo "APP_CLIP_EMBEDDED=$clip_embedded" >> "$GITHUB_ENV"
+          echo "LIVE_ACTIVITY_COMPILED=$live_compiled" >> "$GITHUB_ENV"
+          echo "LIVE_ACTIVITY_EMBEDDED=$live_embedded" >> "$GITHUB_ENV"
+
+      - name: Package unsigned IPA
+        run: |
+          set -euo pipefail
+          APP="${RUNNER_APP}"
+          STAGING="${GITHUB_WORKSPACE}/ipa_staging"
+          rm -rf "$STAGING" "$IPA_PATH"
+          mkdir -p "$STAGING/Payload"
+          # Copy the complete produced bundle. Do not rebuild Frameworks/PlugIns/AppClips.
+          cp -R "$APP" "$STAGING/Payload/Runner.app"
+          (
+            cd "$STAGING"
+            /usr/bin/zip -qry "$IPA_PATH" Payload
+          )
+          test -f "$IPA_PATH"
+          echo "Packaged $IPA_PATH from $APP"
+
+      - name: Verify IPA
+        run: |
+          set -euo pipefail
+          test -f "$IPA_PATH"
+          echo "===== IPA size ====="
+          ls -lh "$IPA_PATH"
+          stat -f 'IPA bytes: %z' "$IPA_PATH"
+          echo
+          echo "===== SHA-256 ====="
+          IPA_SHA="$(shasum -a 256 "$IPA_PATH" | awk '{print $1}')"
+          echo "$IPA_SHA  Yinwei-unsigned.ipa"
+          echo "IPA_SHA256=$IPA_SHA" >> "$GITHUB_ENV"
+          echo
+          echo "===== unzip -l ====="
+          unzip -l "$IPA_PATH" | tee "$LOG_DIR/ipa-listing.txt"
+          if ! unzip -l "$IPA_PATH" | grep -q 'Payload/Runner.app/'; then
+            echo "ERROR: IPA is missing Payload/Runner.app/" >&2
+            exit 1
+          fi
+          echo
+          echo "IPA Frameworks: $(grep -q 'Payload/Runner.app/Frameworks/' "$LOG_DIR/ipa-listing.txt" && echo yes || echo no)"
+          echo "IPA PlugIns:    $(grep -q 'Payload/Runner.app/PlugIns/' "$LOG_DIR/ipa-listing.txt" && echo yes || echo no)"
+          echo "IPA AppClips:   $(grep -q 'Payload/Runner.app/AppClips/' "$LOG_DIR/ipa-listing.txt" && echo yes || echo no)"
+          echo "IPA Clip PlugIns (Live Activity in App Clip): $(grep -q 'YinweiClipLiveActivity.appex' "$LOG_DIR/ipa-listing.txt" && echo yes || echo no)"
+
+      - name: Write Yinwei-build-info.txt
+        run: |
+          set -euo pipefail
+          IOS_SDK="$(xcrun --sdk iphoneos --show-sdk-version 2>/dev/null || true)"
+          XCODE_VER="$(xcodebuild -version | tr '\n' ' ')"
+          MACOS_VER="$(sw_vers -productVersion) $(sw_vers -buildVersion)"
+          FLUTTER_VER="$(flutter --version | head -n 1)"
+          RUST_VER="$(rustc --version)"
+          {
+            echo "Yinwei / 音围 unsigned iPhone IPA"
+            echo "UNSIGNED BUILD — SIGN BEFORE INSTALLATION"
+            echo
+            echo "git SHA:              ${GIT_SHA}"
+            echo "branch:               ${GIT_REF}"
+            echo "Flutter version:      ${FLUTTER_VER}"
+            echo "Flutter pin:          ${FLUTTER_PIN}"
+            echo "Xcode version:        ${XCODE_VER}"
+            echo "macOS runner version: ${MACOS_VER} ($(uname -m), macos-15)"
+            echo "Rust version:         ${RUST_VER}"
+            echo "iOS SDK:              ${IOS_SDK}"
+            echo "configuration:        Release / iphoneos / unsigned"
+            echo "build command:        ${IOS_BUILD_COMMAND}"
+            echo "Runner.app:           ${RUNNER_APP}"
+            echo "IPA SHA-256:          ${IPA_SHA256}"
+            echo "spatial_core tests:   ${CARGO_TEST_PASSED} passed"
+            echo "flutter tests:        ${FLUTTER_TEST_PASSED} passed"
+            echo "Runner contains spatial_core/yinwei symbols: ${YINWEI_FFI_OK}"
+            echo "App Clip compiled:    ${APP_CLIP_COMPILED}"
+            echo "App Clip embedded:    ${APP_CLIP_EMBEDDED}"
+            echo "Live Activity compiled: ${LIVE_ACTIVITY_COMPILED}"
+            echo "Live Activity embedded: ${LIVE_ACTIVITY_EMBEDDED}"
+            echo
+            echo "App Clip / Live Activity are preserved if Xcode embedded them."
+            echo "They are not claimed to function after arbitrary third-party re-signing."
+            echo "This artifact contains no signing identity, certificate, or profile."
+            echo
+            echo "UNSIGNED BUILD — SIGN BEFORE INSTALLATION"
+          } | tee "$INFO_PATH"
+
+      - name: Upload unsigned IPA artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Yinwei-iOS-unsigned-${{ github.sha }}
+          path: |
+            Yinwei-unsigned.ipa
+            Yinwei-build-info.txt
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload build logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Yinwei-iOS-unsigned-logs-${{ github.sha }}
+          path: ${{ runner.temp }}/yinwei-ios-logs/
+          if-no-files-found: ignore
+          retention-days: 7
