@@ -7,6 +7,7 @@
 #include <flutter/encodable_value.h>
 
 #include <memory>
+#include <vector>
 
 #include "win32_window.h"
 
@@ -26,6 +27,10 @@ class FlutterWindow : public Win32Window {
 
  private:
   struct IslandHitShape {
+    struct Region {
+      double left, top, right, bottom, radius;
+    };
+    std::vector<Region> regions;
     bool enabled = false;
     double width = 0;
     double height = 0;

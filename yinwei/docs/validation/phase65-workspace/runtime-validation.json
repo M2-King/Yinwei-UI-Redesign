@@ -1,0 +1,57 @@
+{
+  "phase": "6.5",
+  "title": "Unified spatial workspace and mode presentation",
+  "uiBuild": "ui-53-workspace",
+  "bridgeBuild": "p2.4.32-matrix",
+  "backend": "Native · spatial_core · extra-pts",
+  "opened": "phase5b-tone.wav",
+  "mapping": {
+    "original": "idle",
+    "spatialPlusPoint": "point",
+    "spatialPlusStereo2": "stereo2"
+  },
+  "old2p0Center": "OrbitVisualizer no longer replaces WebView2 when Array is on",
+  "sceneRevision": {
+    "idle": 1,
+    "point": 1,
+    "stereo2": 1,
+    "stereo2Moved": 1,
+    "pointReturn": 1,
+    "stereo2Return": 1,
+    "idleReturn": 1,
+    "deltaRev": 0
+  },
+  "preservation": {
+    "pointPoseAcross2p0": true,
+    "arrayPoseAcrossPoint": true,
+    "movedL": -50.0,
+    "movedR": 40.0,
+    "movedLDistanceM": 2.4
+  },
+  "arrayVisualsDefault": {
+    "L": { "az": -30.0, "el": 0.0, "dist": 1.8, "x": -0.90, "z": -1.56 },
+    "R": { "az": 30.0, "el": 0.0, "dist": 1.8, "x": 0.90, "z": -1.56 }
+  },
+  "console": {
+    "axTreeWarning": true,
+    "javascriptErrors": false
+  },
+  "tests": {
+    "flutterTest": 275,
+    "failed": 0,
+    "nativeSpatialCore": 44,
+    "nativeSceneContract": 8
+  },
+  "frozen": [
+    "SceneContract V1",
+    "CoordinateFrame V1",
+    "AudioProjection V1",
+    "native DSP",
+    "Array DSP",
+    "Engine API semantics",
+    "HRTF tuning",
+    "Phase 5A Island semantics",
+    "Phase 5B transport design",
+    "Phase 6 revision discipline"
+  ]
+}

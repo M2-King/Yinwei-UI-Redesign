@@ -1,20 +1,30 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:convert';
 
 import 'package:desktop_drop/desktop_drop.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:window_manager/window_manager.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:yinwei_player/bridge/app_audio_route.dart';
 import 'package:yinwei_player/bridge/engine_bootstrap.dart';
+import 'package:yinwei_player/bridge/live_capture_health.dart';
 import 'package:yinwei_player/bridge/live_source_follow.dart';
 import 'package:yinwei_player/bridge/live_transfer.dart';
 import 'package:yinwei_player/bridge/system_media.dart';
 import 'package:yinwei_player/models/spatial_params.dart';
 import 'package:yinwei_player/runtime/spatial_runtime_adapter.dart';
 import 'package:yinwei_player/runtime/spatial_scene_bridge.dart';
+import 'package:yinwei_player/runtime/island_spatial_controls.dart';
+import 'package:yinwei_player/runtime/island_runtime_probe.dart';
+import 'package:yinwei_player/contracts/coordinate_frame_v1.dart';
+import 'package:yinwei_player/widgets/island_spatial_controller.dart';
+import 'package:yinwei_player/runtime/workspace_presentation.dart';
 import 'package:yinwei_player/state/engine_controller.dart';
 import 'package:yinwei_player/state/island_now_playing.dart';
+import 'package:yinwei_player/state/window_mode.dart';
 import 'package:yinwei_player/state/window_mode_controller.dart';
 import 'package:yinwei_player/theme/yinwei_theme.dart';
 import 'package:yinwei_player/widgets/eq_mixer_window.dart';
@@ -44,7 +54,10 @@ class PlayerScreen extends StatefulWidget {
   State<PlayerScreen> createState() => _PlayerScreenState();
 }
 
-class _PlayerScreenState extends State<PlayerScreen> {
+class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
+  bool _closing = false;
+  bool get _nativeWindow =>
+      Platform.isWindows && !Platform.environment.containsKey('FLUTTER_TEST');
   late final EngineController _ctrl;
   late final SpatialRuntimeAdapter _spatial;
   late final SpatialSceneBridge _sceneBridge;
@@ -85,7 +98,13 @@ class _PlayerScreenState extends State<PlayerScreen> {
   @override
   void initState() {
     super.initState();
-    _window = widget.windowMode ?? WindowModeController();
+    final startIsland = _nativeWindow &&
+        Platform.environment['YINWEI_START_FULL'] != '1' &&
+        !Platform.environment.containsKey('YINWEI_OPEN');
+    _window = widget.windowMode ??
+        WindowModeController(
+          mode: startIsland ? WindowMode.islandCollapsed : WindowMode.full,
+        );
     _smtc = widget.systemMedia ?? SystemMediaService();
     _live = widget.liveTransfer ?? LiveTransferController();
     if (widget.controller != null) {
@@ -99,6 +118,12 @@ class _PlayerScreenState extends State<PlayerScreen> {
     _spatial = SpatialRuntimeAdapter();
     _spatial.bootstrap(_ctrl.params);
     _sceneBridge = SpatialSceneBridge(adapter: _spatial);
+    if (_nativeWindow) registerIslandRuntimeProbe(_islandProbe);
+    if (_nativeWindow) {
+      windowManager.addListener(this);
+      unawaited(windowManager.setPreventClose(true));
+    }
+    _observeIslandActivity();
     _transportTicks = Listenable.merge([_ctrl, _smtc, _live]);
     _islandTicks = Listenable.merge([_ctrl, _window, _smtc, _live]);
     _sessionTicks = Listenable.merge([_smtc, _live]);
@@ -122,6 +147,14 @@ class _PlayerScreenState extends State<PlayerScreen> {
     }
     unawaited(_maybeRunPhase5bTransportSmoke());
     unawaited(_maybeRunPhase6Smoke());
+    unawaited(_maybeRunPhase65Smoke());
+    if (!Platform.environment.containsKey('FLUTTER_TEST') &&
+        Platform.environment['YINWEI_START_FULL'] != '1' &&
+        !Platform.environment.containsKey('YINWEI_OPEN')) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) unawaited(_window.enterIsland());
+      });
+    }
     _islandAnim = Timer.periodic(const Duration(milliseconds: 80), (_) {
       final wasRunning = _live.running;
       if (wasRunning) {
@@ -168,8 +201,12 @@ class _PlayerScreenState extends State<PlayerScreen> {
   String _shellEpoch() {
     final p = _ctrl.params;
     final a = _ctrl.array;
+    final speakers = a.speakers
+        .map((s) =>
+            '${s.azimuthDeg}|${s.elevationDeg}|${s.distanceM}|${s.gainDb}|${s.mute}')
+        .join(';');
     return '${_window.mode}|${_ctrl.mode}|${a.enabled}|${a.mode}|${a.selectedIndex}|'
-        '${a.matrixLinked}|${a.speakers.length}|${_ctrl.track.title}|${_ctrl.hasOpenedFile}|'
+        '${a.matrixLinked}|${a.speakers.length}|$speakers|${_ctrl.track.title}|${_ctrl.hasOpenedFile}|'
         '${_ctrl.busy}|${_ctrl.lastError}|${p.azimuthDeg}|${p.elevationDeg}|${p.distanceM}|'
         '${p.motion}|${p.orbitHz}|${p.envelopment}|${p.reverbMix}|${p.selectedPreset}|'
         '${p.selectedEq}|${p.eqDb}|${_spatial.appliedRevision}|${_sceneBridge.selectedObjectId}|'
@@ -178,11 +215,20 @@ class _PlayerScreenState extends State<PlayerScreen> {
   }
 
   void _onChange() {
+    _observeIslandActivity();
     _publishTelemetry();
     final epoch = _shellEpoch();
     if (epoch == _lastShellEpoch) return;
     _lastShellEpoch = epoch;
     if (mounted) setState(() {});
+  }
+
+  void _observeIslandActivity() {
+    _window.observeMediaActivity(
+      (_ctrl.hasOpenedFile && _ctrl.playing) ||
+          (_smtc.state.hasTrack && _smtc.state.playing) ||
+          _live.captureHealthy,
+    );
   }
 
   void _commitEnginePose(SpatialParams projected) {
@@ -314,8 +360,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
   Future<void> _startLiveHrtf() async {
     var pid = _smtc.state.pid;
     var proc = _smtc.state.processName;
-    if (!_smtc.state.hasTrack) {
-      _live.fail('没有检测到系统正在播放的媒体');
+    final refuse = LiveSourceFollow.refuseStartReason(_smtc.state);
+    if (refuse != null) {
+      _live.fail(refuse);
       return;
     }
     if (!_live.available) {
@@ -380,6 +427,12 @@ class _PlayerScreenState extends State<PlayerScreen> {
     if (!_live.running) {
       _routeGen++;
       await _audioRoute.restore();
+      _live.fail(LiveCaptureHealth.explainStartFailure(
+        nativeError: _live.lastError,
+        sourcePlaying: _smtc.state.playing,
+        sourceTitle: _smtc.state.title,
+        sourcePid: pid,
+      ));
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -497,7 +550,24 @@ class _PlayerScreenState extends State<PlayerScreen> {
   }
 
   @override
+  void onWindowClose() {
+    if (_closing) return;
+    _closing = true;
+    _window.dispose();
+    _islandAnim?.cancel();
+    _followDebounce?.cancel();
+    unawaited(() async {
+      try {
+        await _stopLiveHrtf();
+      } finally {
+        await windowManager.destroy();
+      }
+    }());
+  }
+
+  @override
   void dispose() {
+    if (_nativeWindow) windowManager.removeListener(this);
     _followDebounce?.cancel();
     _islandAnim?.cancel();
     _ctrl.removeListener(_onChange);
@@ -536,480 +606,387 @@ class _PlayerScreenState extends State<PlayerScreen> {
       liveAzimuthDeg: _live.running ? _live.azimuthDeg() : 0,
       liveElevationDeg: _live.running ? _live.elevationDeg() : 0,
     );
-    return ColoredBox(
-      color: island ? const Color(0x00000000) : YinweiColors.background,
-      child: Stack(
+    return Scaffold(
+      backgroundColor:
+          island ? const Color(0x00000000) : YinweiColors.background,
+      body: Stack(
         fit: StackFit.expand,
         children: [
-          TickerMode(
-            enabled: !island,
-            child: IgnorePointer(
-              ignoring: island,
-              child: Offstage(
-                offstage: island,
-                child: LayoutBuilder(
-                  builder: (context, constraints) {
-                    final w = island ? 1440.0 : constraints.maxWidth;
-                    final h = island ? 900.0 : constraints.maxHeight;
-                    final width = w.isFinite ? w : 1440.0;
-                    final height = h.isFinite ? h : 900.0;
-                    return OverflowBox(
-                      alignment: Alignment.topLeft,
-                      minWidth: width,
-                      maxWidth: width,
-                      minHeight: height,
-                      maxHeight: height,
-                      child: SizedBox(
-                        width: width,
-                        height: height,
-                        child: DropTarget(
-                          onDragEntered: (_) =>
-                              setState(() => _dragging = true),
-                          onDragExited: (_) =>
-                              setState(() => _dragging = false),
-                          onDragDone: (detail) async {
-                            setState(() => _dragging = false);
-                            final path = _firstSupportedDrop(detail);
-                            if (path == null) {
-                              if (!mounted) return;
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                  content: Text(
-                                      '请拖入音频或视频文件（wav/mp3/flac/ogg/m4a/aac/mp4/m4v/mov）'),
-                                  behavior: SnackBarBehavior.floating,
-                                ),
-                              );
-                              return;
-                            }
-                            await _openMediaPath(path);
-                          },
-                          child: Scaffold(
-                            body: Stack(
-                              children: [
-                                LayoutBuilder(
-                                  builder: (context, constraints) {
-                                    final compactRail = constraints.maxWidth <
-                                        YinweiLayout.compactRailBreakpoint;
-                                    return Row(
+          if (!island)
+            DropTarget(
+              onDragEntered: (_) => setState(() => _dragging = true),
+              onDragExited: (_) => setState(() => _dragging = false),
+              onDragDone: (detail) async {
+                setState(() => _dragging = false);
+                final path = _firstSupportedDrop(detail);
+                if (path == null) {
+                  if (!mounted) return;
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text(
+                          '请拖入音频或视频文件（wav/mp3/flac/ogg/m4a/aac/mp4/m4v/mov）'),
+                      behavior: SnackBarBehavior.floating,
+                    ),
+                  );
+                  return;
+                }
+                await _openMediaPath(path);
+              },
+              child: Scaffold(
+                body: Stack(
+                  children: [
+                    LayoutBuilder(
+                      builder: (context, constraints) {
+                        final compactRail = constraints.maxWidth <
+                            YinweiLayout.compactRailBreakpoint;
+                        final presentation = workspacePresentationOf(
+                          playbackMode: c.mode,
+                          arrayMode: c.array.mode,
+                        );
+                        return Row(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            AppRail(
+                              compact: compactRail,
+                              onOpen: _onOpen,
+                              onOpenEq: () => setState(() => _eqOpen = true),
+                              onExport: _onExport,
+                              onEnterIsland: () => _window.enterIsland(),
+                              buildId: '$kYinweiUiBuild · $kYinweiBridgeBuild',
+                              native: _backend == EngineBackend.native,
+                              backend: c.backendLabel,
+                            ),
+                            Expanded(
+                              child: Column(
+                                children: [
+                                  ListenableBuilder(
+                                    listenable: _sessionTicks,
+                                    builder: (context, _) => AppTopBar(
+                                      systemMedia: _smtc,
+                                      liveTransfer: _live,
+                                      onToggleLiveHrtf: () =>
+                                          unawaited(_toggleLiveHrtf()),
+                                      onTogglePlayPause: () =>
+                                          unawaited(_smtc.togglePlayPause()),
+                                      onSelectOutput: (name) =>
+                                          unawaited(_selectWetOutput(name)),
+                                      playbackMode: c.mode,
+                                      arrayEnabled: c.array.enabled,
+                                    ),
+                                  ),
+                                  Expanded(
+                                    child: Row(
                                       crossAxisAlignment:
                                           CrossAxisAlignment.stretch,
                                       children: [
-                                        AppRail(
-                                          compact: compactRail,
-                                          onOpen: _onOpen,
+                                        Expanded(
+                                          child: Padding(
+                                            padding: const EdgeInsets.fromLTRB(
+                                              YinweiLayout.shellGutter,
+                                              10,
+                                              8,
+                                              8,
+                                            ),
+                                            child: SpatialWorkspace(
+                                              playhead: now.playhead,
+                                              azimuthDeg: _live.running
+                                                  ? _live.azimuthDeg()
+                                                  : c.azimuthDeg,
+                                              elevationDeg: _live.running
+                                                  ? _live.elevationDeg()
+                                                  : c.elevationDeg,
+                                              distanceM: c.params.distanceM,
+                                              envelopment: c.params.envelopment,
+                                              playing: now.playing,
+                                              suspended: island,
+                                              playbackMode: c.mode,
+                                              arrayMode: c.array.mode,
+                                              playbackTelemetry: _telemetry,
+                                              sceneSnapshot:
+                                                  _spatial.snapshot(),
+                                              selectedObjectId:
+                                                  _sceneBridge.selectedObjectId,
+                                              onSceneIntent: presentation ==
+                                                      WorkspacePresentation
+                                                          .point
+                                                  ? _onSceneIntent
+                                                  : null,
+                                              arraySpeakers: c.array.speakers,
+                                              selectedSpeakerIndex:
+                                                  c.array.selectedIndex,
+                                              matrixLinked:
+                                                  c.array.matrixLinked,
+                                              orbiting: !c.array.enabled &&
+                                                  (_live.running ||
+                                                      (c.params.motion ==
+                                                              MotionMode
+                                                                  .orbit &&
+                                                          c.mode ==
+                                                              PlaybackMode
+                                                                  .spatial &&
+                                                          c.playing)),
+                                              active: _live.running ||
+                                                  c.mode ==
+                                                      PlaybackMode.spatial,
+                                              onPoseChanged: presentation ==
+                                                      WorkspacePresentation
+                                                          .point
+                                                  ? (az, el) {
+                                                      final next = c.params
+                                                          .copy()
+                                                        ..azimuthDeg = az
+                                                        ..elevationDeg = el
+                                                        ..selectedPreset = null;
+                                                      _applySpatialFromUi(next);
+                                                    }
+                                                  : null,
+                                              onDistanceChanged: presentation ==
+                                                      WorkspacePresentation
+                                                          .point
+                                                  ? (d) {
+                                                      final next = c.params
+                                                          .copy()
+                                                        ..distanceM = d
+                                                        ..selectedPreset = null;
+                                                      _applySpatialFromUi(next);
+                                                    }
+                                                  : null,
+                                              onSpeakerSelected: presentation ==
+                                                      WorkspacePresentation
+                                                          .stereo2
+                                                  ? (i) =>
+                                                      c.selectArraySpeaker(i)
+                                                  : null,
+                                              onSpeakerPoseChanged:
+                                                  presentation ==
+                                                          WorkspacePresentation
+                                                              .stereo2
+                                                      ? (i, az, el) {
+                                                          final next =
+                                                              c.array.copy();
+                                                          if (i < 0 ||
+                                                              i >=
+                                                                  next.speakers
+                                                                      .length) {
+                                                            return;
+                                                          }
+                                                          next.selectedIndex =
+                                                              i;
+                                                          if (next
+                                                              .matrixLinked) {
+                                                            next.moveSelectedInGroup(
+                                                              azimuthDeg: az,
+                                                              elevationDeg: el,
+                                                            );
+                                                          } else {
+                                                            next.speakers[i]
+                                                                .azimuthDeg = az;
+                                                            next.speakers[i]
+                                                                .elevationDeg = el;
+                                                          }
+                                                          _applyArrayFromUi(
+                                                              next);
+                                                        }
+                                                      : null,
+                                              onSpeakerDistanceChanged:
+                                                  presentation ==
+                                                          WorkspacePresentation
+                                                              .stereo2
+                                                      ? (i, d) {
+                                                          final next =
+                                                              c.array.copy();
+                                                          if (i < 0 ||
+                                                              i >=
+                                                                  next.speakers
+                                                                      .length) {
+                                                            return;
+                                                          }
+                                                          next.selectedIndex =
+                                                              i;
+                                                          if (next
+                                                              .matrixLinked) {
+                                                            next.setAllDistance(
+                                                                d);
+                                                          } else {
+                                                            next.speakers[i]
+                                                                .distanceM = d;
+                                                          }
+                                                          _applyArrayFromUi(
+                                                              next);
+                                                        }
+                                                      : null,
+                                              onSpeakerAdd: presentation ==
+                                                      WorkspacePresentation
+                                                          .stereo2
+                                                  ? (az, el, dist) {
+                                                      if (!c.array
+                                                          .canAddSpeaker) {
+                                                        return;
+                                                      }
+                                                      final next =
+                                                          c.array.copy()
+                                                            ..addSpeaker(
+                                                              azimuthDeg: az,
+                                                              elevationDeg: el,
+                                                              distanceM: dist,
+                                                            );
+                                                      _applyArrayFromUi(next);
+                                                    }
+                                                  : null,
+                                            ),
+                                          ),
+                                        ),
+                                        PositionSidebar(
+                                          params: c.params,
+                                          array: c.array,
+                                          arraySupported: c.arraySupported,
+                                          selectedObjectId:
+                                              _sceneBridge.selectedObjectId,
+                                          sceneSnapshot: _spatial.snapshot(),
+                                          onChanged: (p) =>
+                                              _applySpatialFromUi(p),
+                                          onArrayChanged: _applyArrayFromUi,
+                                          onArrayMode: _onArrayMode,
+                                          onPresetSelected: (p) {
+                                            final next = c.params.copy()
+                                              ..applyPreset(p);
+                                            _applySpatialFromUi(next);
+                                          },
                                           onOpenEq: () =>
                                               setState(() => _eqOpen = true),
                                           onExport: _onExport,
-                                          onEnterIsland: () =>
-                                              _window.enterIsland(),
-                                          buildId:
-                                              '$kYinweiUiBuild · $kYinweiBridgeBuild',
-                                          native:
-                                              _backend == EngineBackend.native,
-                                          backend: c.backendLabel,
-                                        ),
-                                        Expanded(
-                                          child: Column(
-                                            children: [
-                                              ListenableBuilder(
-                                                listenable: _sessionTicks,
-                                                builder: (context, _) =>
-                                                    AppTopBar(
-                                                  systemMedia: _smtc,
-                                                  liveTransfer: _live,
-                                                  onToggleLiveHrtf: () =>
-                                                      unawaited(
-                                                          _toggleLiveHrtf()),
-                                                  onTogglePlayPause: () =>
-                                                      unawaited(_smtc
-                                                          .togglePlayPause()),
-                                                  onSelectOutput: (name) =>
-                                                      unawaited(
-                                                          _selectWetOutput(
-                                                              name)),
-                                                  playbackMode: c.mode,
-                                                  arrayEnabled:
-                                                      c.array.enabled,
-                                                ),
+                                          onSavePreset: () {
+                                            ScaffoldMessenger.of(context)
+                                                .showSnackBar(
+                                              const SnackBar(
+                                                content: Text(
+                                                    'Save Preset — local JSON in a later slice'),
+                                                behavior:
+                                                    SnackBarBehavior.floating,
                                               ),
-                                              Expanded(
-                                                child: Row(
-                                                  crossAxisAlignment:
-                                                      CrossAxisAlignment
-                                                          .stretch,
-                                                  children: [
-                                                    Expanded(
-                                                      child: Padding(
-                                                        padding:
-                                                            const EdgeInsets
-                                                                .fromLTRB(
-                                                          YinweiLayout
-                                                              .shellGutter,
-                                                          10,
-                                                          8,
-                                                          8,
-                                                        ),
-                                                        child: SpatialWorkspace(
-                                                          playhead:
-                                                              now.playhead,
-                                                          azimuthDeg: _live
-                                                                  .running
-                                                              ? _live
-                                                                  .azimuthDeg()
-                                                              : c.azimuthDeg,
-                                                          elevationDeg: _live
-                                                                  .running
-                                                              ? _live
-                                                                  .elevationDeg()
-                                                              : c.elevationDeg,
-                                                          distanceM: c
-                                                              .params.distanceM,
-                                                          envelopment: c.params
-                                                              .envelopment,
-                                                          playing: now.playing,
-                                                          playbackTelemetry:
-                                                              _telemetry,
-                                                          sceneSnapshot:
-                                                              _spatial
-                                                                  .snapshot(),
-                                                          selectedObjectId:
-                                                              _sceneBridge
-                                                                  .selectedObjectId,
-                                                          onSceneIntent: c
-                                                                  .array.enabled
-                                                              ? null
-                                                              : _onSceneIntent,
-                                                          arraySpeakers: c
-                                                                  .array.enabled
-                                                              ? c.array.speakers
-                                                              : null,
-                                                          selectedSpeakerIndex: c
-                                                              .array
-                                                              .selectedIndex,
-                                                          matrixLinked: c.array
-                                                              .matrixLinked,
-                                                          orbiting: !c.array
-                                                                  .enabled &&
-                                                              (_live.running ||
-                                                                  (c.params.motion ==
-                                                                          MotionMode
-                                                                              .orbit &&
-                                                                      c.mode ==
-                                                                          PlaybackMode
-                                                                              .spatial &&
-                                                                      c.playing)),
-                                                          active: _live
-                                                                  .running ||
-                                                              c.mode ==
-                                                                  PlaybackMode
-                                                                      .spatial,
-                                                          onPoseChanged:
-                                                              c.array.enabled
-                                                                  ? null
-                                                                  : (az, el) {
-                                                                      final next = c
-                                                                          .params
-                                                                          .copy()
-                                                                        ..azimuthDeg =
-                                                                            az
-                                                                        ..elevationDeg =
-                                                                            el
-                                                                        ..selectedPreset =
-                                                                            null;
-                                                                      _applySpatialFromUi(
-                                                                          next);
-                                                                    },
-                                                          onDistanceChanged:
-                                                              c.array.enabled
-                                                                  ? null
-                                                                  : (d) {
-                                                                      final next = c
-                                                                          .params
-                                                                          .copy()
-                                                                        ..distanceM =
-                                                                            d
-                                                                        ..selectedPreset =
-                                                                            null;
-                                                                      _applySpatialFromUi(
-                                                                          next);
-                                                                    },
-                                                          onSpeakerSelected: c
-                                                                  .array.enabled
-                                                              ? (i) => c
-                                                                  .selectArraySpeaker(
-                                                                      i)
-                                                              : null,
-                                                          onSpeakerPoseChanged:
-                                                              c.array.enabled
-                                                                  ? (i, az,
-                                                                      el) {
-                                                                      final next = c
-                                                                          .array
-                                                                          .copy();
-                                                                      if (i < 0 ||
-                                                                          i >=
-                                                                              next.speakers.length) {
-                                                                        return;
-                                                                      }
-                                                                      next.selectedIndex =
-                                                                          i;
-                                                                      if (next
-                                                                          .matrixLinked) {
-                                                                        next.moveSelectedInGroup(
-                                                                          azimuthDeg:
-                                                                              az,
-                                                                          elevationDeg:
-                                                                              el,
-                                                                        );
-                                                                      } else {
-                                                                        next.speakers[i].azimuthDeg =
-                                                                            az;
-                                                                        next.speakers[i].elevationDeg =
-                                                                            el;
-                                                                      }
-                                                                      _applyArrayFromUi(
-                                                                          next);
-                                                                    }
-                                                                  : null,
-                                                          onSpeakerDistanceChanged:
-                                                              c.array.enabled
-                                                                  ? (i, d) {
-                                                                      final next = c
-                                                                          .array
-                                                                          .copy();
-                                                                      if (i < 0 ||
-                                                                          i >=
-                                                                              next.speakers.length) {
-                                                                        return;
-                                                                      }
-                                                                      next.selectedIndex =
-                                                                          i;
-                                                                      if (next
-                                                                          .matrixLinked) {
-                                                                        next.setAllDistance(
-                                                                            d);
-                                                                      } else {
-                                                                        next.speakers[i]
-                                                                            .distanceM = d;
-                                                                      }
-                                                                      _applyArrayFromUi(
-                                                                          next);
-                                                                    }
-                                                                  : null,
-                                                          onSpeakerAdd: c
-                                                                  .array.enabled
-                                                              ? (az, el, dist) {
-                                                                  if (!c.array
-                                                                      .canAddSpeaker) {
-                                                                    return;
-                                                                  }
-                                                                  final next = c
-                                                                      .array
-                                                                      .copy()
-                                                                    ..addSpeaker(
-                                                                      azimuthDeg:
-                                                                          az,
-                                                                      elevationDeg:
-                                                                          el,
-                                                                      distanceM:
-                                                                          dist,
-                                                                    );
-                                                                  _applyArrayFromUi(
-                                                                      next);
-                                                                }
-                                                              : null,
-                                                        ),
-                                                      ),
-                                                    ),
-                                                    PositionSidebar(
-                                                      params: c.params,
-                                                      array: c.array,
-                                                      arraySupported:
-                                                          c.arraySupported,
-                                                      selectedObjectId:
-                                                          _sceneBridge
-                                                              .selectedObjectId,
-                                                      sceneSnapshot:
-                                                          _spatial.snapshot(),
-                                                      onChanged: (p) =>
-                                                          _applySpatialFromUi(
-                                                              p),
-                                                      onArrayChanged:
-                                                          _applyArrayFromUi,
-                                                      onArrayMode: _onArrayMode,
-                                                      onPresetSelected: (p) {
-                                                        final next = c.params
-                                                            .copy()
-                                                          ..applyPreset(p);
-                                                        _applySpatialFromUi(
-                                                            next);
-                                                      },
-                                                      onOpenEq: () => setState(
-                                                          () => _eqOpen = true),
-                                                      onExport: _onExport,
-                                                      onSavePreset: () {
-                                                        ScaffoldMessenger.of(
-                                                                context)
-                                                            .showSnackBar(
-                                                          const SnackBar(
-                                                            content: Text(
-                                                                'Save Preset — local JSON in a later slice'),
-                                                            behavior:
-                                                                SnackBarBehavior
-                                                                    .floating,
-                                                          ),
-                                                        );
-                                                      },
-                                                    ),
-                                                  ],
-                                                ),
-                                              ),
-                                              ListenableBuilder(
-                                                listenable: _transportTicks,
-                                                builder: (context, _) {
-                                                  final transport =
-                                                      IslandNowPlaying.resolve(
-                                                    engine: c,
-                                                    system: _smtc.state,
-                                                    now: DateTime.now(),
-                                                    liveHrtfRunning:
-                                                        _live.running,
-                                                    liveHrtfHealthy:
-                                                        _live.captureHealthy,
-                                                    liveAzimuthDeg:
-                                                        _live.running
-                                                            ? _live.azimuthDeg()
-                                                            : 0,
-                                                    liveElevationDeg:
-                                                        _live.running
-                                                            ? _live
-                                                                .elevationDeg()
-                                                            : 0,
-                                                  );
-                                                  return NowPlayingPanel(
-                                                    track: transport.asTrack,
-                                                    position:
-                                                        transport.position,
-                                                    isPlaying:
-                                                        transport.playing,
-                                                    playbackMode: c.mode,
-                                                    arrayMode: c.array.mode,
-                                                    arraySupported:
-                                                        c.arraySupported,
-                                                    onSeek: transport
-                                                            .usesSystemMedia
-                                                        ? null
-                                                        : (d) => c.seek(d),
-                                                    onPlayPause: () {
-                                                      if (transport
-                                                          .usesSystemMedia) {
-                                                        unawaited(_smtc
-                                                            .togglePlayPause());
-                                                      } else {
-                                                        unawaited(
-                                                            c.togglePlay());
-                                                      }
-                                                    },
-                                                    onModeChanged:
-                                                        _onPlaybackMode,
-                                                    onArrayMode: _onArrayMode,
-                                                  );
-                                                },
-                                              ),
-                                            ],
-                                          ),
+                                            );
+                                          },
                                         ),
                                       ],
-                                    );
-                                  },
+                                    ),
+                                  ),
+                                  ListenableBuilder(
+                                    listenable: _transportTicks,
+                                    builder: (context, _) {
+                                      final transport =
+                                          IslandNowPlaying.resolve(
+                                        engine: c,
+                                        system: _smtc.state,
+                                        now: DateTime.now(),
+                                        liveHrtfRunning: _live.running,
+                                        liveHrtfHealthy: _live.captureHealthy,
+                                        liveAzimuthDeg: _live.running
+                                            ? _live.azimuthDeg()
+                                            : 0,
+                                        liveElevationDeg: _live.running
+                                            ? _live.elevationDeg()
+                                            : 0,
+                                      );
+                                      return NowPlayingPanel(
+                                        track: transport.asTrack,
+                                        position: transport.position,
+                                        isPlaying: transport.playing,
+                                        playbackMode: c.mode,
+                                        arrayMode: c.array.mode,
+                                        arraySupported: c.arraySupported,
+                                        onSeek: transport.usesSystemMedia
+                                            ? null
+                                            : (d) => c.seek(d),
+                                        onPlayPause: () {
+                                          if (transport.usesSystemMedia) {
+                                            unawaited(_smtc.togglePlayPause());
+                                          } else {
+                                            unawaited(c.togglePlay());
+                                          }
+                                        },
+                                        onModeChanged: _onPlaybackMode,
+                                        onArrayMode: _onArrayMode,
+                                      );
+                                    },
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        );
+                      },
+                    ),
+                    if (_eqOpen)
+                      Positioned(
+                        left: _eqPos.dx,
+                        top: _eqPos.dy,
+                        child: EqMixerWindow(
+                          params: c.params,
+                          onChanged: (p) => _applySpatialFromUi(p),
+                          onEqSelected: (t) {
+                            if (_live.running) {
+                              final next = c.params.copy()..applyEq(t);
+                              _live.applyLiveParams(next);
+                            }
+                            c.applyEq(t);
+                          },
+                          onClose: () => setState(() => _eqOpen = false),
+                          onDrag: (delta) {
+                            setState(() {
+                              _eqPos = Offset(
+                                (_eqPos.dx + delta.dx).clamp(8, 2000),
+                                (_eqPos.dy + delta.dy).clamp(8, 1200),
+                              );
+                            });
+                          },
+                        ),
+                      ),
+                    if (c.busy)
+                      Positioned(
+                        left: 0,
+                        right: 0,
+                        bottom: 36,
+                        child: LinearProgressIndicator(
+                          value: c.jobProgress <= 0 ? null : c.jobProgress,
+                          backgroundColor: Colors.white10,
+                          color: YinweiColors.accent,
+                          minHeight: 3,
+                        ),
+                      ),
+                    if (_dragging)
+                      Positioned.fill(
+                        child: IgnorePointer(
+                          child: ColoredBox(
+                            color: YinweiColors.accent.withOpacity(0.12),
+                            child: Center(
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 28, vertical: 18),
+                                decoration: BoxDecoration(
+                                  color: YinweiColors.panel,
+                                  borderRadius: BorderRadius.circular(12),
+                                  border: Border.all(
+                                      color: YinweiColors.accent, width: 1.5),
                                 ),
-                                if (_eqOpen)
-                                  Positioned(
-                                    left: _eqPos.dx,
-                                    top: _eqPos.dy,
-                                    child: EqMixerWindow(
-                                      params: c.params,
-                                      onChanged: (p) => _applySpatialFromUi(p),
-                                      onEqSelected: (t) {
-                                        if (_live.running) {
-                                          final next = c.params.copy()
-                                            ..applyEq(t);
-                                          _live.applyLiveParams(next);
-                                        }
-                                        c.applyEq(t);
-                                      },
-                                      onClose: () =>
-                                          setState(() => _eqOpen = false),
-                                      onDrag: (delta) {
-                                        setState(() {
-                                          _eqPos = Offset(
-                                            (_eqPos.dx + delta.dx)
-                                                .clamp(8, 2000),
-                                            (_eqPos.dy + delta.dy)
-                                                .clamp(8, 1200),
-                                          );
-                                        });
-                                      },
-                                    ),
-                                  ),
-                                if (c.busy)
-                                  Positioned(
-                                    left: 0,
-                                    right: 0,
-                                    bottom: 36,
-                                    child: LinearProgressIndicator(
-                                      value: c.jobProgress <= 0
-                                          ? null
-                                          : c.jobProgress,
-                                      backgroundColor: Colors.white10,
-                                      color: YinweiColors.accent,
-                                      minHeight: 3,
-                                    ),
-                                  ),
-                                if (_dragging)
-                                  Positioned.fill(
-                                    child: IgnorePointer(
-                                      child: ColoredBox(
-                                        color: YinweiColors.accent
-                                            .withOpacity(0.12),
-                                        child: Center(
-                                          child: Container(
-                                            padding: const EdgeInsets.symmetric(
-                                                horizontal: 28, vertical: 18),
-                                            decoration: BoxDecoration(
-                                              color: YinweiColors.panel,
-                                              borderRadius:
-                                                  BorderRadius.circular(12),
-                                              border: Border.all(
-                                                  color: YinweiColors.accent,
-                                                  width: 1.5),
-                                            ),
-                                            child: Text(
-                                              '拖放以打开音频 / 视频',
-                                              style: Theme.of(context)
-                                                  .textTheme
-                                                  .titleMedium
-                                                  ?.copyWith(
-                                                    color: YinweiColors.accent,
-                                                    fontWeight: FontWeight.w600,
-                                                  ),
-                                            ),
-                                          ),
-                                        ),
+                                child: Text(
+                                  '拖放以打开音频 / 视频',
+                                  style: Theme.of(context)
+                                      .textTheme
+                                      .titleMedium
+                                      ?.copyWith(
+                                        color: YinweiColors.accent,
+                                        fontWeight: FontWeight.w600,
                                       ),
-                                    ),
-                                  ),
-                              ],
+                                ),
+                              ),
                             ),
                           ),
                         ),
                       ),
-                    );
-                  },
+                  ],
                 ),
               ),
             ),
-          ),
           if (island)
             ListenableBuilder(
               listenable: _islandTicks,
@@ -1019,6 +996,17 @@ class _PlayerScreenState extends State<PlayerScreen> {
                 systemMedia: _smtc,
                 liveTransfer: _live,
                 onToggleLiveHrtf: () => unawaited(_toggleLiveHrtf()),
+                onPlaybackMode: _onPlaybackMode,
+                onArrayMode: _onArrayMode,
+                pointReadout: _islandPointReadout(),
+                miniController: IslandSpatialController(
+                  sceneSnapshot: () => _spatial.snapshot()!,
+                  onSceneIntent: _onSceneIntent,
+                  arrayLayout: () => _ctrl.array,
+                  onArrayChanged: _applyArrayFromUi,
+                  onSpeakerSelected: (index) => _ctrl.selectArraySpeaker(index),
+                  onClose: () => _window.setMiniOpen(false),
+                ),
               ),
             ),
         ],
@@ -1034,6 +1022,95 @@ class _PlayerScreenState extends State<PlayerScreen> {
       if (_mediaExts.contains(ext)) return path;
     }
     return null;
+  }
+
+  String _islandPointReadout() {
+    final pose = IslandPointIntent.pose(_spatial.snapshot()!);
+    return '${pose.azimuthDeg.round()}° · ${pose.elevationDeg.round()}° · ${pose.distanceM.toStringAsFixed(2)} m';
+  }
+
+  Future<Map<String, Object?>> _islandProbe(Map<String, String> p) async {
+    switch (p['action']) {
+      case 'full':
+        await _window.enterFull();
+      case 'island':
+        await _window.enterIsland();
+      case 'expand':
+        await _window.expandIsland();
+      case 'collapse':
+        await _window.collapseIsland();
+      case 'mini':
+        _window.setMiniOpen(p['open'] != 'false');
+      case 'hover':
+        await _window.setPillHovered(p['hover'] != 'false');
+      case 'open':
+        await _openMediaPath(p['path']!);
+      case 'play':
+        await _ctrl.togglePlay();
+      case 'stop':
+        if (_ctrl.playing) await _ctrl.togglePlay();
+        if (_smtc.state.playing) _smtc.togglePlayPause();
+      case 'mode':
+        _onPlaybackMode(p['mode'] == 'original'
+            ? PlaybackMode.original
+            : PlaybackMode.spatial);
+        await _ctrl.applyArrayMode(
+            p['mode'] == 'stereo2' ? ArrayMode.stereo2 : ArrayMode.off);
+        if (_live.running) {
+          _live.applyLiveArray(_ctrl.array);
+        }
+      case 'point':
+        _onSceneIntent(IslandPointIntent.commit(
+            _spatial.snapshot()!,
+            SphericalV1(
+                azimuthDeg: double.parse(p['az']!),
+                elevationDeg: double.parse(p['el']!),
+                distanceM: double.parse(p['distance']!))));
+      case 'speaker':
+        await _ctrl.selectArraySpeaker(int.parse(p['index'] ?? '0'));
+      case 'arrayPose':
+        final next = _ctrl.array.copy();
+        if (p['index'] != null) {
+          next.selectedIndex = int.parse(p['index']!);
+        }
+        final speaker = next.selected;
+        if (p['az'] != null) speaker.azimuthDeg = double.parse(p['az']!);
+        if (p['el'] != null) speaker.elevationDeg = double.parse(p['el']!);
+        if (p['distance'] != null)
+          speaker.distanceM = double.parse(p['distance']!);
+        _applyArrayFromUi(next);
+      case 'live':
+        await _toggleLiveHrtf();
+      case 'shutdown':
+        onWindowClose();
+    }
+    Map<String, dynamic>? native;
+    try {
+      native = await const MethodChannel('yinwei/window_chrome')
+          .invokeMapMethod<String, dynamic>('getWindowDiagnostics', {
+        'x': double.tryParse(p['x'] ?? '') ?? 0,
+        'y': double.tryParse(p['y'] ?? '') ?? 0,
+      });
+    } catch (e) {
+      native = {'error': '$e'};
+    }
+    return {
+      'window': _window.mode.name,
+      'interaction': _window.interaction.name,
+      'dormant': _window.dormant,
+      'miniOpen': _window.miniOpen,
+      'busy': _window.busy,
+      'error': _window.lastError,
+      'native': native,
+      'scene': _spatial.snapshot(),
+      'audio': _ctrl.runtimeAudioDiag(),
+      'playing': _ctrl.playing,
+      'hasFile': _ctrl.hasOpenedFile,
+      'liveRunning': _live.running,
+      'liveHealthy': _live.captureHealthy,
+      'systemTitle': _smtc.state.title,
+      'systemPlaying': _smtc.state.playing,
+    };
   }
 
   Future<void> _onOpen() async {
@@ -1185,6 +1262,108 @@ class _PlayerScreenState extends State<PlayerScreen> {
       debugPrint('[Phase6] failed $e');
     }
     debugPrint('[Phase6] engine done');
+  }
+
+  Future<void> _maybeRunPhase65Smoke() async {
+    if (Platform.environment.containsKey('FLUTTER_TEST')) return;
+    if (Platform.environment['YINWEI_PHASE65_SMOKE'] != '1') return;
+    for (var i = 0; i < 40 && !_ctrl.hasOpenedFile; i++) {
+      await Future<void>.delayed(const Duration(milliseconds: 250));
+    }
+    if (!_ctrl.hasOpenedFile) {
+      debugPrint('[Phase65] skip — no opened file');
+      return;
+    }
+    void mark(String label) {
+      final presentation = workspacePresentationOf(
+        playbackMode: _ctrl.mode,
+        arrayMode: _ctrl.array.mode,
+      );
+      final visuals = arraySpeakerVisuals(
+        speakers: _ctrl.array.speakers,
+        selectedIndex: _ctrl.array.selectedIndex,
+      );
+      debugPrint(
+        '[Phase65] MARK $label presentation=${presentation.name} '
+        'mode=${_ctrl.mode} array=${_ctrl.array.mode} '
+        'sceneRev=${_spatial.appliedRevision} '
+        'pointAz=${_ctrl.params.azimuthDeg} pointEl=${_ctrl.params.elevationDeg} '
+        'pointDist=${_ctrl.params.distanceM} '
+        'L=${_ctrl.array.speakers.isNotEmpty ? _ctrl.array.speakers.first.azimuthDeg : null} '
+        'R=${_ctrl.array.speakers.length > 1 ? _ctrl.array.speakers[1].azimuthDeg : null} '
+        'visuals=${visuals.map((v) => '${v.label}:${v.world.x.toStringAsFixed(2)},${v.world.z.toStringAsFixed(2)}').toList()}',
+      );
+      try {
+        File('${Directory.systemTemp.path}${Platform.pathSeparator}yinwei_phase65_mark.txt')
+            .writeAsStringSync(label);
+      } catch (_) {}
+    }
+
+    try {
+      final rev0 = _spatial.appliedRevision;
+      final pointAz0 = _ctrl.params.azimuthDeg;
+      final pointEl0 = _ctrl.params.elevationDeg;
+      final pointDist0 = _ctrl.params.distanceM;
+      await _ctrl.play();
+
+      _onPlaybackMode(PlaybackMode.original);
+      _onArrayMode(ArrayMode.off);
+      await Future<void>.delayed(const Duration(milliseconds: 400));
+      mark('idle');
+      await Future<void>.delayed(const Duration(seconds: 3));
+
+      _onPlaybackMode(PlaybackMode.spatial);
+      await Future<void>.delayed(const Duration(milliseconds: 400));
+      mark('point');
+      await Future<void>.delayed(const Duration(seconds: 3));
+
+      _onArrayMode(ArrayMode.stereo2);
+      await Future<void>.delayed(const Duration(milliseconds: 400));
+      mark('stereo2');
+      await Future<void>.delayed(const Duration(seconds: 3));
+
+      final mutated = _ctrl.array.copy();
+      mutated.speakers[0].azimuthDeg = -50;
+      mutated.speakers[0].distanceM = 2.4;
+      mutated.speakers[1].azimuthDeg = 40;
+      mutated.selectedIndex = 0;
+      _applyArrayFromUi(mutated);
+      await Future<void>.delayed(const Duration(milliseconds: 400));
+      mark('stereo2-moved');
+      await Future<void>.delayed(const Duration(seconds: 3));
+
+      _onArrayMode(ArrayMode.off);
+      await Future<void>.delayed(const Duration(milliseconds: 400));
+      mark('point-return');
+      await Future<void>.delayed(const Duration(seconds: 3));
+      debugPrint(
+        '[Phase65] pointPreserved az=${_ctrl.params.azimuthDeg == pointAz0} '
+        'el=${_ctrl.params.elevationDeg == pointEl0} '
+        'dist=${_ctrl.params.distanceM == pointDist0} '
+        'revDelta=${_spatial.appliedRevision - rev0}',
+      );
+
+      _onArrayMode(ArrayMode.stereo2);
+      await Future<void>.delayed(const Duration(milliseconds: 400));
+      mark('stereo2-return');
+      await Future<void>.delayed(const Duration(seconds: 3));
+      debugPrint(
+        '[Phase65] arrayPreserved L=${_ctrl.array.speakers.first.azimuthDeg} '
+        'R=${_ctrl.array.speakers[1].azimuthDeg} '
+        'Ldist=${_ctrl.array.speakers.first.distanceM}',
+      );
+
+      _onPlaybackMode(PlaybackMode.original);
+      await Future<void>.delayed(const Duration(milliseconds: 400));
+      mark('idle-return');
+      await Future<void>.delayed(const Duration(seconds: 3));
+      debugPrint(
+        '[Phase65] final rev=${_spatial.appliedRevision} deltaRev=${_spatial.appliedRevision - rev0}',
+      );
+    } catch (e) {
+      debugPrint('[Phase65] failed $e');
+    }
+    debugPrint('[Phase65] engine done');
   }
 
   Future<void> _maybeRunPhase5bTransportSmoke() async {

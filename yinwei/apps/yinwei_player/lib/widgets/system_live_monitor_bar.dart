@@ -1,5 +1,6 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:yinwei_player/bridge/live_capture_health.dart';
 import 'package:yinwei_player/bridge/live_transfer.dart';
 import 'package:yinwei_player/bridge/system_media.dart';
 import 'package:yinwei_player/theme/yinwei_theme.dart';
@@ -62,7 +63,12 @@ class SystemLiveMonitorBar extends StatelessWidget {
       subtitle = err ?? '播放汽水音乐 / Spotify 后会出现在这里';
     }
     if (err != null && !running) {
-      subtitle = err;
+      subtitle = LiveCaptureHealth.explainStartFailure(
+        nativeError: err,
+        sourcePlaying: s.playing,
+        sourceTitle: s.title,
+        sourcePid: s.pid,
+      );
     }
 
     final accentLive = running || starting;

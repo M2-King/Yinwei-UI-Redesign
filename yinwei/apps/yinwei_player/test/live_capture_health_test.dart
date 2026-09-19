@@ -70,4 +70,34 @@ void main() {
     );
     expect(h.healthy, isFalse);
   });
+
+  test('paused source is play-first, not Wrong PID', () {
+    const native =
+        'audio device: process loopback silent (pid=24068). pid=19616 include_tree=false frames=7680 energy=0. Wrong PID or app blocked capture.';
+    final msg = LiveCaptureHealth.explainStartFailure(
+      nativeError: native,
+      sourcePlaying: false,
+      sourceTitle: 'Borsia',
+      sourcePid: 24068,
+    );
+    expect(msg, '请先播放 Borsia，再开 HRTF LIVE');
+    expect(msg, isNot(contains('Wrong PID')));
+    expect(msg, isNot(contains('include_tree')));
+  });
+
+  test('playing silent loopback does not dump exclude-self pid', () {
+    const native =
+        'audio device: process loopback silent (pid=24068). pid=19616 include_tree=false frames=7680 energy=0. Wrong PID or app blocked capture.';
+    final msg = LiveCaptureHealth.explainStartFailure(
+      nativeError: native,
+      sourcePlaying: true,
+      sourceTitle: 'Borsia',
+      sourcePid: 24068,
+    );
+    expect(msg, contains('环回静音'));
+    expect(msg, contains('Borsia'));
+    expect(msg, contains('24068'));
+    expect(msg, isNot(contains('19616')));
+    expect(msg, isNot(contains('Wrong PID')));
+  });
 }

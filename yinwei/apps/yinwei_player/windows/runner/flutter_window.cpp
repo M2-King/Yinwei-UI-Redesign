@@ -89,6 +89,17 @@ void FlutterWindow::RegisterWindowChromeChannel() {
             shape.inset_x = ReadMapDouble(*args, "insetX", 0);
             shape.inset_y = ReadMapDouble(*args, "insetY", 0);
             shape.radius = ReadMapDouble(*args, "radius", 0);
+            if (const auto* value = ValueOrNull(*args, "regions")) {
+              if (const auto* regions = std::get_if<flutter::EncodableList>(value)) {
+                for (const auto& raw : *regions) {
+                  if (const auto* r = std::get_if<flutter::EncodableMap>(&raw)) {
+                    shape.regions.push_back({ReadMapDouble(*r, "left", 0),
+                        ReadMapDouble(*r, "top", 0), ReadMapDouble(*r, "right", 0),
+                        ReadMapDouble(*r, "bottom", 0), ReadMapDouble(*r, "radius", 0)});
+                  }
+                }
+              }
+            }
           }
           SetIslandHitShape(shape);
           result->Success();
@@ -96,6 +107,31 @@ void FlutterWindow::RegisterWindowChromeChannel() {
         }
         if (call.method_name() == "getWorkAreaForWindow") {
           result->Success(GetWorkAreaForWindow());
+          return;
+        }
+        if (call.method_name() == "getWindowDiagnostics") {
+          flutter::EncodableMap info;
+          const HWND hwnd = GetHandle();
+          RECT rect{};
+          GetWindowRect(hwnd, &rect);
+          info[flutter::EncodableValue("hwnd")] = flutter::EncodableValue(static_cast<int64_t>(reinterpret_cast<intptr_t>(hwnd)));
+          info[flutter::EncodableValue("visible")] = flutter::EncodableValue(IsWindowVisible(hwnd) != FALSE);
+          info[flutter::EncodableValue("dpiScale")] = flutter::EncodableValue(DpiScale());
+          info[flutter::EncodableValue("exStyle")] = flutter::EncodableValue(static_cast<int64_t>(GetWindowLongPtr(hwnd, GWL_EXSTYLE)));
+          info[flutter::EncodableValue("left")] = flutter::EncodableValue(static_cast<int32_t>(rect.left));
+          info[flutter::EncodableValue("top")] = flutter::EncodableValue(static_cast<int32_t>(rect.top));
+          info[flutter::EncodableValue("width")] = flutter::EncodableValue(static_cast<int32_t>(rect.right - rect.left));
+          info[flutter::EncodableValue("height")] = flutter::EncodableValue(static_cast<int32_t>(rect.bottom - rect.top));
+          HRGN region = CreateRectRgn(0, 0, 0, 0);
+          const int region_type = GetWindowRgn(hwnd, region);
+          info[flutter::EncodableValue("regionType")] = flutter::EncodableValue(region_type);
+          if (const auto* args = std::get_if<flutter::EncodableMap>(call.arguments())) {
+            const int x = static_cast<int>(std::lround(ReadMapDouble(*args, "x", 0) * DpiScale()));
+            const int y = static_cast<int>(std::lround(ReadMapDouble(*args, "y", 0) * DpiScale()));
+            info[flutter::EncodableValue("pointInside")] = flutter::EncodableValue(PtInRegion(region, x, y) != FALSE);
+          }
+          DeleteObject(region);
+          result->Success(info);
           return;
         }
         result->NotImplemented();
@@ -108,6 +144,7 @@ void FlutterWindow::SetToolWindowStyle(bool enable) {
     return;
   }
   LONG_PTR ex = GetWindowLongPtr(hwnd, GWL_EXSTYLE);
+  const LONG_PTR previous = ex;
   if (enable) {
     ex |= WS_EX_TOOLWINDOW;
     ex &= ~WS_EX_APPWINDOW;
@@ -115,6 +152,7 @@ void FlutterWindow::SetToolWindowStyle(bool enable) {
     ex &= ~WS_EX_TOOLWINDOW;
     ex |= WS_EX_APPWINDOW;
   }
+  if (ex == previous) return;
   SetWindowLongPtr(hwnd, GWL_EXSTYLE, ex);
   // Force taskbar / Alt+Tab membership refresh.
   SetWindowPos(hwnd, nullptr, 0, 0, 0, 0,
@@ -139,6 +177,28 @@ void FlutterWindow::RefreshIslandHitShape() {
   }
 
   const double scale = DpiScale();
+  if (!island_hit_shape_.regions.empty()) {
+    HRGN combined = CreateRectRgn(0, 0, 0, 0);
+    if (!combined) return;  // Keep the last known valid region on allocation failure.
+    for (const auto& r : island_hit_shape_.regions) {
+      if (!std::isfinite(r.left) || !std::isfinite(r.top) ||
+          !std::isfinite(r.right) || !std::isfinite(r.bottom) ||
+          !std::isfinite(r.radius) || r.right <= r.left || r.bottom <= r.top) continue;
+      HRGN part = CreateRoundRectRgn(
+          static_cast<int>(std::lround(r.left * scale)),
+          static_cast<int>(std::lround(r.top * scale)),
+          static_cast<int>(std::lround(r.right * scale)) + 1,
+          static_cast<int>(std::lround(r.bottom * scale)) + 1,
+          static_cast<int>(std::lround(r.radius * 2 * scale)),
+          static_cast<int>(std::lround(r.radius * 2 * scale)));
+      if (!part) { DeleteObject(combined); return; }
+      const int status = CombineRgn(combined, combined, part, RGN_OR);
+      DeleteObject(part);
+      if (status == ERROR) { DeleteObject(combined); return; }
+    }
+    if (!SetWindowRgn(hwnd, combined, TRUE)) DeleteObject(combined);
+    return;
+  }
   const int left =
       static_cast<int>(std::lround(island_hit_shape_.inset_x * scale));
   const int top =
@@ -163,7 +223,7 @@ void FlutterWindow::RefreshIslandHitShape() {
     return;
   }
   // SetWindowRgn takes ownership of the HRGN.
-  SetWindowRgn(hwnd, region, TRUE);
+  if (!SetWindowRgn(hwnd, region, TRUE)) DeleteObject(region);
 }
 
 flutter::EncodableMap FlutterWindow::GetWorkAreaForWindow() {
@@ -264,6 +324,11 @@ FlutterWindow::MessageHandler(HWND hwnd, UINT const message,
   }
 
   switch (message) {
+    case WM_SIZE: {
+      LRESULT handled = Win32Window::MessageHandler(hwnd, message, wparam, lparam);
+      RefreshIslandHitShape();
+      return handled;
+    }
     case WM_FONTCHANGE:
       flutter_controller_->engine()->ReloadSystemFonts();
       break;

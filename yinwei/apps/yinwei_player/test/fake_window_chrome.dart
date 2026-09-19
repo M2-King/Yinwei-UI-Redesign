@@ -4,6 +4,10 @@ import 'package:yinwei_player/state/window_chrome.dart';
 
 /// In-memory chrome for unit tests.
 class FakeWindowChrome implements WindowChrome {
+  bool cancelled = false;
+  List<RRect> hitRegions = const [];
+  @override
+  void cancelPendingOperations() => cancelled = true;
   Size size = const Size(1440, 900);
   Offset position = const Offset(80, 80);
   Offset cursor = const Offset(100, 100);
@@ -91,7 +95,10 @@ class FakeWindowChrome implements WindowChrome {
     double insetX = 0,
     double insetY = 0,
     double radius = 0,
+    List<RRect> regions = const [],
   }) async {
+    if (cancelled) return;
+    hitRegions = regions;
     hitShapeEnabled = enabled;
     hitShapeWindowSize = windowSize;
     hitShapeInsetX = insetX;

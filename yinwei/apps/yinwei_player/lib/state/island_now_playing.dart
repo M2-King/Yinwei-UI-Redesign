@@ -70,10 +70,10 @@ class IslandNowPlaying {
   }) {
     final systemLive = system.hasTrack && system.playing;
 
-    if (liveHrtfHealthy && system.hasTrack) {
+    if (liveHrtfHealthy) {
       return IslandNowPlaying(
         source: IslandMediaSource.system,
-        title: system.title,
+        title: system.hasTrack ? system.title : 'System Audio',
         artist: system.artist.isEmpty ? _shortApp(system.sourceApp) : system.artist,
         album: system.album,
         playing: true,
@@ -176,12 +176,12 @@ class IslandNowPlaying {
 
     return IslandNowPlaying(
       source: IslandMediaSource.idle,
-      title: engine.track.title,
-      artist: engine.track.artist,
-      album: engine.track.album,
+      title: '音围 Yinwei',
+      artist: '',
+      album: '',
       playing: false,
-      playhead: engine.playhead,
-      duration: engine.track.duration,
+      playhead: 0,
+      duration: Duration.zero,
       liveTransfer: false,
       yinweiSpatial: false,
       azimuthDeg: engine.azimuthDeg,

@@ -414,6 +414,7 @@ void main() {
   testWidgets('playhead ticks keep inspector mounted without workspace playhead churn',
       (tester) async {
     final ctrl = EngineController(engine: MockEngine(), backendLabel: 'Mock');
+    ctrl.hasOpenedFile = true; // This test models a loaded, paused track.
     await tester.binding.setSurfaceSize(const Size(1440, 900));
     addTearDown(() async {
       await tester.binding.setSurfaceSize(null);

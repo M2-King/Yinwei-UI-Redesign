@@ -1,4 +1,5 @@
 import 'dart:ui';
+import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:yinwei_player/models/spatial_params.dart';
@@ -10,7 +11,7 @@ import 'fake_window_chrome.dart';
 
 void main() {
   group('IslandGeometry', () {
-    test('fixed two-step heights', () {
+    test('one stable container for collapsed and expanded', () {
       expect(
         IslandGeometry.sizeFor(WindowMode.islandCollapsed),
         const Size(IslandGeometry.width, IslandGeometry.collapsedHeight),
@@ -31,7 +32,7 @@ void main() {
           IslandGeometry.width - IslandGeometry.pillInsetX * 2);
       expect(
         collapsed.height,
-        IslandGeometry.collapsedHeight - IslandGeometry.pillInsetY * 2,
+        54,
       );
     });
 
@@ -91,6 +92,20 @@ void main() {
       expect(chrome.applyIslandCalls, 1);
     });
 
+    test('initial island still installs native chrome', () async {
+      ctrl.dispose();
+      chrome = FakeWindowChrome();
+      ctrl = WindowModeController(
+        chrome: chrome,
+        mode: WindowMode.islandCollapsed,
+      );
+      await ctrl.enterIsland();
+      expect(ctrl.mode, WindowMode.islandCollapsed);
+      expect(chrome.applyIslandCalls, 1);
+      expect(chrome.islandApplied, isTrue);
+      expect(ctrl.hitShapeEnabled, isTrue);
+    });
+
     test(
         'enterIsland places on the current window work area, not primary origin',
         () async {
@@ -116,6 +131,7 @@ void main() {
       expect(chrome.size.height, IslandGeometry.expandedHeight);
       expect(chrome.clickThrough, isFalse);
       expect(chrome.hitShapeEnabled, isTrue);
+      expect(chrome.applyIslandCalls, 1);
       expect(
         chrome.hitShapeWindowSize,
         IslandGeometry.sizeFor(WindowMode.islandExpanded),
@@ -230,5 +246,62 @@ void main() {
       expect(adapter.appliedRevision, revision);
       expect(adapter.snapshot()?['revision'], revision);
     });
+
+    test('mini uses disjoint hit regions and hover performs no native work',
+        () async {
+      await ctrl.enterIsland();
+      await ctrl.expandIsland();
+      ctrl.setMiniOpen(true);
+      await Future<void>.delayed(Duration.zero);
+      expect(chrome.hitRegions.length, 2);
+      expect(chrome.hitRegions.any((r) => r.contains(const Offset(288, 170))),
+          isFalse);
+      expect(chrome.hitRegions.last.contains(const Offset(288, 300)), isTrue);
+      final regions = chrome.setHitShapeCalls;
+      await ctrl.setPillHovered(true);
+      await ctrl.setPillHovered(false);
+      expect(chrome.setHitShapeCalls, regions);
+      expect(chrome.applyIslandCalls, 1);
+      ctrl.setMiniOpen(false);
+      await Future<void>.delayed(Duration.zero);
+      expect(chrome.hitRegions.length, 1);
+    });
+
+    test('small work areas scale the whole container inside the same display',
+        () async {
+      chrome.windowWorkArea = const Rect.fromLTWH(-400, 30, 400, 350);
+      await ctrl.enterIsland();
+      expect(chrome.size.width, lessThanOrEqualTo(400));
+      expect(chrome.position.dy + chrome.size.height, lessThanOrEqualTo(380));
+      expect(ctrl.contentScale, lessThan(1));
+    });
+
+    test(
+        'disposing in an async transition cancels subsequent native operations',
+        () async {
+      final gate = Completer<void>();
+      final gated = _GatedChrome(gate);
+      final subject = WindowModeController(chrome: gated);
+      final entering = subject.enterIsland();
+      subject.dispose();
+      gate.complete();
+      await entering;
+      await Future<void>.delayed(Duration.zero);
+      expect(gated.cancelled, isTrue);
+      expect(gated.applyIslandCalls, 0);
+      expect(gated.setHitShapeCalls, 0);
+      await subject.enterFull();
+      expect(gated.applyFullCalls, 0);
+    });
   });
+}
+
+class _GatedChrome extends FakeWindowChrome {
+  _GatedChrome(this.gate);
+  final Completer<void> gate;
+  @override
+  Future<Size> currentSize() async {
+    await gate.future;
+    return size;
+  }
 }

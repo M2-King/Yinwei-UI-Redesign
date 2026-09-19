@@ -11,6 +11,7 @@ void main() {
       engine: MockEngine(),
       backendLabel: 'Native · spatial_core',
     );
+    ctrl.hasOpenedFile = true; // The golden depicts a loaded, paused track.
     await tester.binding.setSurfaceSize(const Size(1440, 900));
     addTearDown(() => tester.binding.setSurfaceSize(null));
 

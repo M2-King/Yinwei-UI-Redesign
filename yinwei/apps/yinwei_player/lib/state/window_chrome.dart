@@ -1,3 +1,4 @@
+import 'dart:ui';
 import 'package:flutter/services.dart';
 import 'package:screen_retriever/screen_retriever.dart';
 import 'package:window_manager/window_manager.dart';
@@ -11,6 +12,7 @@ import 'package:window_manager/window_manager.dart';
 ///   DPI (`GetDpiForWindow`, dpi/96) so Island placement and hit-testing use
 ///   the same scale as the window's current display.
 abstract class WindowChrome {
+  void cancelPendingOperations();
   Future<Size> currentSize();
   Future<Offset> currentPosition();
   Future<Offset> cursorScreenPoint();
@@ -32,12 +34,25 @@ abstract class WindowChrome {
     double insetX = 0,
     double insetY = 0,
     double radius = 0,
+    List<RRect> regions = const [],
   });
 }
 
 /// Production chrome via [window_manager] + thin `yinwei/window_chrome` channel.
 class WindowManagerChrome implements WindowChrome {
   static const _channel = MethodChannel('yinwei/window_chrome');
+  bool _cancelled = false;
+  bool _island = false;
+
+  @override
+  void cancelPendingOperations() => _cancelled = true;
+
+  Future<void> _steps(List<Future<void> Function()> steps) async {
+    for (final step in steps) {
+      if (_cancelled) return;
+      await step();
+    }
+  }
 
   @override
   Future<Size> currentSize() => windowManager.getSize();
@@ -76,21 +91,23 @@ class WindowManagerChrome implements WindowChrome {
     required Size size,
     required Offset position,
   }) async {
-    await windowManager.setIgnoreMouseEvents(false);
-    await setToolWindow(false);
-    await windowManager.setAlwaysOnTop(false);
-    await windowManager.setSkipTaskbar(false);
-    // Restores frame after setAsFrameless (API is one-way).
-    await windowManager.setTitleBarStyle(TitleBarStyle.normal);
-    await windowManager.setHasShadow(true);
-    await windowManager.setResizable(true);
-    await windowManager.setBackgroundColor(const Color(0xFF0B0B0D));
-    await windowManager.setMinimumSize(const Size(1024, 640));
-    await windowManager.setMaximumSize(const Size(10000, 10000));
-    await windowManager.setSize(size);
-    await windowManager.setPosition(position);
-    await windowManager.show();
-    await windowManager.focus();
+    await _steps([
+      () => windowManager.setIgnoreMouseEvents(false),
+      () => setToolWindow(false),
+      () => windowManager.setAlwaysOnTop(false),
+      () => windowManager.setSkipTaskbar(false),
+      () => windowManager.setTitleBarStyle(TitleBarStyle.normal),
+      () => windowManager.setHasShadow(true),
+      () => windowManager.setResizable(true),
+      () => windowManager.setBackgroundColor(const Color(0xFF0B0B0D)),
+      () => windowManager.setMaximumSize(const Size(10000, 10000)),
+      () => windowManager.setMinimumSize(const Size(1024, 640)),
+      () => windowManager.setSize(size),
+      () => windowManager.setPosition(position),
+      () => windowManager.show(),
+      () => windowManager.focus(),
+    ]);
+    _island = false;
   }
 
   @override
@@ -98,29 +115,35 @@ class WindowManagerChrome implements WindowChrome {
     required Size size,
     required Offset position,
   }) async {
-    // Island click targeting uses SetWindowRgn, not WS_EX_TRANSPARENT.
-    await windowManager.setIgnoreMouseEvents(false);
-    await windowManager.setAsFrameless();
-    await windowManager.setHasShadow(false);
-    await windowManager.setResizable(false);
-    await windowManager.setAlwaysOnTop(true);
-    await windowManager.setSkipTaskbar(true);
-    await windowManager.setBackgroundColor(const Color(0x00000000));
-    await windowManager.setMinimumSize(size);
-    await windowManager.setMaximumSize(size);
-    await setToolWindow(true);
-    await windowManager.setSize(size);
-    await windowManager.setPosition(position);
-    await windowManager.show();
+    await _steps([
+      if (!_island) ...[
+        () => windowManager.setIgnoreMouseEvents(false),
+        () => windowManager.setAsFrameless(),
+        () => windowManager.setHasShadow(false),
+        () => windowManager.setResizable(false),
+        () => windowManager.setAlwaysOnTop(true),
+        () => windowManager.setSkipTaskbar(true),
+        () => windowManager.setBackgroundColor(const Color(0x00000000)),
+        () => setToolWindow(true),
+      ],
+      () => windowManager.setMinimumSize(Size.zero),
+      () => windowManager.setMaximumSize(const Size(10000, 10000)),
+      () => windowManager.setSize(size),
+      () => windowManager.setPosition(position),
+      () => windowManager.show(),
+    ]);
+    _island = true;
   }
 
   @override
   Future<void> setClickThrough(bool ignore) async {
+    if (_cancelled) return;
     await windowManager.setIgnoreMouseEvents(ignore, forward: true);
   }
 
   @override
   Future<void> setToolWindow(bool enable) async {
+    if (_cancelled) return;
     try {
       await _channel.invokeMethod<void>('setToolWindow', enable);
     } on MissingPluginException {
@@ -135,7 +158,9 @@ class WindowManagerChrome implements WindowChrome {
     double insetX = 0,
     double insetY = 0,
     double radius = 0,
+    List<RRect> regions = const [],
   }) async {
+    if (_cancelled) return;
     try {
       await _channel.invokeMethod<void>('setIslandHitShape', <String, dynamic>{
         'enabled': enabled,
@@ -144,6 +169,15 @@ class WindowManagerChrome implements WindowChrome {
         'insetX': insetX,
         'insetY': insetY,
         'radius': radius,
+        'regions': regions
+            .map((r) => <String, double>{
+                  'left': r.left,
+                  'top': r.top,
+                  'right': r.right,
+                  'bottom': r.bottom,
+                  'radius': r.tlRadiusX,
+                })
+            .toList(),
       });
     } on MissingPluginException {
       // Runner channel absent in tests / non-Windows hosts.

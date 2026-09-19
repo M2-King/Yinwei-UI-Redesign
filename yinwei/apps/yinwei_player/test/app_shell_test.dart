@@ -62,7 +62,8 @@ void main() {
     expect(transport.bottom, closeTo(900, 0.5));
     expect(workspace.width, greaterThan(inspector.width));
     expect(workspace.height, greaterThan(transport.height * 4));
-    expect(find.text('Across the Room'), findsOneWidget);
+    expect(find.text('Across the Room'), findsNothing);
+    expect(find.text('音围 Yinwei'), findsWidgets);
     expect(find.text('Point Source'), findsOneWidget);
     expect(find.text('Quick Controls'), findsOneWidget);
   });
@@ -224,6 +225,7 @@ void main() {
     );
     await tester.pump();
 
+    ctrl.hasOpenedFile = true;
     ctrl.playing = true;
     ctrl.notifyListeners();
     await tester.pump();
@@ -235,7 +237,7 @@ void main() {
     expect(find.byType(IslandBar), findsOneWidget);
     expect(ctrl.playing, isTrue);
 
-    await tester.tap(find.byTooltip('播放 / 暂停'));
+    await tester.tap(find.byKey(const ValueKey('island-play')));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 80));
     expect(ctrl.playing, isFalse);

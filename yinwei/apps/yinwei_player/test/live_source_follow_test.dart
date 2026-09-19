@@ -124,6 +124,22 @@ void main() {
     );
   });
 
+  test('paused SMTC refuses live start', () {
+    final paused = _track(
+      pid: soda,
+      process: 'SodaMusic',
+      title: 'Borsia',
+      playing: false,
+    );
+    expect(LiveSourceFollow.refuseStartReason(paused), '请先播放 Borsia，再开 HRTF LIVE');
+    expect(
+      LiveSourceFollow.refuseStartReason(
+        _track(pid: soda, process: 'SodaMusic', title: 'Borsia'),
+      ),
+      isNull,
+    );
+  });
+
   test('paused other app does not steal a healthy 汽水 pin', () {
     final paused = _track(
       pid: spotify,

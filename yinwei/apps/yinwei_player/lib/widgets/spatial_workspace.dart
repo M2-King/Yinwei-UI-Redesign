@@ -7,17 +7,19 @@ import 'package:flutter/material.dart';
 import 'package:webview_flutter_windows/webview_flutter_windows.dart';
 import 'package:yinwei_player/models/spatial_params.dart';
 import 'package:yinwei_player/runtime/spatial_scene_bridge.dart';
+import 'package:yinwei_player/runtime/workspace_presentation.dart';
 import 'package:yinwei_player/theme/yinwei_theme.dart';
 import 'package:yinwei_player/widgets/orbit_visualizer.dart';
 import 'package:yinwei_player/widgets/spatial_workspace_html.dart';
 
 /// Left-pane Spatial Audio Workspace.
 ///
-/// Windows Point mode: local Three.js scene in WebView2.
-/// Tests / Array / non-Windows: [OrbitVisualizer].
+/// Windows: one persistent Three.js studio in WebView2.
+/// Presentation idle / point / stereo2 is derived from playback + Array state.
+/// Tests / non-Windows / missing WebView2: [OrbitVisualizer] fallback.
 ///
-/// Three.js proposes world-XYZ intents. Flutter Scene Store is authoritative.
-/// Array speakers keep the native OrbitVisualizer path.
+/// Three.js proposes world-XYZ intents. Flutter Scene Store is the Point
+/// authority. Array speakers are a visual overlay, not SceneContract objects.
 class SpatialWorkspace extends StatefulWidget {
   const SpatialWorkspace({
     super.key,
@@ -29,6 +31,8 @@ class SpatialWorkspace extends StatefulWidget {
     this.active = true,
     this.orbiting = false,
     this.playing = false,
+    this.playbackMode = PlaybackMode.spatial,
+    this.arrayMode = ArrayMode.off,
     this.playbackTelemetry,
     this.arraySpeakers,
     this.selectedSpeakerIndex = 0,
@@ -43,6 +47,7 @@ class SpatialWorkspace extends StatefulWidget {
     this.onSpeakerAdd,
     this.matrixLinked = false,
     this.forceFallback = false,
+    this.suspended = false,
   });
 
   final double playhead;
@@ -53,8 +58,15 @@ class SpatialWorkspace extends StatefulWidget {
   final bool active;
   final bool orbiting;
   final bool playing;
+  final PlaybackMode playbackMode;
+  final ArrayMode arrayMode;
   final ValueListenable<PlaybackTelemetryV1>? playbackTelemetry;
   final List<ArraySpeaker>? arraySpeakers;
+
+  WorkspacePresentation get presentation => workspacePresentationOf(
+        playbackMode: playbackMode,
+        arrayMode: arrayMode,
+      );
   final int selectedSpeakerIndex;
   final Map<String, dynamic>? sceneSnapshot;
   final String? selectedObjectId;
@@ -69,6 +81,7 @@ class SpatialWorkspace extends StatefulWidget {
       onSpeakerAdd;
   final bool matrixLinked;
   final bool forceFallback;
+  final bool suspended;
 
   @override
   State<SpatialWorkspace> createState() => _SpatialWorkspaceState();
@@ -82,15 +95,31 @@ class _SpatialWorkspaceState extends State<SpatialWorkspace> {
   int? _lastSceneRevision;
   String? _lastTelemetry;
   String? _lastUi;
+  String? _lastPresentation;
   var _phase3SmokeStarted = false;
   var _phase6SmokeStarted = false;
+  var _bootStarted = false;
+  Future<void> _visibilityWork = Future<void>.value();
 
-  bool get _arrayOn =>
-      widget.arraySpeakers != null && widget.arraySpeakers!.isNotEmpty;
+  void _syncVisibility() {
+    _visibilityWork = _visibilityWork.then((_) async {
+      final web = _web;
+      if (!mounted || web == null) return;
+      // Cap compositor work if this surface is hidden. Do not TrySuspend;
+      // that native Stop+Start path aborted flutter_windows.dll.
+      if (widget.suspended) {
+        await web.setFpsLimit(1);
+      } else {
+        await web.setFpsLimit(0);
+        if (mounted && !widget.suspended) _pushAll();
+      }
+    }).catchError((Object e) {
+      debugPrint('[SpatialWorkspace] visibility: $e');
+    });
+  }
 
   bool get _useWebView {
     if (widget.forceFallback) return false;
-    if (_arrayOn) return false;
     if (_failed) return false;
     if (kIsWeb) return false;
     if (Platform.environment.containsKey('FLUTTER_TEST')) return false;
@@ -103,10 +132,12 @@ class _SpatialWorkspaceState extends State<SpatialWorkspace> {
     debugPrint(
       '[SpatialWorkspace] windows=${Platform.isWindows} '
       'flutterTest=${Platform.environment.containsKey('FLUTTER_TEST')} '
-      'array=$_arrayOn forceFallback=${widget.forceFallback} '
+      'presentation=${widget.presentation.name} '
+      'array=${widget.arrayMode.name} forceFallback=${widget.forceFallback} '
       'useWebView=$_useWebView',
     );
     if (_useWebView) {
+      _bootStarted = true;
       unawaited(_bootWebView());
     }
     widget.playbackTelemetry?.addListener(_onTelemetry);
@@ -135,15 +166,22 @@ class _SpatialWorkspaceState extends State<SpatialWorkspace> {
   }
 
   Future<void> _bootWebView() async {
+    if (_web != null) return;
     try {
       final version = await WebviewController.getWebViewVersion();
       debugPrint('[SpatialWorkspace] WebView2 runtime=$version');
+      if (!mounted) return;
       if (version == null) {
         throw StateError('WebView2 runtime missing');
       }
       final html = await SpatialWorkspaceHtml.load();
+      if (!mounted) return;
       final controller = WebviewController();
       await controller.initialize();
+      if (!mounted) {
+        await controller.dispose();
+        return;
+      }
       _subs.add(controller.webMessage.listen(_onWinMessage));
       _subs.add(
         controller.loadingState.listen((state) {
@@ -182,6 +220,7 @@ window.YinweiPose = {
       }
       debugPrint('[SpatialWorkspace] WebView2 controller ready');
       setState(() => _web = controller);
+      _syncVisibility();
       _maybeStartPhase3Smoke();
     } catch (e) {
       debugPrint('[SpatialWorkspace] WebView2 boot failed: $e');
@@ -194,6 +233,16 @@ window.YinweiPose = {
     debugPrint(
       '[SpatialWorkspace] js ${raw.length > 240 ? raw.substring(0, 240) : raw}',
     );
+    Map<String, dynamic>? data;
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is Map) data = Map<String, dynamic>.from(decoded);
+    } catch (_) {
+      data = null;
+    }
+    if (data != null && _handleArrayVisualIntent(data)) {
+      return;
+    }
     final handler = widget.onSceneIntent;
     if (handler != null) {
       SceneBridgeResult result;
@@ -203,14 +252,11 @@ window.YinweiPose = {
         return;
       }
       _sendOutgoing(result.outgoing);
+      if ((data?['type'] as String? ?? '') == 'ready') {
+        _pageReady = true;
+        _pushPresentation(force: true);
+      }
       _maybeStartPhase3Smoke();
-      return;
-    }
-    Map<String, dynamic>? data;
-    try {
-      final decoded = jsonDecode(raw);
-      if (decoded is Map<String, dynamic>) data = decoded;
-    } catch (_) {
       return;
     }
     if (data == null) return;
@@ -219,6 +265,37 @@ window.YinweiPose = {
       _pushAll(force: true);
       _maybeStartPhase3Smoke();
     }
+  }
+
+  bool _handleArrayVisualIntent(Map<String, dynamic> data) {
+    final type = data['type'] as String? ?? '';
+    if (type == 'arraySpeakerSelect' || type == 'selectObject') {
+      final index = data['index'] is num
+          ? (data['index'] as num).toInt()
+          : arraySpeakerIndexFromId(data['objectId'] as String?);
+      if (index == null) {
+        return type == 'arraySpeakerSelect';
+      }
+      widget.onSpeakerSelected?.call(index);
+      return true;
+    }
+    if (type == 'arraySpeakerPosePreview' || type == 'arraySpeakerPoseCommit') {
+      final index = data['index'] is num
+          ? (data['index'] as num).toInt()
+          : arraySpeakerIndexFromId(data['objectId'] as String?);
+      if (index == null) return true;
+      final az = (data['azimuthDeg'] as num?)?.toDouble();
+      final el = (data['elevationDeg'] as num?)?.toDouble();
+      final dist = (data['distanceM'] as num?)?.toDouble();
+      if (az != null && el != null) {
+        widget.onSpeakerPoseChanged?.call(index, az, el);
+      }
+      if (dist != null) {
+        widget.onSpeakerDistanceChanged?.call(index, dist);
+      }
+      return true;
+    }
+    return false;
   }
 
   Map<String, dynamic> _sceneMessage() {
@@ -242,10 +319,31 @@ window.YinweiPose = {
     };
   }
 
-  Map<String, dynamic> _uiMessage() => {
-        'type': 'uiState',
-        'selectedObjectId': widget.selectedObjectId,
-      };
+  Map<String, dynamic> _uiMessage() {
+    final selected = widget.presentation == WorkspacePresentation.stereo2
+        ? arraySpeakerObjectId(widget.selectedSpeakerIndex)
+        : widget.selectedObjectId;
+    return {
+      'type': 'uiState',
+      'selectedObjectId': selected,
+    };
+  }
+
+  Map<String, dynamic> _presentationMessage() {
+    final presentation = widget.presentation;
+    final speakers = presentation == WorkspacePresentation.stereo2
+        ? arraySpeakerVisuals(
+            speakers: widget.arraySpeakers ?? const [],
+            selectedIndex: widget.selectedSpeakerIndex,
+          )
+        : const <ArraySpeakerVisual>[];
+    return {
+      'type': 'presentationState',
+      'presentation': presentation.name,
+      'selectedSpeakerIndex': widget.selectedSpeakerIndex,
+      'arraySpeakers': speakers.map((s) => s.toJson()).toList(),
+    };
+  }
 
   void _sendOutgoing(List<Map<String, dynamic>> messages) {
     for (final msg in messages) {
@@ -261,6 +359,10 @@ window.YinweiPose = {
         final payload = jsonEncode(msg);
         _lastUi = payload;
         _runRaw('applyUiState', payload);
+      } else if (type == 'presentationState') {
+        final payload = jsonEncode(msg);
+        _lastPresentation = payload;
+        _runRaw('applyPresentation', payload);
       }
     }
   }
@@ -304,10 +406,18 @@ window.YinweiPose = {
     _runRaw('applyUiState', payload);
   }
 
+  void _pushPresentation({bool force = false}) {
+    final payload = jsonEncode(_presentationMessage());
+    if (!force && payload == _lastPresentation) return;
+    _lastPresentation = payload;
+    _runRaw('applyPresentation', payload);
+  }
+
   void _pushAll({bool force = false}) {
     _pushScene(force: force);
     _pushTelemetry(force: force);
     _pushUi(force: force);
+    _pushPresentation(force: force);
     _maybeStartPhase3Smoke();
     _maybeStartPhase6Smoke();
   }
@@ -356,11 +466,14 @@ window.YinweiPose = {
         'YinweiWorkspace.debug.nudgeSource(0.08, 0, -0.04, false)',
       );
     }
-    await step('nudge-xz-commit', 'YinweiWorkspace.debug.nudgeSource(0.05, 0, 0, true)');
+    await step('nudge-xz-commit',
+        'YinweiWorkspace.debug.nudgeSource(0.05, 0, 0, true)');
     for (var i = 0; i < 4; i++) {
-      await step('nudge-y-$i', 'YinweiWorkspace.debug.nudgeSource(0, 0.06, 0, false)');
+      await step(
+          'nudge-y-$i', 'YinweiWorkspace.debug.nudgeSource(0, 0.06, 0, false)');
     }
-    await step('nudge-y-commit', 'YinweiWorkspace.debug.nudgeSource(0, 0.04, 0, true)');
+    await step('nudge-y-commit',
+        'YinweiWorkspace.debug.nudgeSource(0, 0.04, 0, true)');
     await step('set-free', 'YinweiWorkspace.debug.setView("free")');
     await step('orbit', 'YinweiWorkspace.debug.orbit()');
     await step('pan', 'YinweiWorkspace.debug.pan()');
@@ -451,11 +564,19 @@ window.YinweiPose = {
   @override
   void didUpdateWidget(covariant SpatialWorkspace old) {
     super.didUpdateWidget(old);
+    if (old.suspended != widget.suspended) _syncVisibility();
     if (old.playbackTelemetry != widget.playbackTelemetry) {
       old.playbackTelemetry?.removeListener(_onTelemetry);
       widget.playbackTelemetry?.addListener(_onTelemetry);
     }
-    if (_useWebView) _pushAll();
+    if (_useWebView) {
+      if (_web == null && !_failed && !_bootStarted) {
+        _bootStarted = true;
+        unawaited(_bootWebView());
+      } else if (!widget.suspended) {
+        _pushAll();
+      }
+    }
   }
 
   @override
@@ -483,7 +604,9 @@ window.YinweiPose = {
         envelopment: _tel.envelopment,
         active: _tel.active,
         orbiting: _tel.orbiting,
-        arraySpeakers: widget.arraySpeakers,
+        arraySpeakers: widget.presentation == WorkspacePresentation.stereo2
+            ? widget.arraySpeakers
+            : null,
         selectedSpeakerIndex: widget.selectedSpeakerIndex,
         onPoseChanged: widget.onPoseChanged,
         onDistanceChanged: widget.onDistanceChanged,

@@ -49,4 +49,15 @@ class LiveSourceFollow {
   /// Wet HRTF stays silent until the source tree is pinned to muted speakers.
   /// No headphones/speakers split keeps overlay-preview (dry+wet on one device).
   static bool holdWetUntilPinned({required bool splitDetected}) => splitDetected;
+
+  /// Process loopback of a paused SMTC session is silent frames, then a
+  /// misleading "Wrong PID" native error.
+  static String? refuseStartReason(SystemMediaState smtc) {
+    if (!smtc.hasTrack) return '没有检测到系统正在播放的媒体';
+    if (!smtc.playing) {
+      final title = smtc.title.trim().isEmpty ? '系统媒体' : smtc.title.trim();
+      return '请先播放 $title，再开 HRTF LIVE';
+    }
+    return null;
+  }
 }

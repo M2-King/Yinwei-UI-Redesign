@@ -12,23 +12,39 @@ extension WindowModeX on WindowMode {
   bool get isExpandedIsland => this == WindowMode.islandExpanded;
 }
 
-/// Fixed island geometry — two height steps only (no per-frame HWND animation).
+/// One stable Island container. Only its visible native region changes.
 ///
 /// Coordinate space: Flutter logical pixels. Native Windows converts to
 /// physical pixels with `GetDpiForWindow` (dpi / 96). Do not apply extra
 /// scale constants in Dart.
 abstract final class IslandGeometry {
-  static const double width = 420;
-  static const double collapsedHeight = 64;
-  static const double expandedHeight = 120;
+  static const double width = 576;
+  static const double collapsedHeight = 488;
+  static const double expandedHeight = 488;
   static const double topInset = 10;
 
   /// Logical padding from the HWND edge to the visible pill (IslandBar).
-  static const double pillInsetX = 8;
-  static const double pillInsetY = 6;
+  static const double pillInsetX = 90;
+  static const double pillInsetY = 8;
 
   /// Visible pill corner radius. Must match the IslandBar decoration.
-  static const double pillRadius = 22;
+  static const double pillRadius = 28;
+
+  static Rect capsule({required bool expanded, bool dormant = false}) {
+    final w = expanded
+        ? 552.0
+        : dormant
+            ? 300.0
+            : 396.0;
+    final h = expanded
+        ? 156.0
+        : dormant
+            ? 46.0
+            : 54.0;
+    return Rect.fromLTWH((width - w) / 2, pillInsetY, w, h);
+  }
+
+  static const miniRect = Rect.fromLTWH(108, 176, 360, 300);
 
   static Size sizeFor(WindowMode mode) {
     switch (mode) {
@@ -42,17 +58,16 @@ abstract final class IslandGeometry {
   }
 
   static Size pillSizeFor(WindowMode mode) {
-    final size = sizeFor(mode);
-    return Size(
-      size.width - pillInsetX * 2,
-      size.height - pillInsetY * 2,
-    );
+    return capsule(expanded: mode.isExpandedIsland).size;
   }
 
   /// Top-center of [workArea] (logical pixels), with [topInset] from the top.
   static Offset topCenterIn(Rect workArea, Size islandSize) {
-    final x = workArea.left + (workArea.width - islandSize.width) / 2;
-    final y = workArea.top + topInset;
+    final x = workArea.left +
+        ((workArea.width - islandSize.width) / 2).clamp(0.0, double.infinity);
+    final y = workArea.top +
+        topInset.clamp(0.0,
+            (workArea.height - islandSize.height).clamp(0.0, double.infinity));
     return Offset(x, y);
   }
 }

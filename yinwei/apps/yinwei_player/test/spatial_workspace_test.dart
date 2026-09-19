@@ -68,6 +68,8 @@ void main() {
     expect(dart.contains('onSceneIntent'), isTrue);
     expect(dart.contains('applySceneSnapshot'), isTrue);
     expect(dart.contains('applyPlaybackTelemetry'), isTrue);
+    expect(dart.contains('if (_arrayOn) return false'), isFalse);
+    expect(dart.contains('applyPresentation'), isTrue);
   });
 
   test('Phase 3 scene.js is a professional 3D workspace without geometric clamp', () async {
@@ -79,6 +81,10 @@ void main() {
     expect(scene.contains('contactShadow'), isTrue);
     expect(scene.contains('relationLine'), isTrue);
     expect(scene.contains('camDamp'), isTrue);
+    expect(scene.contains('poseTweens'), isTrue);
+    expect(scene.contains('startPoseTween'), isTrue);
+    expect(scene.contains('shortestAzimuthDelta'), isTrue);
+    expect(scene.contains('poseToXyz'), isTrue);
     expect(scene.contains("makeLabelSprite('FRONT"), isFalse);
     expect(scene.contains("makeLabelSprite('RIGHT"), isFalse);
     expect(scene.contains("makeLabelSprite('LEFT"), isFalse);

@@ -35,4 +35,25 @@ class LiveCaptureHealth {
         lastEnergyAgeMs! < recentEnergyMs;
     return framesRising && recentEnergy;
   }
+
+  /// Compact bar / snackbar copy. Exclude-self silence is "nothing is
+  /// rendering", not a Yinwei PID dump.
+  static String explainStartFailure({
+    required String? nativeError,
+    required bool sourcePlaying,
+    required String sourceTitle,
+    required int sourcePid,
+  }) {
+    final title = sourceTitle.trim().isEmpty ? '系统媒体' : sourceTitle.trim();
+    if (!sourcePlaying) {
+      return '请先播放 $title，再开 HRTF LIVE';
+    }
+    final err = nativeError ?? '';
+    if (err.contains('process loopback silent') ||
+        err.contains('Wrong PID') ||
+        err.contains('blocked capture')) {
+      return '环回静音 · 无法捕获 $title（pid $sourcePid）。确认正在播放，且未静音源应用。';
+    }
+    return err.isEmpty ? 'Live HRTF 启动失败' : err;
+  }
 }

@@ -38,6 +38,10 @@
   var hoveredObjectId = null;
   var source = null;
   var listener = null;
+  var presentation = 'point';
+
+  var POSE_SNAP = 0.06;
+  var poseTweens = {};
 
   function xyzToPose(v) {
     var dist = v.length();
@@ -49,6 +53,95 @@
     if (az > 180) az -= 360;
     if (az <= -180) az += 360;
     return { azimuth: az, elevation: THREE.MathUtils.clamp(el, -90, 90), distance: dist };
+  }
+
+  function poseToXyz(pose, out) {
+    var az = pose.azimuth * DEG;
+    var el = pose.elevation * DEG;
+    var d = pose.distance;
+    var ce = Math.cos(el);
+    out = out || new THREE.Vector3();
+    return out.set(
+      d * Math.sin(az) * ce,
+      d * Math.sin(el),
+      -d * Math.cos(az) * ce
+    );
+  }
+
+  function shortestAzimuthDelta(from, to) {
+    var d = to - from;
+    while (d > 180) d -= 360;
+    while (d < -180) d += 360;
+    return d;
+  }
+
+  function cancelPoseTween(id) {
+    if (id) delete poseTweens[id];
+  }
+
+  var _tweenPos = new THREE.Vector3();
+
+  function applyMovedVisual(mesh) {
+    if (mesh.userData.kind === 'emitter' || mesh.userData.kind === 'arraySpeaker') {
+      mesh.lookAt(new THREE.Vector3(0, mesh.position.y, 0));
+      if (mesh.userData.shadow) {
+        mesh.userData.shadow.position.y = FLOOR_Y - mesh.position.y + 0.012;
+      }
+    }
+    if (mesh.userData.kind === 'source') {
+      source = mesh;
+      decorateSourceVisual(mesh);
+    }
+    if (mesh.userData.kind === 'listener') listener = mesh;
+    if (mesh.userData.id === selectedObjectId) showSelectionHud(mesh);
+  }
+
+  function startPoseTween(mesh, target) {
+    var id = mesh.userData.id;
+    var from = xyzToPose(mesh.position);
+    var to = xyzToPose(target);
+    var jump = mesh.position.distanceTo(target);
+    var azDelta = Math.abs(shortestAzimuthDelta(from.azimuth, to.azimuth));
+    var dur = THREE.MathUtils.clamp(260 + jump * 90 + azDelta * 1.6, 280, 560);
+    poseTweens[id] = {
+      id: id,
+      fromAz: from.azimuth,
+      fromEl: from.elevation,
+      fromDist: from.distance,
+      dAz: shortestAzimuthDelta(from.azimuth, to.azimuth),
+      dEl: to.elevation - from.elevation,
+      dDist: to.distance - from.distance,
+      t0: performance.now(),
+      dur: dur,
+    };
+  }
+
+  function stepPoseTweens(now) {
+    var ids = Object.keys(poseTweens);
+    if (!ids.length) return;
+    ids.forEach(function (id) {
+      var tw = poseTweens[id];
+      var mesh = objectsById[id];
+      if (!mesh || (dragging && dragging.objectId === id)) {
+        cancelPoseTween(id);
+        return;
+      }
+      var k = Math.min(1, (now - tw.t0) / tw.dur);
+      var ease = 1 - Math.pow(1 - k, 3);
+      poseToXyz(
+        {
+          azimuth: tw.fromAz + tw.dAz * ease,
+          elevation: tw.fromEl + tw.dEl * ease,
+          distance: tw.fromDist + tw.dDist * ease,
+        },
+        _tweenPos
+      );
+      mesh.position.copy(_tweenPos);
+      applyMovedVisual(mesh);
+      if (k >= 1) cancelPoseTween(id);
+    });
+    formatPose();
+    needsRender = true;
   }
 
   function quatDomainToThree(q) {
@@ -959,7 +1052,7 @@
 
   function formatPose() {
     var el = document.getElementById('pose');
-    if (!source) {
+    if (presentation !== 'point' || !source || !source.visible) {
       el.innerHTML = '<span>Az</span>—  <span>El</span>—  <span>Dist</span>—';
       return;
     }
@@ -998,13 +1091,17 @@
         ? 'SOURCE'
         : kind === 'listener'
           ? 'LISTENER'
-          : String(mesh.userData.visualRole || mesh.userData.id || 'EMITTER').toUpperCase();
+          : kind === 'arraySpeaker'
+            ? String(mesh.userData.visualRole || mesh.userData.id || 'SPEAKER').toUpperCase()
+            : String(mesh.userData.visualRole || mesh.userData.id || 'EMITTER').toUpperCase();
     var note =
-      kind === 'emitter'
-        ? 'Studio monitor · visual reference'
-        : kind === 'source'
-          ? 'Point source'
-          : 'Listening origin';
+      kind === 'arraySpeaker'
+        ? '2.0 array · acoustic'
+        : kind === 'emitter'
+          ? 'Studio monitor · visual reference'
+          : kind === 'source'
+            ? 'Point source'
+            : 'Listening origin';
     el.style.display = 'block';
     el.innerHTML = '<div class="ch">' + title + '</div><div class="muted">' + note + '</div>';
     selectionHalo.visible = true;
@@ -1020,13 +1117,18 @@
     needsRender = true;
   }
 
+  function isArraySpeakerId(id) {
+    return typeof id === 'string' && id.indexOf('array-') === 0;
+  }
+
   function createMeshFor(obj) {
     var mesh;
     if (obj.type === 'listener') mesh = makeListenerMesh();
     else if (obj.type === 'source') mesh = makeSourceMesh();
     else mesh = makeEmitterMesh(obj);
     mesh.userData.id = obj.id;
-    mesh.userData.kind = obj.type;
+    mesh.userData.kind = obj.type === 'arraySpeaker' ? 'arraySpeaker' : obj.type;
+    if (typeof obj.index === 'number') mesh.userData.arrayIndex = obj.index;
     scene.add(mesh);
     objectsById[obj.id] = mesh;
     if (obj.type === 'listener') listener = mesh;
@@ -1034,26 +1136,36 @@
     return mesh;
   }
 
-  function updateMeshTransform(mesh, obj, skipSource) {
-    if (skipSource && mesh.userData.kind === 'source') return;
-    mesh.position.copy(worldOf(obj));
+  function updateMeshTransform(mesh, obj, skipSource, animate) {
+    if (skipSource && mesh.userData.kind === 'source') {
+      cancelPoseTween(mesh.userData.id);
+      return;
+    }
+    var target = worldOf(obj);
     applyDomainOrientation(mesh, obj);
-    if (mesh.userData.kind === 'emitter') {
-      mesh.lookAt(new THREE.Vector3(0, mesh.position.y, 0));
+    var kind = mesh.userData.kind;
+    var canTween =
+      !!animate &&
+      kind !== 'listener' &&
+      kind !== 'emitter' &&
+      mesh.visible !== false &&
+      mesh.position.distanceToSquared(target) > POSE_SNAP * POSE_SNAP;
+    if (canTween) {
+      startPoseTween(mesh, target);
+    } else {
+      cancelPoseTween(mesh.userData.id);
+      mesh.position.copy(target);
+      applyMovedVisual(mesh);
+    }
+    if (kind === 'emitter' || kind === 'arraySpeaker') {
       mesh.userData.visualRole = obj.visualRole;
       if (mesh.userData.label) {
         mesh.userData.label.visible =
           mesh.userData.id === selectedObjectId || mesh.userData.id === hoveredObjectId;
       }
-      if (mesh.userData.shadow) {
-        mesh.userData.shadow.position.y = FLOOR_Y - mesh.position.y + 0.012;
-      }
     }
-    if (mesh.userData.kind === 'source') {
-      source = mesh;
-      decorateSourceVisual(mesh);
-    }
-    if (mesh.userData.kind === 'listener') listener = mesh;
+    if (kind === 'source') source = mesh;
+    if (kind === 'listener') listener = mesh;
   }
 
   function applySceneSnapshot(msg) {
@@ -1068,8 +1180,10 @@
       if (!obj || !obj.id) return;
       incoming[obj.id] = true;
       var mesh = objectsById[obj.id];
+      var isNew = !mesh;
       if (!mesh) mesh = createMeshFor(obj);
-      updateMeshTransform(mesh, obj, skipSource && obj.id === skipSource);
+      var skip = skipSource && obj.id === skipSource;
+      updateMeshTransform(mesh, obj, skip, !isNew && !skip);
     }
 
     upsert(sceneDoc.listener);
@@ -1078,19 +1192,90 @@
 
     Object.keys(objectsById).forEach(function (id) {
       if (incoming[id]) return;
+      if (isArraySpeakerId(id)) return;
       var mesh = objectsById[id];
       scene.remove(mesh);
+      cancelPoseTween(id);
       delete objectsById[id];
       if (source === mesh) source = null;
       if (listener === mesh) listener = null;
     });
 
     formatPose();
-    if (selectedObjectId && objectsById[selectedObjectId]) {
+    applyPresentationVisibility();
+    if (selectedObjectId && objectsById[selectedObjectId] && objectsById[selectedObjectId].visible) {
       showSelectionHud(objectsById[selectedObjectId]);
     } else if (!selectedObjectId) {
       showSelectionHud(null);
     }
+    needsRender = true;
+  }
+
+  function applyPresentationVisibility() {
+    var showSource = presentation === 'point';
+    var showListener = presentation !== 'idle';
+    var showArray = presentation === 'stereo2';
+    Object.keys(objectsById).forEach(function (id) {
+      var mesh = objectsById[id];
+      var kind = mesh.userData.kind;
+      if (kind === 'source') mesh.visible = showSource;
+      else if (kind === 'listener') mesh.visible = showListener;
+      else if (kind === 'arraySpeaker') mesh.visible = showArray;
+      else if (kind === 'emitter') mesh.visible = false;
+    });
+    if (showSource && source) decorateSourceVisual(source);
+    else decorateSourceVisual(null);
+    waveGroup.visible = showSource && state.playing && state.active;
+    if (selectedObjectId && objectsById[selectedObjectId] && !objectsById[selectedObjectId].visible) {
+      selectedObjectId = null;
+      showSelectionHud(null);
+    }
+    needsRender = true;
+  }
+
+  function applyPresentation(msg) {
+    if (!msg) return;
+    presentation = msg.presentation || 'point';
+    var speakers = presentation === 'stereo2' ? msg.arraySpeakers || [] : [];
+    var incoming = {};
+    var skipArray =
+      dragging && dragging.kind === 'arraySpeaker' ? dragging.objectId : null;
+    speakers.forEach(function (spk) {
+      if (!spk) return;
+      var id = spk.id || ('array-' + spk.index);
+      incoming[id] = true;
+      var obj = {
+        id: id,
+        type: 'arraySpeaker',
+        visualRole: spk.label,
+        index: spk.index,
+        worldPosition: spk.worldPosition,
+      };
+      var mesh = objectsById[id];
+      var isNew = !mesh;
+      if (!mesh) mesh = createMeshFor(obj);
+      if (id !== skipArray) updateMeshTransform(mesh, obj, false, !isNew);
+      mesh.userData.kind = 'arraySpeaker';
+      mesh.userData.arrayIndex = spk.index;
+      mesh.userData.mute = !!spk.mute;
+    });
+    Object.keys(objectsById).forEach(function (id) {
+      if (!isArraySpeakerId(id)) return;
+      if (incoming[id]) return;
+      var mesh = objectsById[id];
+      scene.remove(mesh);
+      cancelPoseTween(id);
+      delete objectsById[id];
+    });
+    applyPresentationVisibility();
+    if (presentation === 'stereo2' && typeof msg.selectedSpeakerIndex === 'number') {
+      var selId = 'array-' + msg.selectedSpeakerIndex;
+      if (objectsById[selId] && objectsById[selId].visible) {
+        selectedObjectId = selId;
+        showSelectionHud(objectsById[selId]);
+      }
+    }
+    formatPose();
     needsRender = true;
   }
 
@@ -1110,7 +1295,8 @@
     state.active = active;
     state.orbiting = orbiting;
     if (!visualChanged) return;
-    decorateSourceVisual(source);
+    if (presentation === 'point') decorateSourceVisual(source);
+    else decorateSourceVisual(null);
     needsRender = true;
   }
 
@@ -1133,6 +1319,30 @@
     if (window.YinweiPose && typeof window.YinweiPose.postMessage === 'function') {
       window.YinweiPose.postMessage(msg);
     }
+  }
+
+  function postArrayIntent(type, mesh, force) {
+    if (!mesh) return;
+    if (!isFinite(mesh.position.x) || !isFinite(mesh.position.y) || !isFinite(mesh.position.z)) {
+      return;
+    }
+    var now = performance.now();
+    if (!force && type === 'arraySpeakerPosePreview' && now - lastPosePost < POSE_MS) return;
+    lastPosePost = now;
+    var pose = xyzToPose(mesh.position);
+    postToHost({
+      type: type,
+      objectId: mesh.userData.id,
+      index: mesh.userData.arrayIndex,
+      azimuthDeg: pose.azimuth,
+      elevationDeg: pose.elevation,
+      distanceM: pose.distance,
+      worldPosition: {
+        x: mesh.position.x,
+        y: mesh.position.y,
+        z: mesh.position.z,
+      },
+    });
   }
 
   function postSourceIntent(type, force) {
@@ -1172,9 +1382,13 @@
   }
 
   function pickableMeshes() {
-    return Object.keys(objectsById).map(function (id) {
-      return objectsById[id];
-    });
+    return Object.keys(objectsById)
+      .map(function (id) {
+        return objectsById[id];
+      })
+      .filter(function (mesh) {
+        return mesh && mesh.visible !== false;
+      });
   }
 
   function resolveHit(object) {
@@ -1215,13 +1429,29 @@
 
   function selectResolved(resolved) {
     if (!resolved) {
+      if (presentation === 'stereo2') {
+        showSelectionHud(
+          selectedObjectId && objectsById[selectedObjectId]
+            ? objectsById[selectedObjectId]
+            : null
+        );
+        return;
+      }
       selectedObjectId = null;
       postToHost({ type: 'selectObject', objectId: null });
       showSelectionHud(null);
       return;
     }
     selectedObjectId = resolved.mesh.userData.id;
-    postToHost({ type: 'selectObject', objectId: selectedObjectId });
+    if (resolved.mesh.userData.kind === 'arraySpeaker') {
+      postToHost({
+        type: 'arraySpeakerSelect',
+        objectId: selectedObjectId,
+        index: resolved.mesh.userData.arrayIndex,
+      });
+    } else if (presentation === 'point') {
+      postToHost({ type: 'selectObject', objectId: selectedObjectId });
+    }
     showSelectionHud(resolved.mesh);
   }
 
@@ -1234,13 +1464,37 @@
     lastPtr.x = e.clientX;
     lastPtr.y = e.clientY;
     var resolved = pick(e);
-    if (e.button === 0 && resolved && resolved.mesh.userData.kind === 'source') {
+    if (e.button === 0 && presentation === 'point' && resolved && resolved.mesh.userData.kind === 'source') {
       dragging = {
         kind: 'source',
         objectId: resolved.mesh.userData.id,
         mode: resolved.elevationHandle || e.shiftKey ? 'y' : 'xz',
       };
       gestureBasedOnRevision = authoritativeRevision;
+      cancelPoseTween(resolved.mesh.userData.id);
+      if (dragging.mode === 'y') {
+        camera.getWorldDirection(_dir);
+        _right.crossVectors(_dir, camera.up).normalize();
+        dragPlane.setFromNormalAndCoplanarPoint(_right, resolved.mesh.position);
+      } else {
+        dragPlane.setFromNormalAndCoplanarPoint(
+          new THREE.Vector3(0, 1, 0),
+          resolved.mesh.position
+        );
+      }
+      selectResolved(resolved);
+      try {
+        renderer.domElement.setPointerCapture(e.pointerId);
+      } catch (err) {}
+      return;
+    }
+    if (e.button === 0 && presentation === 'stereo2' && resolved && resolved.mesh.userData.kind === 'arraySpeaker') {
+      dragging = {
+        kind: 'arraySpeaker',
+        objectId: resolved.mesh.userData.id,
+        mode: e.shiftKey ? 'y' : 'xz',
+      };
+      cancelPoseTween(resolved.mesh.userData.id);
       if (dragging.mode === 'y') {
         camera.getWorldDirection(_dir);
         _right.crossVectors(_dir, camera.up).normalize();
@@ -1304,6 +1558,34 @@
       }
       return;
     }
+    if (dragging && dragging.kind === 'arraySpeaker') {
+      var arrayMesh = objectsById[dragging.objectId];
+      if (!arrayMesh) return;
+      ndcFromEvent(e);
+      raycaster.setFromCamera(pointer, camera);
+      if (e.shiftKey) dragging.mode = 'y';
+      if (dragging.mode === 'y') {
+        camera.getWorldDirection(_dir);
+        _right.crossVectors(_dir, camera.up).normalize();
+        dragPlane.setFromNormalAndCoplanarPoint(_right, arrayMesh.position);
+      }
+      if (raycaster.ray.intersectPlane(dragPlane, dragHit)) {
+        if (dragging.mode === 'y') {
+          arrayMesh.position.y = dragHit.y;
+        } else {
+          arrayMesh.position.x = dragHit.x;
+          arrayMesh.position.z = dragHit.z;
+        }
+        arrayMesh.lookAt(new THREE.Vector3(0, arrayMesh.position.y, 0));
+        if (arrayMesh.userData.shadow) {
+          arrayMesh.userData.shadow.position.y = FLOOR_Y - arrayMesh.position.y + 0.012;
+        }
+        showSelectionHud(arrayMesh);
+        postArrayIntent('arraySpeakerPosePreview', arrayMesh, false);
+        needsRender = true;
+      }
+      return;
+    }
     if (!dragging) {
       var hover = pick(e);
       var nextHover = hover ? hover.mesh.userData.id : null;
@@ -1342,6 +1624,10 @@
     if (dragging && dragging.kind === 'source') {
       postSourceIntent('sourcePoseCommit', true);
     }
+    if (dragging && dragging.kind === 'arraySpeaker') {
+      var commitMesh = objectsById[dragging.objectId];
+      if (commitMesh) postArrayIntent('arraySpeakerPoseCommit', commitMesh, true);
+    }
     dragging = null;
     gestureBasedOnRevision = null;
     orbitingCam = false;
@@ -1368,6 +1654,19 @@
         needsRender = true;
         return;
       }
+      if (dragging && dragging.kind === 'arraySpeaker') {
+        var wheelMesh = objectsById[dragging.objectId];
+        if (wheelMesh) {
+          var alen = Math.max(1e-6, wheelMesh.position.length());
+          var anext = Math.max(0.05, alen + (e.deltaY > 0 ? 0.12 : -0.12));
+          wheelMesh.position.setLength(anext);
+          wheelMesh.lookAt(new THREE.Vector3(0, wheelMesh.position.y, 0));
+          showSelectionHud(wheelMesh);
+          postArrayIntent('arraySpeakerPosePreview', wheelMesh, false);
+          needsRender = true;
+        }
+        return;
+      }
       camSphGoal.radius = THREE.MathUtils.clamp(
         camSphGoal.radius * (e.deltaY > 0 ? 1.07 : 0.93),
         1.4,
@@ -1389,7 +1688,9 @@
     var box = new THREE.Box3();
     var has = false;
     Object.keys(objectsById).forEach(function (id) {
-      box.expandByObject(objectsById[id]);
+      var mesh = objectsById[id];
+      if (!mesh.visible) return;
+      box.expandByObject(mesh);
       has = true;
     });
     if (!has) return VIEW.free;
@@ -1441,7 +1742,7 @@
   });
 
   function spawnWave() {
-    if (!source) return;
+    if (presentation !== 'point' || !source) return;
     for (var i = 0; i < waves.length; i++) {
       if (waves[i].userData.age > 1.4) {
         waves[i].userData.age = 0;
@@ -1453,7 +1754,7 @@
   }
 
   function updateWaves(dt) {
-    var live = state.playing && state.active;
+    var live = presentation === 'point' && state.playing && state.active;
     waveGroup.visible = live;
     if (!live) return;
     waveAcc += dt;
@@ -1492,6 +1793,8 @@
       needsRender = true;
     }
 
+    stepPoseTweens(now);
+
     var damp = 1 - Math.pow(1 - camDamp, dt * 60);
     if (
       Math.abs(camSph.radius - camSphGoal.radius) > 1e-4 ||
@@ -1507,7 +1810,7 @@
       needsRender = true;
     }
 
-    var animate = (state.playing && state.active) || dragging;
+    var animate = (presentation === 'point' && state.playing && state.active) || dragging;
     if (animate) {
       updateWaves(dt);
       if (source) {
@@ -1570,7 +1873,15 @@
       source: source
         ? { x: source.position.x, y: source.position.y, z: source.position.z }
         : null,
-      hasListener: !!listener,
+      presentation: presentation,
+      sourceVisible: !!(source && source.visible),
+      listenerVisible: !!(listener && listener.visible),
+      visibleIds: Object.keys(objectsById).filter(function (id) {
+        return objectsById[id].visible !== false;
+      }),
+      arrayCount: Object.keys(objectsById).filter(function (id) {
+        return objectsById[id].userData.kind === 'arraySpeaker';
+      }).length,
       emitterCount: Object.keys(objectsById).filter(function (id) {
         return objectsById[id].userData.kind === 'emitter';
       }).length,
@@ -1591,6 +1902,7 @@
     applySceneSnapshot: applySceneSnapshot,
     applyPlaybackTelemetry: applyPlaybackTelemetry,
     applyUiState: applyUiState,
+    applyPresentation: applyPresentation,
     init: function () {
       postToHost({ type: 'ready' });
     },
