@@ -41,7 +41,7 @@ jobs:
     env:
       PLAYER: ${{ github.workspace }}/yinwei/apps/yinwei_player
       YINWEI_ROOT: ${{ github.workspace }}/yinwei
-      LOG_DIR: ${{ runner.temp }}/yinwei-ios-logs
+      LOG_DIR: ${{ github.workspace }}/.ci-ios-logs
       IPA_PATH: ${{ github.workspace }}/Yinwei-unsigned.ipa
       INFO_PATH: ${{ github.workspace }}/Yinwei-build-info.txt
       GIT_SHA: ${{ github.sha }}
@@ -481,6 +481,6 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: Yinwei-iOS-unsigned-logs-${{ github.sha }}
-          path: ${{ runner.temp }}/yinwei-ios-logs/
+          path: ${{ github.workspace }}/.ci-ios-logs/
           if-no-files-found: ignore
           retention-days: 7
