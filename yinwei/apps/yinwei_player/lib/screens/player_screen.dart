@@ -19,6 +19,7 @@ import 'package:yinwei_player/platform/platform_capabilities.dart';
 import 'package:yinwei_player/runtime/spatial_runtime_adapter.dart';
 import 'package:yinwei_player/runtime/spatial_scene_bridge.dart';
 import 'package:yinwei_player/runtime/island_spatial_controls.dart';
+import 'package:yinwei_player/runtime/orbit_pose_math.dart';
 import 'package:yinwei_player/runtime/island_runtime_probe.dart';
 import 'package:yinwei_player/contracts/coordinate_frame_v1.dart';
 import 'package:yinwei_player/widgets/island_spatial_controller.dart';
@@ -188,13 +189,18 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
     });
   }
 
+  bool get _orbitOverlayActive => OrbitOverlay.active(
+        mode: _ctrl.mode,
+        motion: _ctrl.params.motion,
+        playing: _ctrl.playing,
+        arrayEnabled: _ctrl.array.enabled,
+      );
+
   void _publishTelemetry() {
     final next = PlaybackTelemetryV1(
       playhead: _ctrl.playhead,
       playing: _ctrl.playing,
-      orbiting: _ctrl.params.motion == MotionMode.orbit &&
-          _ctrl.mode == PlaybackMode.spatial &&
-          _ctrl.playing,
+      orbiting: _orbitOverlayActive,
       envelopment: _ctrl.params.envelopment,
       active: _live.running || _ctrl.mode == PlaybackMode.spatial,
       azimuthDeg: _live.running ? _live.azimuthDeg() : _ctrl.azimuthDeg,
@@ -261,7 +267,14 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
 
   SceneBridgeResult _onSceneIntent(String raw) {
     final previousSelection = _sceneBridge.selectedObjectId;
-    final result = _sceneBridge.handleMessage(raw);
+    final rewritten = OrbitPoseMath.rewritePointIntent(
+      raw: raw,
+      scene: _spatial.snapshot() ?? const <String, dynamic>{},
+      elapsed: _ctrl.position,
+      orbitHz: _ctrl.params.orbitHz,
+      overlayActive: _orbitOverlayActive,
+    );
+    final result = _sceneBridge.handleMessage(rewritten);
     debugPrint(
       '[SceneBridge] accepted=${result.accepted} mutated=${result.sceneMutated} '
       'write=${result.shouldWriteEngine} rev=${_spatial.appliedRevision} '
@@ -715,15 +728,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
                                                   c.array.selectedIndex,
                                               matrixLinked:
                                                   c.array.matrixLinked,
-                                              orbiting: !c.array.enabled &&
-                                                  (_live.running ||
-                                                      (c.params.motion ==
-                                                              MotionMode
-                                                                  .orbit &&
-                                                          c.mode ==
-                                                              PlaybackMode
-                                                                  .spatial &&
-                                                          c.playing)),
+                                              orbiting: _orbitOverlayActive,
                                               active: _live.running ||
                                                   c.mode ==
                                                       PlaybackMode.spatial,
@@ -731,9 +736,17 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
                                                       WorkspacePresentation
                                                           .point
                                                   ? (az, el) {
+                                                      final visualAz =
+                                                          _orbitOverlayActive
+                                                              ? _ctrl.params
+                                                                  .originAzimuthFromVisual(
+                                                                  az,
+                                                                  _ctrl.position,
+                                                                )
+                                                              : az;
                                                       final next = c.params
                                                           .copy()
-                                                        ..azimuthDeg = az
+                                                        ..azimuthDeg = visualAz
                                                         ..elevationDeg = el
                                                         ..selectedPreset = null;
                                                       _applySpatialFromUi(next);
@@ -1000,6 +1013,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
                 pointReadout: _islandPointReadout(),
                 miniController: IslandSpatialController(
                   sceneSnapshot: () => _spatial.snapshot()!,
+                  playbackTelemetry: _telemetry.value,
                   onSceneIntent: _onSceneIntent,
                   arrayLayout: () => _ctrl.array,
                   onArrayChanged: _applyArrayFromUi,
@@ -1049,7 +1063,10 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
   }
 
   String _islandPointReadout() {
-    final pose = IslandPointIntent.pose(_spatial.snapshot()!);
+    final pose = OrbitVisualPose.resolve(
+      scenePose: IslandPointIntent.pose(_spatial.snapshot()!),
+      telemetry: _telemetry.value,
+    );
     return '${pose.azimuthDeg.round()}° · ${pose.elevationDeg.round()}° · ${pose.distanceM.toStringAsFixed(2)} m';
   }
 

@@ -228,7 +228,6 @@ class EngineController extends ChangeNotifier {
     playing = false;
     _tick?.cancel();
     position = await _engine.position();
-    _syncAzimuth();
     notifyListeners();
   }
 
@@ -252,7 +251,13 @@ class EngineController extends ChangeNotifier {
   }
 
   void _syncAzimuth() {
-    azimuthDeg = params.visualAzimuthDeg(position);
+    if (playing &&
+        mode == PlaybackMode.spatial &&
+        params.motion == MotionMode.orbit) {
+      azimuthDeg = params.visualAzimuthDeg(position);
+    } else {
+      azimuthDeg = params.azimuthDeg;
+    }
     elevationDeg = params.elevationDeg;
   }
 

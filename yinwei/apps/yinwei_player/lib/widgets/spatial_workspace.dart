@@ -297,16 +297,7 @@ class _SpatialWorkspaceState extends State<SpatialWorkspace> {
     };
   }
 
-  Map<String, dynamic> _telemetryMessage() {
-    final tel = _tel;
-    return {
-      'type': 'playbackTelemetry',
-      'playing': tel.playing,
-      'orbiting': tel.orbiting,
-      'envelopment': tel.envelopment,
-      'active': tel.active,
-    };
-  }
+  Map<String, dynamic> _telemetryMessage() => _tel.toHostMessage();
 
   Map<String, dynamic> _uiMessage() {
     final selected = widget.presentation == WorkspacePresentation.stereo2

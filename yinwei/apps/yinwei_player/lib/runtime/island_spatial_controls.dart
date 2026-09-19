@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:math' as math;
 import 'package:yinwei_player/contracts/coordinate_frame_v1.dart';
 import 'package:yinwei_player/runtime/spatial_runtime_adapter.dart';
+import 'package:yinwei_player/runtime/spatial_scene_bridge.dart';
 
 /// Read-only coordinate adapter. No scene store, pose cache or engine access.
 abstract final class IslandPointIntent {
@@ -28,13 +29,17 @@ abstract final class IslandPointIntent {
   }
 
   static String commit(Map scene, SphericalV1 pose) {
-    final world = listenerLocalToWorld(sphericalToLocal(pose), listener(scene));
     return jsonEncode({
       'type': 'sourcePoseCommit',
       'objectId': kSpatialPointSourceIdV1,
       'basedOnRevision': scene['revision'],
-      'worldPosition': {'x': world.x, 'y': world.y, 'z': world.z},
+      'worldPosition': worldOf(scene, pose),
     });
+  }
+
+  static Map<String, double> worldOf(Map scene, SphericalV1 pose) {
+    final world = listenerLocalToWorld(sphericalToLocal(pose), listener(scene));
+    return {'x': world.x, 'y': world.y, 'z': world.z};
   }
 
   /// The circular control uses spherical metres as its radius, not projected
@@ -54,5 +59,21 @@ abstract final class IslandPointIntent {
             : wrapAzimuthDeg(math.atan2(dx, -dy) * 180 / math.pi),
         elevationDeg: elevationDeg,
         distanceM: r / radius * rangeM);
+  }
+}
+
+/// Read-only orbit overlay. Does not write SceneStore or EngineApi.
+abstract final class OrbitVisualPose {
+  static SphericalV1 resolve({
+    required SphericalV1 scenePose,
+    PlaybackTelemetryV1? telemetry,
+  }) {
+    final tel = telemetry;
+    if (tel == null || !tel.orbiting) return scenePose;
+    return SphericalV1(
+      azimuthDeg: tel.azimuthDeg,
+      elevationDeg: tel.elevationDeg,
+      distanceM: scenePose.distanceM,
+    );
   }
 }

@@ -11,12 +11,14 @@ class IslandSpatialController extends StatefulWidget {
       {super.key,
       required this.sceneSnapshot,
       required this.onSceneIntent,
+      this.playbackTelemetry,
       this.arrayLayout,
       this.onArrayChanged,
       this.onSpeakerSelected,
       required this.onClose});
   final Map<String, dynamic> Function() sceneSnapshot;
   final SceneBridgeResult Function(String) onSceneIntent;
+  final PlaybackTelemetryV1? playbackTelemetry;
   final VoidCallback onClose;
   final ArrayLayout Function()? arrayLayout;
   final ValueChanged<ArrayLayout>? onArrayChanged;
@@ -34,7 +36,12 @@ class _IslandSpatialControllerState extends State<IslandSpatialController> {
   static const _center = Offset(110, 102);
   bool get _stereo => widget.arrayLayout?.call().mode == ArrayMode.stereo2;
   SphericalV1 get _pose {
-    if (!_stereo) return IslandPointIntent.pose(widget.sceneSnapshot());
+    if (!_stereo) {
+      return OrbitVisualPose.resolve(
+        scenePose: IslandPointIntent.pose(widget.sceneSnapshot()),
+        telemetry: widget.playbackTelemetry,
+      );
+    }
     final s = widget.arrayLayout!().selected;
     return SphericalV1(
         azimuthDeg: s.azimuthDeg,

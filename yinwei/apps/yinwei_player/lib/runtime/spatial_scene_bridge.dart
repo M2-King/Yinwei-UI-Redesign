@@ -76,6 +76,17 @@ class PlaybackTelemetryV1 {
         azimuthDeg,
         elevationDeg,
       );
+
+  Map<String, dynamic> toHostMessage() => {
+        'type': 'playbackTelemetry',
+        'playhead': playhead,
+        'playing': playing,
+        'orbiting': orbiting,
+        'envelopment': envelopment,
+        'active': active,
+        'azimuthDeg': azimuthDeg,
+        'elevationDeg': elevationDeg,
+      };
 }
 
 class SceneBridgeResult {
@@ -117,6 +128,8 @@ class SpatialRendererRegistry {
     return null;
   }
 
+  bool _orbitOverlay = false;
+
   void applySceneSnapshot(Map scene) {
     final incoming = <String, Map<String, dynamic>>{};
     void add(Object? raw) {
@@ -135,16 +148,44 @@ class SpatialRendererRegistry {
       add(item);
     }
     for (final id in incoming.keys) {
+      final previousPos = objectsById[id]?['worldPosition'];
       if (!objectsById.containsKey(id)) {
         _creates[id] = (_creates[id] ?? 0) + 1;
       }
       objectsById[id] = incoming[id]!;
+      if (_orbitOverlay &&
+          id == kSpatialPointSourceIdV1 &&
+          previousPos != null) {
+        objectsById[id]!['worldPosition'] = previousPos;
+      }
     }
     objectsById.removeWhere((id, _) => !incoming.containsKey(id));
   }
 
   void applyPlaybackTelemetry(Map telemetry) {
-    // Playback is not scene state. Never rebuild emitters here.
+    // Playback is visual overlay only. Never rebuild emitters or allocate IDs.
+    _orbitOverlay = telemetry['orbiting'] == true;
+    if (!_orbitOverlay) return;
+    final az = telemetry['azimuthDeg'];
+    final el = telemetry['elevationDeg'];
+    if (az is! num || el is! num) return;
+    final source = objectsById[kSpatialPointSourceIdV1];
+    if (source == null) return;
+    final pos = source['worldPosition'];
+    if (pos is! Map) return;
+    final current = Vec3V1(
+      (pos['x'] as num).toDouble(),
+      (pos['y'] as num).toDouble(),
+      (pos['z'] as num).toDouble(),
+    );
+    final world = sphericalToLocal(
+      SphericalV1(
+        azimuthDeg: az.toDouble(),
+        elevationDeg: el.toDouble(),
+        distanceM: geometricDistanceM(current),
+      ),
+    );
+    source['worldPosition'] = {'x': world.x, 'y': world.y, 'z': world.z};
   }
 }
 
@@ -192,16 +233,7 @@ class SpatialSceneBridge {
     };
   }
 
-  Map<String, dynamic> playbackTelemetryMessage() {
-    return {
-      'type': 'playbackTelemetry',
-      'playhead': telemetry.playhead,
-      'playing': telemetry.playing,
-      'orbiting': telemetry.orbiting,
-      'envelopment': telemetry.envelopment,
-      'active': telemetry.active,
-    };
-  }
+  Map<String, dynamic> playbackTelemetryMessage() => telemetry.toHostMessage();
 
   Map<String, dynamic> uiStateMessage() {
     return {

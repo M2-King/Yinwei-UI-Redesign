@@ -23,6 +23,8 @@
     playing: false,
     active: true,
     orbiting: false,
+    azimuthDeg: 0,
+    elevationDeg: 0,
   };
 
   var viewMode = 'free';
@@ -80,6 +82,7 @@
   }
 
   var _tweenPos = new THREE.Vector3();
+  var _orbitPos = new THREE.Vector3();
 
   function applyMovedVisual(mesh) {
     if (mesh.userData.kind === 'emitter' || mesh.userData.kind === 'arraySpeaker') {
@@ -1174,7 +1177,11 @@
     var sceneDoc = msg.scene;
     var incoming = {};
     var skipSource =
-      dragging && dragging.kind === 'source' ? dragging.objectId : null;
+      dragging && dragging.kind === 'source'
+        ? dragging.objectId
+        : state.orbiting && source
+          ? source.userData.id
+          : null;
 
     function upsert(obj) {
       if (!obj || !obj.id) return;
@@ -1286,10 +1293,39 @@
     var active = typeof next.active === 'boolean' ? next.active : state.active;
     var orbiting = typeof next.orbiting === 'boolean' ? next.orbiting : state.orbiting;
     if (typeof next.playhead === 'number') state.playhead = next.playhead;
+    if (typeof next.azimuthDeg === 'number') state.azimuthDeg = next.azimuthDeg;
+    if (typeof next.elevationDeg === 'number') state.elevationDeg = next.elevationDeg;
+    var poseMoved = false;
+    if (
+      presentation === 'point' &&
+      orbiting &&
+      source &&
+      typeof next.azimuthDeg === 'number' &&
+      typeof next.elevationDeg === 'number' &&
+      !(dragging && dragging.kind === 'source')
+    ) {
+      cancelPoseTween(source.userData.id);
+      var current = xyzToPose(source.position);
+      poseToXyz(
+        {
+          azimuth: next.azimuthDeg,
+          elevation: next.elevationDeg,
+          distance: current.distance,
+        },
+        _orbitPos
+      );
+      if (source.position.distanceToSquared(_orbitPos) > 1e-12) {
+        source.position.copy(_orbitPos);
+        applyMovedVisual(source);
+        poseMoved = true;
+      }
+    }
     var visualChanged =
       envelopment !== state.envelopment ||
       playing !== state.playing ||
-      active !== state.active;
+      active !== state.active ||
+      orbiting !== state.orbiting ||
+      poseMoved;
     state.envelopment = envelopment;
     state.playing = playing;
     state.active = active;
@@ -1297,6 +1333,7 @@
     if (!visualChanged) return;
     if (presentation === 'point') decorateSourceVisual(source);
     else decorateSourceVisual(null);
+    if (poseMoved) formatPose();
     needsRender = true;
   }
 

@@ -1,5 +1,7 @@
 import 'dart:math' as math;
 
+import 'package:yinwei_player/contracts/coordinate_frame_v1.dart';
+
 /// Mirrors `spatial_core::SpatialParams` / presets — keep in sync with Rust.
 
 enum PlaybackMode { original, spatial }
@@ -135,15 +137,21 @@ class SpatialParams {
     selectedEq = EqSequence.matching(eqDb);
   }
 
+  /// visibleHeading = wrap(origin + elapsed * orbitHz * 360).
+  double orbitPhaseDeg(Duration elapsed) {
+    return elapsed.inMilliseconds / 1000.0 * orbitHz * 360.0;
+  }
+
   /// Effective azimuth for the orbit visualizer.
   double visualAzimuthDeg(Duration elapsed) {
     if (motion != MotionMode.orbit) return azimuthDeg;
-    final turns = elapsed.inMilliseconds / 1000.0 * orbitHz;
-    var az = azimuthDeg + turns * 360.0;
-    az %= 360.0;
-    if (az > 180) az -= 360;
-    if (az <= -180) az += 360;
-    return az;
+    return wrapAzimuthDeg(azimuthDeg + orbitPhaseDeg(elapsed));
+  }
+
+  /// Inverse of [visualAzimuthDeg]: stored Point origin from a live heading.
+  double originAzimuthFromVisual(double visualDeg, Duration elapsed) {
+    if (motion != MotionMode.orbit) return wrapAzimuthDeg(visualDeg);
+    return wrapAzimuthDeg(visualDeg - orbitPhaseDeg(elapsed));
   }
 }
 

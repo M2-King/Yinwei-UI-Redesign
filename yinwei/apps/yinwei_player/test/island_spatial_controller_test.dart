@@ -78,6 +78,34 @@ void main() {
     expect(find.byKey(const ValueKey('mini-remove-speaker')), findsNothing);
   });
 
+  testWidgets('Stereo mini ignores Point orbit telemetry overlay', (tester) async {
+    var layout = ArrayLayout.stereo2();
+    await tester.pumpWidget(MaterialApp(
+      home: Center(
+        child: SizedBox(
+          width: 360,
+          height: 300,
+          child: IslandSpatialController(
+            sceneSnapshot: () => <String, dynamic>{},
+            playbackTelemetry: const PlaybackTelemetryV1(
+              playing: true,
+              orbiting: true,
+              azimuthDeg: 90,
+              elevationDeg: -40,
+            ),
+            onSceneIntent: (_) => const SceneBridgeResult(),
+            arrayLayout: () => layout,
+            onArrayChanged: (next) => layout = next,
+            onClose: () {},
+          ),
+        ),
+      ),
+    ));
+    expect(find.text('-30°'), findsWidgets);
+    expect(find.text('90°'), findsNothing);
+    expect(find.text('-40°'), findsNothing);
+  });
+
   testWidgets('Stereo mini add sounder appends a selectable Mid speaker',
       (tester) async {
     var layout = ArrayLayout.stereo2();
