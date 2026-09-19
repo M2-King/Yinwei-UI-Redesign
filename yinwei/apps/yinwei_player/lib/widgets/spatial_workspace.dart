@@ -4,13 +4,32 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:webview_flutter_windows/webview_flutter_windows.dart';
 import 'package:yinwei_player/models/spatial_params.dart';
+import 'package:yinwei_player/platform/platform_capabilities.dart';
+import 'package:yinwei_player/platform/spatial_workspace_host.dart';
 import 'package:yinwei_player/runtime/spatial_scene_bridge.dart';
 import 'package:yinwei_player/runtime/workspace_presentation.dart';
 import 'package:yinwei_player/theme/yinwei_theme.dart';
 import 'package:yinwei_player/widgets/orbit_visualizer.dart';
 import 'package:yinwei_player/widgets/spatial_workspace_html.dart';
+
+/// Injected into the Three.js document so JS can post intents without
+/// `chrome.webview`. Windows WebView2 still uses chrome.webview first.
+const kYinweiPoseBridgeScript = '''
+window.YinweiPose = {
+  postMessage: function (msg) {
+    if (window.chrome && window.chrome.webview) {
+      try {
+        window.chrome.webview.postMessage(
+          typeof msg === 'string' ? JSON.parse(msg) : msg
+        );
+      } catch (e) {
+        window.chrome.webview.postMessage(msg);
+      }
+    }
+  }
+};
+''';
 
 /// Left-pane Spatial Audio Workspace.
 ///
@@ -48,6 +67,7 @@ class SpatialWorkspace extends StatefulWidget {
     this.matrixLinked = false,
     this.forceFallback = false,
     this.suspended = false,
+    this.capabilities,
   });
 
   final double playhead;
@@ -82,14 +102,14 @@ class SpatialWorkspace extends StatefulWidget {
   final bool matrixLinked;
   final bool forceFallback;
   final bool suspended;
+  final PlatformCapabilities? capabilities;
 
   @override
   State<SpatialWorkspace> createState() => _SpatialWorkspaceState();
 }
 
 class _SpatialWorkspaceState extends State<SpatialWorkspace> {
-  WebviewController? _web;
-  final _subs = <StreamSubscription>[];
+  late SpatialWorkspaceHost _host;
   var _pageReady = false;
   var _failed = false;
   int? _lastSceneRevision;
@@ -103,16 +123,9 @@ class _SpatialWorkspaceState extends State<SpatialWorkspace> {
 
   void _syncVisibility() {
     _visibilityWork = _visibilityWork.then((_) async {
-      final web = _web;
-      if (!mounted || web == null) return;
-      // Cap compositor work if this surface is hidden. Do not TrySuspend;
-      // that native Stop+Start path aborted flutter_windows.dll.
-      if (widget.suspended) {
-        await web.setFpsLimit(1);
-      } else {
-        await web.setFpsLimit(0);
-        if (mounted && !widget.suspended) _pushAll();
-      }
+      if (!mounted || !_host.usesWebView) return;
+      await _host.setSuspended(widget.suspended);
+      if (!widget.suspended && mounted) _pushAll();
     }).catchError((Object e) {
       debugPrint('[SpatialWorkspace] visibility: $e');
     });
@@ -121,24 +134,27 @@ class _SpatialWorkspaceState extends State<SpatialWorkspace> {
   bool get _useWebView {
     if (widget.forceFallback) return false;
     if (_failed) return false;
-    if (kIsWeb) return false;
-    if (Platform.environment.containsKey('FLUTTER_TEST')) return false;
-    return Platform.isWindows;
+    return _host.usesWebView;
   }
 
   @override
   void initState() {
     super.initState();
+    final inTest = Platform.environment.containsKey('FLUTTER_TEST');
+    _host = createSpatialWorkspaceHost(
+      capabilities: widget.capabilities ?? PlatformCapabilities.detect(),
+      forceFallback: widget.forceFallback || inTest,
+    );
     debugPrint(
       '[SpatialWorkspace] windows=${Platform.isWindows} '
-      'flutterTest=${Platform.environment.containsKey('FLUTTER_TEST')} '
+      'flutterTest=$inTest '
       'presentation=${widget.presentation.name} '
       'array=${widget.arrayMode.name} forceFallback=${widget.forceFallback} '
       'useWebView=$_useWebView',
     );
     if (_useWebView) {
       _bootStarted = true;
-      unawaited(_bootWebView());
+      unawaited(_bootHost());
     }
     widget.playbackTelemetry?.addListener(_onTelemetry);
   }
@@ -165,66 +181,39 @@ class _SpatialWorkspaceState extends State<SpatialWorkspace> {
     setState(() {});
   }
 
-  Future<void> _bootWebView() async {
-    if (_web != null) return;
+  Future<void> _bootHost() async {
+    if (_host.view != null) return;
     try {
-      final version = await WebviewController.getWebViewVersion();
-      debugPrint('[SpatialWorkspace] WebView2 runtime=$version');
-      if (!mounted) return;
-      if (version == null) {
-        throw StateError('WebView2 runtime missing');
-      }
       final html = await SpatialWorkspaceHtml.load();
       if (!mounted) return;
-      final controller = WebviewController();
-      await controller.initialize();
-      if (!mounted) {
-        await controller.dispose();
-        return;
-      }
-      _subs.add(controller.webMessage.listen(_onWinMessage));
-      _subs.add(
-        controller.loadingState.listen((state) {
-          if (state == LoadingState.navigationCompleted) {
-            _pageReady = true;
-            _pushAll(force: true);
-          }
-        }),
+      await _host.boot(
+        html: html,
+        poseBridgeScript: kYinweiPoseBridgeScript,
+        onMessage: _onWinMessage,
+        onReady: () {
+          _pageReady = true;
+          _pushAll(force: true);
+        },
+        onLoadError: (error) {
+          debugPrint('[SpatialWorkspace] load error $error');
+        },
       );
-      _subs.add(
-        controller.onLoadError.listen((status) {
-          debugPrint('[SpatialWorkspace] load error $status');
-        }),
-      );
-      await controller.setBackgroundColor(YinweiColors.background);
-      await controller.setPopupWindowPolicy(WebviewPopupWindowPolicy.deny);
-      await controller.addScriptToExecuteOnDocumentCreated('''
-window.YinweiPose = {
-  postMessage: function (msg) {
-    if (window.chrome && window.chrome.webview) {
-      try {
-        window.chrome.webview.postMessage(
-          typeof msg === 'string' ? JSON.parse(msg) : msg
-        );
-      } catch (e) {
-        window.chrome.webview.postMessage(msg);
-      }
-    }
-  }
-};
-''');
-      await controller.loadStringContent(html);
       if (!mounted) {
-        await controller.dispose();
+        await _host.dispose();
         return;
       }
       debugPrint('[SpatialWorkspace] WebView2 controller ready');
-      setState(() => _web = controller);
+      setState(() {});
       _syncVisibility();
       _maybeStartPhase3Smoke();
     } catch (e) {
       debugPrint('[SpatialWorkspace] WebView2 boot failed: $e');
-      if (mounted) setState(() => _failed = true);
+      if (mounted) {
+        setState(() {
+          _failed = true;
+          _host = FallbackWorkspaceHost();
+        });
+      }
     }
   }
 
@@ -372,11 +361,10 @@ window.YinweiPose = {
   }
 
   void _runRaw(String fn, String payload) {
-    final web = _web;
-    if (web == null || !_pageReady || !mounted) return;
+    if (!_host.usesWebView || !_pageReady || !mounted) return;
     if (!TickerMode.of(context)) return;
     unawaited(
-      web.executeScript(
+      _host.executeScript(
         'window.YinweiWorkspace&&YinweiWorkspace.$fn($payload)',
       ),
     );
@@ -426,7 +414,7 @@ window.YinweiPose = {
     if (_phase6SmokeStarted) return;
     if (Platform.environment.containsKey('FLUTTER_TEST')) return;
     if (Platform.environment['YINWEI_PHASE6_SMOKE'] != '1') return;
-    if (!_pageReady || _web == null) return;
+    if (!_pageReady || !_host.usesWebView) return;
     _phase6SmokeStarted = true;
     unawaited(_runPhase6Smoke());
   }
@@ -490,15 +478,14 @@ window.YinweiPose = {
     if (_phase3SmokeStarted) return;
     if (Platform.environment.containsKey('FLUTTER_TEST')) return;
     if (Platform.environment['YINWEI_PHASE3_SMOKE'] != '1') return;
-    if (!_pageReady || _web == null) return;
+    if (!_pageReady || !_host.usesWebView) return;
     _phase3SmokeStarted = true;
     unawaited(_runPhase3Smoke());
   }
 
   Future<dynamic> _js(String expr) async {
-    final web = _web;
-    if (web == null || !_pageReady) return null;
-    return web.executeScript(expr);
+    if (!_host.usesWebView || !_pageReady) return null;
+    return _host.executeScript(expr);
   }
 
   Future<void> _runPhase3Smoke() async {
@@ -570,9 +557,9 @@ window.YinweiPose = {
       widget.playbackTelemetry?.addListener(_onTelemetry);
     }
     if (_useWebView) {
-      if (_web == null && !_failed && !_bootStarted) {
+      if (_host.view == null && !_failed && !_bootStarted) {
         _bootStarted = true;
-        unawaited(_bootWebView());
+        unawaited(_bootHost());
       } else if (!widget.suspended) {
         _pushAll();
       }
@@ -582,13 +569,7 @@ window.YinweiPose = {
   @override
   void dispose() {
     widget.playbackTelemetry?.removeListener(_onTelemetry);
-    for (final sub in _subs) {
-      unawaited(sub.cancel());
-    }
-    final web = _web;
-    if (web != null) {
-      unawaited(web.dispose());
-    }
+    unawaited(_host.dispose());
     super.dispose();
   }
 
@@ -617,22 +598,18 @@ window.YinweiPose = {
         matrixLinked: widget.matrixLinked,
       );
     } else {
-      final web = _web;
-      viewport = web == null
-          ? const ColoredBox(
-              color: YinweiColors.background,
-              child: Center(
-                child: SizedBox(
-                  width: 18,
-                  height: 18,
-                  child: CircularProgressIndicator(strokeWidth: 1.6),
-                ),
+      final view = _host.view;
+      viewport = view ??
+          const ColoredBox(
+            color: YinweiColors.background,
+            child: Center(
+              child: SizedBox(
+                width: 18,
+                height: 18,
+                child: CircularProgressIndicator(strokeWidth: 1.6),
               ),
-            )
-          : ColoredBox(
-              color: YinweiColors.background,
-              child: Webview(web),
-            );
+            ),
+          );
     }
 
     return ClipRRect(

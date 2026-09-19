@@ -15,6 +15,7 @@ import 'package:yinwei_player/bridge/live_source_follow.dart';
 import 'package:yinwei_player/bridge/live_transfer.dart';
 import 'package:yinwei_player/bridge/system_media.dart';
 import 'package:yinwei_player/models/spatial_params.dart';
+import 'package:yinwei_player/platform/platform_capabilities.dart';
 import 'package:yinwei_player/runtime/spatial_runtime_adapter.dart';
 import 'package:yinwei_player/runtime/spatial_scene_bridge.dart';
 import 'package:yinwei_player/runtime/island_spatial_controls.dart';
@@ -24,6 +25,7 @@ import 'package:yinwei_player/widgets/island_spatial_controller.dart';
 import 'package:yinwei_player/runtime/workspace_presentation.dart';
 import 'package:yinwei_player/state/engine_controller.dart';
 import 'package:yinwei_player/state/island_now_playing.dart';
+import 'package:yinwei_player/state/window_chrome.dart';
 import 'package:yinwei_player/state/window_mode.dart';
 import 'package:yinwei_player/state/window_mode_controller.dart';
 import 'package:yinwei_player/theme/yinwei_theme.dart';
@@ -43,12 +45,14 @@ class PlayerScreen extends StatefulWidget {
     this.windowMode,
     this.systemMedia,
     this.liveTransfer,
+    this.capabilities,
   });
 
   final EngineController? controller;
   final WindowModeController? windowMode;
   final SystemMediaService? systemMedia;
   final LiveTransferController? liveTransfer;
+  final PlatformCapabilities? capabilities;
 
   @override
   State<PlayerScreen> createState() => _PlayerScreenState();
@@ -56,8 +60,11 @@ class PlayerScreen extends StatefulWidget {
 
 class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
   bool _closing = false;
+  late final PlatformCapabilities _caps;
   bool get _nativeWindow =>
-      Platform.isWindows && !Platform.environment.containsKey('FLUTTER_TEST');
+      _caps.desktopWindow &&
+      _caps.nativeWindowChrome &&
+      !Platform.environment.containsKey('FLUTTER_TEST');
   late final EngineController _ctrl;
   late final SpatialRuntimeAdapter _spatial;
   late final SpatialSceneBridge _sceneBridge;
@@ -98,15 +105,21 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
   @override
   void initState() {
     super.initState();
-    final startIsland = _nativeWindow &&
+    _caps = widget.capabilities ?? PlatformCapabilities.detect();
+    final startIsland = _caps.floatingIsland &&
+        _nativeWindow &&
         Platform.environment['YINWEI_START_FULL'] != '1' &&
         !Platform.environment.containsKey('YINWEI_OPEN');
     _window = widget.windowMode ??
         WindowModeController(
+          chrome: _caps.nativeWindowChrome
+              ? WindowManagerChrome()
+              : InactiveWindowChrome(),
           mode: startIsland ? WindowMode.islandCollapsed : WindowMode.full,
         );
     _smtc = widget.systemMedia ?? SystemMediaService();
-    _live = widget.liveTransfer ?? LiveTransferController();
+    _live = widget.liveTransfer ??
+        LiveTransferController(capabilities: _caps);
     if (widget.controller != null) {
       _ctrl = widget.controller!;
       _backend = EngineBackend.mock;
@@ -132,9 +145,11 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
     _window.addListener(_onWindowMode);
     _smtc.addListener(_onSmtcChange);
     _live.addListener(_onChange);
-    unawaited(_smtc.start());
-    unawaited(_audioRoute.recoverIfDirty());
-    _live.refreshDevices();
+    if (_caps.systemMedia) unawaited(_smtc.start());
+    if (_caps.liveTransfer) {
+      unawaited(_audioRoute.recoverIfDirty());
+      _live.refreshDevices();
+    }
     final smoke = Platform.environment.containsKey('FLUTTER_TEST')
         ? null
         : Platform.environment['YINWEI_OPEN'];
@@ -148,7 +163,8 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
     unawaited(_maybeRunPhase5bTransportSmoke());
     unawaited(_maybeRunPhase6Smoke());
     unawaited(_maybeRunPhase65Smoke());
-    if (!Platform.environment.containsKey('FLUTTER_TEST') &&
+    if (_caps.floatingIsland &&
+        !Platform.environment.containsKey('FLUTTER_TEST') &&
         Platform.environment['YINWEI_START_FULL'] != '1' &&
         !Platform.environment.containsKey('YINWEI_OPEN')) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -613,25 +629,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
         fit: StackFit.expand,
         children: [
           if (!island)
-            DropTarget(
-              onDragEntered: (_) => setState(() => _dragging = true),
-              onDragExited: (_) => setState(() => _dragging = false),
-              onDragDone: (detail) async {
-                setState(() => _dragging = false);
-                final path = _firstSupportedDrop(detail);
-                if (path == null) {
-                  if (!mounted) return;
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text(
-                          '请拖入音频或视频文件（wav/mp3/flac/ogg/m4a/aac/mp4/m4v/mov）'),
-                      behavior: SnackBarBehavior.floating,
-                    ),
-                  );
-                  return;
-                }
-                await _openMediaPath(path);
-              },
+            _maybeDesktopDrop(
               child: Scaffold(
                 body: Stack(
                   children: [
@@ -699,6 +697,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
                                               envelopment: c.params.envelopment,
                                               playing: now.playing,
                                               suspended: island,
+                                              capabilities: _caps,
                                               playbackMode: c.mode,
                                               arrayMode: c.array.mode,
                                               playbackTelemetry: _telemetry,
@@ -1011,6 +1010,31 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
             ),
         ],
       ),
+    );
+  }
+
+  Widget _maybeDesktopDrop({required Widget child}) {
+    if (!_caps.desktopDrop) return child;
+    return DropTarget(
+      onDragEntered: (_) => setState(() => _dragging = true),
+      onDragExited: (_) => setState(() => _dragging = false),
+      onDragDone: (detail) async {
+        setState(() => _dragging = false);
+        final path = _firstSupportedDrop(detail);
+        if (path == null) {
+          if (!mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                  '请拖入音频或视频文件（wav/mp3/flac/ogg/m4a/aac/mp4/m4v/mov）'),
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+          return;
+        }
+        await _openMediaPath(path);
+      },
+      child: child,
     );
   }
 

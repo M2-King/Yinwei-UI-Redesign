@@ -233,3 +233,53 @@ class WindowManagerChrome implements WindowChrome {
     return Rect.fromLTWH(left, top, width, height);
   }
 }
+
+/// Non-Windows / tests without HWND chrome. Presentation no-ops only.
+class InactiveWindowChrome implements WindowChrome {
+  @override
+  void cancelPendingOperations() {}
+
+  @override
+  Future<Size> currentSize() async => const Size(1440, 900);
+
+  @override
+  Future<Offset> currentPosition() async => Offset.zero;
+
+  @override
+  Future<Offset> cursorScreenPoint() async => Offset.zero;
+
+  @override
+  Future<Rect> primaryWorkArea() async =>
+      const Rect.fromLTWH(0, 0, 1440, 900);
+
+  @override
+  Future<Rect> workAreaForCurrentWindow() async => primaryWorkArea();
+
+  @override
+  Future<void> applyFull({
+    required Size size,
+    required Offset position,
+  }) async {}
+
+  @override
+  Future<void> applyIsland({
+    required Size size,
+    required Offset position,
+  }) async {}
+
+  @override
+  Future<void> setClickThrough(bool ignore) async {}
+
+  @override
+  Future<void> setToolWindow(bool enable) async {}
+
+  @override
+  Future<void> setIslandHitShape({
+    required bool enabled,
+    Size windowSize = Size.zero,
+    double insetX = 0,
+    double insetY = 0,
+    double radius = 0,
+    List<RRect> regions = const [],
+  }) async {}
+}

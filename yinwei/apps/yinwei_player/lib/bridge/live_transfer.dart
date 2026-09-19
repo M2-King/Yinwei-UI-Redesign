@@ -5,9 +5,15 @@ import 'package:flutter/foundation.dart';
 import 'package:yinwei_player/bridge/live_capture_health.dart';
 import 'package:yinwei_player/bridge/yinwei_bindings.dart';
 import 'package:yinwei_player/models/spatial_params.dart';
+import 'package:yinwei_player/platform/platform_capabilities.dart';
 
 /// Controls WASAPI loopback → HRTF live transfer in `spatial_core`.
 class LiveTransferController extends ChangeNotifier {
+  LiveTransferController({PlatformCapabilities? capabilities})
+      : _capabilities = capabilities ?? PlatformCapabilities.detect();
+
+  final PlatformCapabilities _capabilities;
+
   bool running = false;
   bool starting = false;
   String? lastError;
@@ -30,7 +36,11 @@ class LiveTransferController extends ChangeNotifier {
 
   YinweiBindings? get _b => YinweiBindings.tryLoad();
 
+  /// Product gate. Independent of whether `yinwei_live_*` stubs exist.
+  bool get capabilityEnabled => _capabilities.liveTransfer;
+
   bool get available {
+    if (!_capabilities.liveTransfer) return false;
     final b = _b;
     if (b == null) return false;
     try {
@@ -95,6 +105,10 @@ class LiveTransferController extends ChangeNotifier {
     SpatialParams? params,
     ArrayLayout? array,
   }) async {
+    if (!_capabilities.liveTransfer) {
+      fail('Live Transfer is Windows-only');
+      return;
+    }
     final b = _b;
     if (b == null) {
       fail('spatial_core.dll not loaded — run build_native_windows.ps1');

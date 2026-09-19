@@ -18,6 +18,10 @@ freeverb = "0.1"
 hound = "3.5"
 symphonia = { version = "0.5", features = ["mp3", "aac", "flac", "ogg", "pcm", "isomp4"] }
 cpal = { version = "0.15", optional = true }
+
+# WASAPI process-loopback is Windows Live Transfer only. Portable realtime
+# playback uses cpal. Do not pull wasapi into macOS/iOS/Android graphs.
+[target.'cfg(windows)'.dependencies]
 wasapi = { version = "0.17", optional = true }
 
 [features]
