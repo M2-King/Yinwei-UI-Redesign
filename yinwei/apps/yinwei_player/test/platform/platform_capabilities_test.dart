@@ -18,6 +18,8 @@ void main() {
     expect(caps.array, isTrue);
     expect(caps.liveActivity, isFalse);
     expect(caps.appClip, isFalse);
+    expect(caps.mobileFileImport, isFalse);
+    expect(caps.audioSession, isFalse);
   });
 
   test('non-Windows defaults disable Windows-only product surfaces', () {
@@ -34,6 +36,8 @@ void main() {
     expect(caps.array, isFalse);
     expect(caps.liveActivity, isFalse);
     expect(caps.appClip, isFalse);
+    expect(caps.mobileFileImport, isFalse);
+    expect(caps.audioSession, isFalse);
   });
 
   test('iOS product profile keeps Point audio and hides Windows chrome', () {
@@ -50,6 +54,8 @@ void main() {
     expect(caps.array, isTrue);
     expect(caps.liveActivity, isTrue);
     expect(caps.appClip, isTrue);
+    expect(caps.mobileFileImport, isTrue);
+    expect(caps.audioSession, isTrue);
   });
 
   test('detect follows the Windows product profile on this host', () {

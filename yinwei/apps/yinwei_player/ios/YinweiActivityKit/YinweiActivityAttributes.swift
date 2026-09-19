@@ -11,6 +11,8 @@ public struct YinweiActivityAttributes: ActivityAttributes {
     public var elevationDeg: Double
     public var sourceLabel: String
     public var title: String
+    public var motionMode: String
+    public var distanceM: Double
 
     public init(
       mode: String,
@@ -19,7 +21,9 @@ public struct YinweiActivityAttributes: ActivityAttributes {
       azimuthDeg: Double,
       elevationDeg: Double,
       sourceLabel: String,
-      title: String
+      title: String,
+      motionMode: String = "fixed",
+      distanceM: Double = 0
     ) {
       self.mode = mode
       self.playing = playing
@@ -28,6 +32,8 @@ public struct YinweiActivityAttributes: ActivityAttributes {
       self.elevationDeg = elevationDeg
       self.sourceLabel = sourceLabel
       self.title = title
+      self.motionMode = motionMode
+      self.distanceM = distanceM
     }
 
     public var viewState: YinweiActivityViewState {

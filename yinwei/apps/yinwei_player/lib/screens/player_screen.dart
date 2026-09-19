@@ -39,6 +39,12 @@ import 'package:yinwei_player/widgets/now_playing_panel.dart';
 import 'package:yinwei_player/widgets/spatial_workspace.dart';
 import 'package:yinwei_player/widgets/position_sidebar.dart';
 import 'package:yinwei_player/mobile/mobile_player_screen.dart';
+import 'package:yinwei_player/platform/audio_session_coordinator.dart';
+import 'package:yinwei_player/platform/live_activity_bridge.dart';
+import 'package:yinwei_player/platform/live_activity_coordinator.dart';
+import 'package:yinwei_player/platform/media_file_acquisition.dart';
+import 'package:yinwei_player/mobile/mobile_visual_pose.dart';
+import 'package:yinwei_player/presentation/yinwei_live_presentation.dart';
 
 /// Main window — Dual-Mode Full / Floating Island (Yinwei + Windows SMTC).
 class PlayerScreen extends StatefulWidget {
@@ -49,6 +55,9 @@ class PlayerScreen extends StatefulWidget {
     this.systemMedia,
     this.liveTransfer,
     this.capabilities,
+    this.liveActivity,
+    this.mediaFiles,
+    this.audioSession,
   });
 
   final EngineController? controller;
@@ -56,6 +65,9 @@ class PlayerScreen extends StatefulWidget {
   final SystemMediaService? systemMedia;
   final LiveTransferController? liveTransfer;
   final PlatformCapabilities? capabilities;
+  final LiveActivityBridge? liveActivity;
+  final MediaFileAcquisition? mediaFiles;
+  final AudioSessionCoordinator? audioSession;
 
   @override
   State<PlayerScreen> createState() => _PlayerScreenState();
@@ -71,6 +83,11 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
   late final EngineController _ctrl;
   late final SpatialRuntimeAdapter _spatial;
   late final SpatialSceneBridge _sceneBridge;
+  late final LiveActivityCoordinator _liveActivity;
+  late final MediaFileAcquisition _mediaFiles;
+  late final AudioSessionCoordinator _audioSession;
+  SphericalV1? _liveActivityFrozenPose;
+  var _audioSessionArmed = false;
   late final WindowModeController _window;
   late final SystemMediaService _smtc;
   late final LiveTransferController _live;
@@ -134,6 +151,14 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
     _spatial = SpatialRuntimeAdapter();
     _spatial.bootstrap(_ctrl.params);
     _sceneBridge = SpatialSceneBridge(adapter: _spatial);
+    _mediaFiles =
+        widget.mediaFiles ?? MediaFileAcquisition.create(capabilities: _caps);
+    _audioSession = widget.audioSession ??
+        AudioSessionCoordinator.create(capabilities: _caps);
+    _liveActivity = LiveActivityCoordinator(
+      bridge: widget.liveActivity ??
+          LiveActivityBridge.create(capabilities: _caps),
+    );
     if (_nativeWindow) registerIslandRuntimeProbe(_islandProbe);
     if (_nativeWindow) {
       windowManager.addListener(this);
@@ -219,6 +244,56 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
     );
     if (_telemetry.value != next) {
       _telemetry.value = next;
+    }
+    _publishLiveActivity();
+    _syncAudioSession();
+  }
+
+  void _publishLiveActivity() {
+    final telemetry = _telemetry.value;
+    final presentationKind = workspacePresentationOf(
+      playbackMode: _ctrl.mode,
+      arrayMode: _ctrl.array.mode,
+    );
+    final scene = _spatial.snapshot();
+    final scenePose = scene != null && scene['sources'] is List
+        ? IslandPointIntent.pose(scene)
+        : SphericalV1(
+            azimuthDeg: _ctrl.params.azimuthDeg,
+            elevationDeg: _ctrl.params.elevationDeg,
+            distanceM: _ctrl.params.distanceM,
+          );
+    final overlay = presentationKind == WorkspacePresentation.point &&
+        OrbitOverlay.ofTelemetry(telemetry);
+    if (overlay) {
+      _liveActivityFrozenPose = SphericalV1(
+        azimuthDeg: telemetry.azimuthDeg,
+        elevationDeg: telemetry.elevationDeg,
+        distanceM: scenePose.distanceM,
+      );
+    }
+    unawaited(
+      _liveActivity.publish(
+        YinweiLivePresentation.read(
+          controller: _ctrl,
+          telemetry: telemetry,
+          visualPose: MobileVisualPose.resolve(
+            scenePose: scenePose,
+            telemetry: telemetry,
+            motion: _ctrl.params.motion,
+            presentation: presentationKind,
+            lastLivePose: _liveActivityFrozenPose,
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _syncAudioSession() {
+    if (!_audioSession.available) return;
+    if (_ctrl.playing && !_audioSessionArmed) {
+      _audioSessionArmed = true;
+      unawaited(_audioSession.activateForPlayback());
     }
   }
 
@@ -606,6 +681,8 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
     _smtc.removeListener(_onSmtcChange);
     _live.removeListener(_onChange);
     _sceneBridge.dispose();
+    unawaited(_liveActivity.end());
+    unawaited(_audioSession.deactivate());
     _telemetry.dispose();
     unawaited(_live.stop());
     unawaited(_audioRoute.restore());
@@ -1197,8 +1274,9 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
 
   Future<void> _openMediaPath(String path) async {
     try {
-      await _ctrl.openPath(path);
-      debugPrint('[Player] opened path=$path backend=$_backend');
+      final readable = await _mediaFiles.prepareReadablePath(path);
+      await _ctrl.openPath(readable);
+      debugPrint('[Player] opened path=$readable backend=$_backend');
       if (!mounted) return;
       final label = _backend == EngineBackend.native ? '真引擎' : '演示引擎 Mock';
       final name = path.split(RegExp(r'[\\/]')).last.toLowerCase();

@@ -44,6 +44,18 @@ void main() {
     expect(activity.azimuthDeg, 41);
     expect(activity.playing, isTrue);
     expect(activity.orbiting, isTrue);
+
+    final payload = presentation.toChannelPayload();
+    expect(payload, {
+      'title': presentation.title,
+      'playing': true,
+      'spatialMode': 'spatial',
+      'motionMode': 'fixed',
+      'azimuthDeg': 41,
+      'elevationDeg': 8,
+      'distanceM': 1.8,
+      'orbiting': true,
+    });
     ctrl.dispose();
   });
 }

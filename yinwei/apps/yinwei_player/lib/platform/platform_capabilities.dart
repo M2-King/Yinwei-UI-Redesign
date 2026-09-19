@@ -21,6 +21,8 @@ class PlatformCapabilities {
     this.array = false,
     this.liveActivity = false,
     this.appClip = false,
+    this.mobileFileImport = false,
+    this.audioSession = false,
   });
 
   final bool desktopWindow;
@@ -35,6 +37,8 @@ class PlatformCapabilities {
   final bool array;
   final bool liveActivity;
   final bool appClip;
+  final bool mobileFileImport;
+  final bool audioSession;
 
   static const windows = PlatformCapabilities(
     desktopWindow: true,
@@ -62,6 +66,8 @@ class PlatformCapabilities {
     array: true,
     liveActivity: true,
     appClip: true,
+    mobileFileImport: true,
+    audioSession: true,
   );
 
   static const none = PlatformCapabilities(
@@ -95,7 +101,9 @@ class PlatformCapabilities {
         pointSpatial == other.pointSpatial &&
         array == other.array &&
         liveActivity == other.liveActivity &&
-        appClip == other.appClip;
+        appClip == other.appClip &&
+        mobileFileImport == other.mobileFileImport &&
+        audioSession == other.audioSession;
   }
 
   @override
@@ -112,5 +120,7 @@ class PlatformCapabilities {
         array,
         liveActivity,
         appClip,
+        mobileFileImport,
+        audioSession,
       );
 }

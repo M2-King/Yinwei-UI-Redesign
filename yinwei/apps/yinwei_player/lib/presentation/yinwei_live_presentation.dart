@@ -57,4 +57,40 @@ class YinweiLivePresentation {
       title: title,
     );
   }
+
+  Map<String, dynamic> toChannelPayload() => {
+        'title': title,
+        'playing': playing,
+        'spatialMode': spatialMode.name,
+        'motionMode': motionMode.name,
+        'azimuthDeg': azimuthDeg,
+        'elevationDeg': elevationDeg,
+        'distanceM': distanceM,
+        'orbiting': orbiting,
+      };
+
+  @override
+  bool operator ==(Object other) {
+    return other is YinweiLivePresentation &&
+        title == other.title &&
+        playing == other.playing &&
+        spatialMode == other.spatialMode &&
+        motionMode == other.motionMode &&
+        azimuthDeg == other.azimuthDeg &&
+        elevationDeg == other.elevationDeg &&
+        distanceM == other.distanceM &&
+        orbiting == other.orbiting;
+  }
+
+  @override
+  int get hashCode => Object.hash(
+        title,
+        playing,
+        spatialMode,
+        motionMode,
+        azimuthDeg,
+        elevationDeg,
+        distanceM,
+        orbiting,
+      );
 }
