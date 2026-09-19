@@ -13,6 +13,11 @@ void main() {
     expect(caps.liveTransfer, isTrue);
     expect(caps.desktopDrop, isTrue);
     expect(caps.threeJsWebView, isTrue);
+    expect(caps.filePlayback, isTrue);
+    expect(caps.pointSpatial, isTrue);
+    expect(caps.array, isTrue);
+    expect(caps.liveActivity, isFalse);
+    expect(caps.appClip, isFalse);
   });
 
   test('non-Windows defaults disable Windows-only product surfaces', () {
@@ -24,6 +29,27 @@ void main() {
     expect(caps.liveTransfer, isFalse);
     expect(caps.desktopDrop, isFalse);
     expect(caps.threeJsWebView, isFalse);
+    expect(caps.filePlayback, isFalse);
+    expect(caps.pointSpatial, isFalse);
+    expect(caps.array, isFalse);
+    expect(caps.liveActivity, isFalse);
+    expect(caps.appClip, isFalse);
+  });
+
+  test('iOS product profile keeps Point audio and hides Windows chrome', () {
+    const caps = PlatformCapabilities.ios;
+    expect(caps.desktopWindow, isFalse);
+    expect(caps.nativeWindowChrome, isFalse);
+    expect(caps.floatingIsland, isFalse);
+    expect(caps.systemMedia, isFalse);
+    expect(caps.liveTransfer, isFalse);
+    expect(caps.desktopDrop, isFalse);
+    expect(caps.threeJsWebView, isFalse);
+    expect(caps.filePlayback, isTrue);
+    expect(caps.pointSpatial, isTrue);
+    expect(caps.array, isTrue);
+    expect(caps.liveActivity, isTrue);
+    expect(caps.appClip, isTrue);
   });
 
   test('detect follows the Windows product profile on this host', () {
@@ -33,6 +59,8 @@ void main() {
     expect(caps.threeJsWebView, Platform.isWindows);
     if (Platform.isWindows) {
       expect(caps, PlatformCapabilities.windows);
+    } else if (Platform.isIOS) {
+      expect(caps, PlatformCapabilities.ios);
     } else {
       expect(caps, PlatformCapabilities.none);
     }

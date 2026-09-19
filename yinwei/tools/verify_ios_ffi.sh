@@ -1,0 +1,47 @@
+#!/usr/bin/env bash
+# Verify yinwei_* symbols in the linked iOS Runner after Xcode/Flutter build.
+set -euo pipefail
+
+if [[ "$(uname -s)" != "Darwin" ]]; then
+  echo "ERROR: verify_ios_ffi.sh must run on macOS." >&2
+  exit 1
+fi
+
+BIN="${1:-}"
+if [[ -z "$BIN" ]]; then
+  echo "Usage: $0 /path/to/Runner.app/Runner" >&2
+  exit 1
+fi
+if [[ ! -f "$BIN" ]]; then
+  echo "ERROR: binary not found: $BIN" >&2
+  exit 1
+fi
+
+REQUIRED=(
+  yinwei_last_error
+  yinwei_open
+  yinwei_set_params
+  yinwei_play
+  yinwei_current_azimuth_deg
+  yinwei_dispose
+)
+
+exports="$(nm -gU "$BIN" 2>/dev/null || nm -g "$BIN")"
+missing=()
+for sym in "${REQUIRED[@]}"; do
+  if ! grep -q "$sym" <<<"$exports"; then
+    missing+=("$sym")
+  fi
+done
+
+if ((${#missing[@]} > 0)); then
+  echo "ERROR: linked Runner is missing: ${missing[*]}" >&2
+  echo "Run tools/build_native_ios.sh so -force_load is generated, then rebuild." >&2
+  exit 1
+fi
+
+echo "FFI symbols reachable in $BIN"
+if grep -qi 'spatial_core.dll' <<<"$exports"; then
+  echo "ERROR: Windows DLL string present in iOS binary" >&2
+  exit 1
+fi

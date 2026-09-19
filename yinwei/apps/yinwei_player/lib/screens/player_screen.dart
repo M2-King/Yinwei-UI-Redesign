@@ -14,6 +14,7 @@ import 'package:yinwei_player/bridge/live_capture_health.dart';
 import 'package:yinwei_player/bridge/live_source_follow.dart';
 import 'package:yinwei_player/bridge/live_transfer.dart';
 import 'package:yinwei_player/bridge/system_media.dart';
+import 'package:yinwei_player/bridge/yinwei_bindings.dart';
 import 'package:yinwei_player/models/spatial_params.dart';
 import 'package:yinwei_player/platform/platform_capabilities.dart';
 import 'package:yinwei_player/runtime/spatial_runtime_adapter.dart';
@@ -37,6 +38,7 @@ import 'package:yinwei_player/widgets/island_bar.dart';
 import 'package:yinwei_player/widgets/now_playing_panel.dart';
 import 'package:yinwei_player/widgets/spatial_workspace.dart';
 import 'package:yinwei_player/widgets/position_sidebar.dart';
+import 'package:yinwei_player/widgets/ios_proof_surface.dart';
 
 /// Main window — Dual-Mode Full / Floating Island (Yinwei + Windows SMTC).
 class PlayerScreen extends StatefulWidget {
@@ -624,6 +626,15 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
 
   @override
   Widget build(BuildContext context) {
+    if (_caps == PlatformCapabilities.ios) {
+      return IosProofSurface(
+        controller: _ctrl,
+        backend: _backend,
+        loadError: YinweiBindings.loadError,
+        onOpen: () => unawaited(_onOpen()),
+        onSpatialFromUi: _applySpatialFromUi,
+      );
+    }
     final island = _window.isIsland;
     final c = _ctrl;
     final now = IslandNowPlaying.resolve(

@@ -2,6 +2,7 @@ import 'dart:ffi';
 import 'dart:io';
 
 import 'package:ffi/ffi.dart';
+import 'package:yinwei_player/bridge/native_library_locator.dart';
 
 /// Low-level bindings to `spatial_core` C ABI (P2.4).
 ///
@@ -106,8 +107,13 @@ class YinweiBindings {
   }
 
   /// Load a specific absolute library path (for background isolates).
+  ///
+  /// iOS statically links `spatial_core`; [NativeLibraryLocator.processToken]
+  /// must reopen [DynamicLibrary.process] instead of a DLL path.
   static YinweiBindings loadFromPath(String absolutePath) {
-    final lib = DynamicLibrary.open(absolutePath);
+    final lib = absolutePath == NativeLibraryLocator.processToken
+        ? DynamicLibrary.process()
+        : DynamicLibrary.open(absolutePath);
     resolvedLibraryPath = absolutePath;
     final b = YinweiBindings._(lib);
     _instance = b;
@@ -116,8 +122,20 @@ class YinweiBindings {
   }
 
   static ({DynamicLibrary lib, String path}) _openLib() {
+    final mode = NativeLibraryLocator.modeFor(
+      isWindows: Platform.isWindows,
+      isLinux: Platform.isLinux,
+      isMacOS: Platform.isMacOS,
+      isIOS: Platform.isIOS,
+    );
+    if (mode == NativeLibraryLoadMode.iosProcess) {
+      return (
+        lib: DynamicLibrary.process(),
+        path: NativeLibraryLocator.processToken,
+      );
+    }
     final errors = <String>[];
-    if (Platform.isWindows) {
+    if (mode == NativeLibraryLoadMode.windowsDll) {
       final exeDir = File(Platform.resolvedExecutable).parent.path;
       final cwd = Directory.current.path;
       // Prefer the DLL next to the running exe (fresh build) BEFORE bare /
@@ -154,11 +172,11 @@ class YinweiBindings {
       }
       throw StateError('spatial_core.dll load failed:\n${errors.join('\n')}');
     }
-    if (Platform.isLinux) {
+    if (mode == NativeLibraryLoadMode.linuxSo) {
       const name = 'libspatial_core.so';
       return (lib: DynamicLibrary.open(name), path: name);
     }
-    if (Platform.isMacOS) {
+    if (mode == NativeLibraryLoadMode.macDylib) {
       const name = 'libspatial_core.dylib';
       return (lib: DynamicLibrary.open(name), path: name);
     }

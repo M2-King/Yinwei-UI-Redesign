@@ -4,8 +4,8 @@ import 'package:flutter/foundation.dart';
 
 /// Product capability layer — not plugin/feature detection and not audio state.
 ///
-/// Windows is the current shipping profile. Future hosts start from [none]
-/// until a platform-native adapter is deliberately designed.
+/// Windows remains the shipping desktop profile. iOS is the first Apple proof
+/// profile: Point spatial + file playback, no Win32 Island/SMTC/WASAPI.
 @immutable
 class PlatformCapabilities {
   const PlatformCapabilities({
@@ -16,6 +16,11 @@ class PlatformCapabilities {
     required this.liveTransfer,
     required this.desktopDrop,
     required this.threeJsWebView,
+    this.filePlayback = false,
+    this.pointSpatial = false,
+    this.array = false,
+    this.liveActivity = false,
+    this.appClip = false,
   });
 
   final bool desktopWindow;
@@ -25,6 +30,11 @@ class PlatformCapabilities {
   final bool liveTransfer;
   final bool desktopDrop;
   final bool threeJsWebView;
+  final bool filePlayback;
+  final bool pointSpatial;
+  final bool array;
+  final bool liveActivity;
+  final bool appClip;
 
   static const windows = PlatformCapabilities(
     desktopWindow: true,
@@ -34,6 +44,24 @@ class PlatformCapabilities {
     liveTransfer: true,
     desktopDrop: true,
     threeJsWebView: true,
+    filePlayback: true,
+    pointSpatial: true,
+    array: true,
+  );
+
+  static const ios = PlatformCapabilities(
+    desktopWindow: false,
+    nativeWindowChrome: false,
+    floatingIsland: false,
+    systemMedia: false,
+    liveTransfer: false,
+    desktopDrop: false,
+    threeJsWebView: false,
+    filePlayback: true,
+    pointSpatial: true,
+    array: true,
+    liveActivity: true,
+    appClip: true,
   );
 
   static const none = PlatformCapabilities(
@@ -49,6 +77,7 @@ class PlatformCapabilities {
   static PlatformCapabilities detect() {
     if (kIsWeb) return none;
     if (Platform.isWindows) return windows;
+    if (Platform.isIOS) return ios;
     return none;
   }
 
@@ -61,7 +90,12 @@ class PlatformCapabilities {
         systemMedia == other.systemMedia &&
         liveTransfer == other.liveTransfer &&
         desktopDrop == other.desktopDrop &&
-        threeJsWebView == other.threeJsWebView;
+        threeJsWebView == other.threeJsWebView &&
+        filePlayback == other.filePlayback &&
+        pointSpatial == other.pointSpatial &&
+        array == other.array &&
+        liveActivity == other.liveActivity &&
+        appClip == other.appClip;
   }
 
   @override
@@ -73,5 +107,10 @@ class PlatformCapabilities {
         liveTransfer,
         desktopDrop,
         threeJsWebView,
+        filePlayback,
+        pointSpatial,
+        array,
+        liveActivity,
+        appClip,
       );
 }

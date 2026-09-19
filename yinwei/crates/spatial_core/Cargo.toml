@@ -22,11 +22,11 @@ cpal = { version = "0.15", optional = true }
 # WASAPI process-loopback is Windows Live Transfer only. Portable realtime
 # playback uses cpal. Do not pull wasapi into macOS/iOS/Android graphs.
 [target.'cfg(windows)'.dependencies]
-wasapi = { version = "0.17", optional = true }
+wasapi = "0.17"
 
 [features]
 default = ["realtime"]
-realtime = ["dep:cpal", "dep:wasapi"]
+realtime = ["dep:cpal"]
 
 [dev-dependencies]
 approx = "0.5"
