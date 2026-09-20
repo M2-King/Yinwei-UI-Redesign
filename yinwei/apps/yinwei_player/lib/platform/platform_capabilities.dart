@@ -23,6 +23,7 @@ class PlatformCapabilities {
     this.appClip = false,
     this.mobileFileImport = false,
     this.audioSession = false,
+    this.androidPlaybackCapture = false,
   });
 
   final bool desktopWindow;
@@ -39,6 +40,10 @@ class PlatformCapabilities {
   final bool appClip;
   final bool mobileFileImport;
   final bool audioSession;
+  final bool androidPlaybackCapture;
+
+  bool get usesMobilePlayer =>
+      filePlayback && !desktopWindow && !nativeWindowChrome && !floatingIsland;
 
   static const windows = PlatformCapabilities(
     desktopWindow: true,
@@ -70,6 +75,23 @@ class PlatformCapabilities {
     audioSession: true,
   );
 
+  /// Android product profile: Point + file playback + A1 capture probe.
+  /// Windows WASAPI Live Transfer stays off. spatial_core is not connected.
+  static const android = PlatformCapabilities(
+    desktopWindow: false,
+    nativeWindowChrome: false,
+    floatingIsland: false,
+    systemMedia: false,
+    liveTransfer: false,
+    desktopDrop: false,
+    threeJsWebView: false,
+    filePlayback: true,
+    pointSpatial: true,
+    array: true,
+    mobileFileImport: true,
+    androidPlaybackCapture: true,
+  );
+
   static const none = PlatformCapabilities(
     desktopWindow: false,
     nativeWindowChrome: false,
@@ -84,6 +106,7 @@ class PlatformCapabilities {
     if (kIsWeb) return none;
     if (Platform.isWindows) return windows;
     if (Platform.isIOS) return ios;
+    if (Platform.isAndroid) return android;
     return none;
   }
 
@@ -103,7 +126,8 @@ class PlatformCapabilities {
         liveActivity == other.liveActivity &&
         appClip == other.appClip &&
         mobileFileImport == other.mobileFileImport &&
-        audioSession == other.audioSession;
+        audioSession == other.audioSession &&
+        androidPlaybackCapture == other.androidPlaybackCapture;
   }
 
   @override
@@ -122,5 +146,6 @@ class PlatformCapabilities {
         appClip,
         mobileFileImport,
         audioSession,
+        androidPlaybackCapture,
       );
 }

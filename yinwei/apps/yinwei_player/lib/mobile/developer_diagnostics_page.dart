@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:yinwei_player/bridge/engine_bootstrap.dart';
+import 'package:yinwei_player/platform/android_playback_capture.dart';
 import 'package:yinwei_player/platform/developer_diagnostics.dart';
 import 'package:yinwei_player/platform/screen_audio_probe.dart';
 import 'package:yinwei_player/state/engine_controller.dart';
@@ -12,12 +13,14 @@ class DeveloperDiagnosticsPage extends StatefulWidget {
     this.controller,
     this.backend,
     this.probe,
+    this.androidProbe,
     this.diagnostics,
   });
 
   final EngineController? controller;
   final EngineBackend? backend;
   final ScreenAudioProbe? probe;
+  final AndroidPlaybackCapture? androidProbe;
   final DeveloperDiagnostics? diagnostics;
 
   @override
@@ -27,6 +30,7 @@ class DeveloperDiagnosticsPage extends StatefulWidget {
 
 class _DeveloperDiagnosticsPageState extends State<DeveloperDiagnosticsPage> {
   late final ScreenAudioProbe _probe;
+  late final AndroidPlaybackCapture? _androidProbe;
   late final DeveloperDiagnostics _diagnostics;
   DeveloperDiagnosticsReport? _report;
   String? _statusMessage;
@@ -35,16 +39,19 @@ class _DeveloperDiagnosticsPageState extends State<DeveloperDiagnosticsPage> {
   void initState() {
     super.initState();
     _probe = widget.probe ?? ScreenAudioProbe.create();
+    _androidProbe = widget.androidProbe;
     _diagnostics = widget.diagnostics ?? DeveloperDiagnostics();
     _refresh();
   }
 
   Future<void> _refresh() async {
     final capture = await _probe.getStatus();
+    final android = await _androidProbe?.getStatus();
     final report = await _diagnostics.collect(
       controller: widget.controller,
       backend: widget.backend,
       capture: capture,
+      androidCapture: android,
     );
     if (!mounted) return;
     setState(() => _report = report);

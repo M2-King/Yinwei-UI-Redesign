@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:yinwei_player/bridge/engine_bootstrap.dart';
 import 'package:yinwei_player/mobile/developer_diagnostics_page.dart';
+import 'package:yinwei_player/platform/android_playback_capture.dart';
 import 'package:yinwei_player/platform/developer_diagnostics.dart';
 import 'package:yinwei_player/platform/screen_audio_probe.dart';
 import 'package:yinwei_player/state/engine_controller.dart';
@@ -212,5 +213,69 @@ void main() {
     await tester.pump();
     expect(exported, isTrue);
     expect(find.text('Share sheet opened'), findsOneWidget);
+  });
+
+  test('A1 Android report lists projection/capture and never includes PCM', () {
+    final capture = AndroidPlaybackCaptureStatus.fromChannel({
+      'supported': true,
+      'androidSdk': 34,
+      'projectionGranted': true,
+      'captureActive': true,
+      'foregroundServiceRunning': true,
+      'audioRecordState': 'RECORDING',
+      'readCount': 82,
+      'capturedFrames': 49152,
+      'sampleRate': 48000,
+      'channelCount': 2,
+      'encoding': 'PCM_16BIT',
+      'rmsDb': -17.8,
+      'peakDb': -2.1,
+      'silent': false,
+      'receivingPlaybackAudio': true,
+      'playbackCaptureConfigured': true,
+      'audioRecordSource': 'PLAYBACK_CAPTURE',
+    });
+    final report = DeveloperDiagnosticsReport.fromParts(
+      native: {
+        'build': {
+          'androidSdk': 34,
+          'manufacturer': 'Google',
+          'model': 'Pixel 8',
+          'androidVersion': '14',
+          'appVersion': '0.1.0',
+        },
+        'lifecycle': {
+          'appState': 'background',
+          'projectionRevoked': false,
+        },
+        'log': [
+          {
+            'iso': '2026-09-20T00:00:00Z',
+            'category': 'CAPTURE',
+            'message': 'reads=82 rms=-17.8dBFS',
+          },
+        ],
+      },
+      capture: ScreenAudioProbeStatus.unavailable,
+      androidCapture: capture,
+      generatedAt: DateTime.utc(2026, 9, 20, 9),
+    );
+
+    final text = report.asText();
+    expect(text, contains('YINWEI ANDROID DIAGNOSTICS'));
+    expect(text, contains('phase: A1 capture-only'));
+    expect(text, contains('== BUILD =='));
+    expect(text, contains('== PROJECTION =='));
+    expect(text, contains('== CAPTURE =='));
+    expect(text, contains('== LIFECYCLE =='));
+    expect(text, contains('manufacturer: Google'));
+    expect(text, contains('model: Pixel 8'));
+    expect(text, contains('reads: 82'));
+    expect(text, contains('frames: 49152'));
+    expect(text, contains('stream input initialized: no (A1 capture-only)'));
+    expect(text, contains('This report does not contain captured PCM samples.'));
+    expect(text, contains('microphone used as source: no'));
+    expect(report.asMap()['pcmSamplesIncluded'], isFalse);
+    expect(report.asMap()['phase'], 'A1');
   });
 }

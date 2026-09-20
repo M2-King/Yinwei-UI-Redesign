@@ -28,6 +28,26 @@ void main() {
     );
   });
 
+  test('Android A1 does not load spatial_core', () {
+    expect(
+      NativeLibraryLocator.modeFor(
+        isWindows: false,
+        isLinux: false,
+        isMacOS: false,
+        isIOS: false,
+        isAndroid: true,
+      ),
+      NativeLibraryLoadMode.androidUnavailable,
+    );
+    final detail = EngineBootstrap.missingEngineDetailFor(
+      NativeLibraryLoadMode.androidUnavailable,
+      'not connected',
+    );
+    expect(detail.toLowerCase(), contains('android a1'));
+    expect(detail.toLowerCase(), isNot(contains('dll')));
+    expect(detail, contains('not connected'));
+  });
+
   test('unknown hosts stay explicit unsupported platforms', () {
     expect(
       () => NativeLibraryLocator.modeFor(

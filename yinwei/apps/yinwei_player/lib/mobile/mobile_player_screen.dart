@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:yinwei_player/bridge/engine_bootstrap.dart';
 import 'package:yinwei_player/contracts/coordinate_frame_v1.dart';
+import 'package:yinwei_player/mobile/android_playback_capture_panel.dart';
 import 'package:yinwei_player/mobile/ios_runtime_status.dart';
 import 'package:yinwei_player/mobile/ios_screen_audio_probe_panel.dart';
 import 'package:yinwei_player/mobile/mobile_now_playing_header.dart';
@@ -10,6 +11,7 @@ import 'package:yinwei_player/mobile/mobile_spatial_stage.dart';
 import 'package:yinwei_player/mobile/mobile_transport.dart';
 import 'package:yinwei_player/mobile/mobile_visual_pose.dart';
 import 'package:yinwei_player/models/spatial_params.dart';
+import 'package:yinwei_player/platform/android_playback_capture.dart';
 import 'package:yinwei_player/platform/platform_capabilities.dart';
 import 'package:yinwei_player/platform/screen_audio_probe.dart';
 import 'package:yinwei_player/presentation/yinwei_live_presentation.dart';
@@ -36,6 +38,7 @@ class MobilePlayerScreen extends StatefulWidget {
     this.onMotionChanged,
     this.onPlaybackMode,
     this.screenAudioProbe,
+    this.androidPlaybackCapture,
   });
 
   final EngineController controller;
@@ -50,6 +53,7 @@ class MobilePlayerScreen extends StatefulWidget {
   final ValueChanged<MotionMode>? onMotionChanged;
   final ValueChanged<PlaybackMode>? onPlaybackMode;
   final ScreenAudioProbe? screenAudioProbe;
+  final AndroidPlaybackCapture? androidPlaybackCapture;
 
   @override
   State<MobilePlayerScreen> createState() => _MobilePlayerScreenState();
@@ -163,11 +167,18 @@ class _MobilePlayerScreenState extends State<MobilePlayerScreen> {
                     onMotion: widget.onMotionChanged,
                   ),
                   const SizedBox(height: 8),
-                  IosScreenAudioProbePanel(
-                    controller: c,
-                    backend: widget.backend,
-                    probe: widget.screenAudioProbe,
-                  ),
+                  if (widget.capabilities.androidPlaybackCapture)
+                    AndroidPlaybackCapturePanel(
+                      controller: c,
+                      backend: widget.backend,
+                      probe: widget.androidPlaybackCapture,
+                    )
+                  else
+                    IosScreenAudioProbePanel(
+                      controller: c,
+                      backend: widget.backend,
+                      probe: widget.screenAudioProbe,
+                    ),
                   const SizedBox(height: 8),
                   MobileTransport(
                     controller: c,

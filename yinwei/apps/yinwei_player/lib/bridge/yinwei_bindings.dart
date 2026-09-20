@@ -130,7 +130,13 @@ class YinweiBindings {
       isLinux: Platform.isLinux,
       isMacOS: Platform.isMacOS,
       isIOS: Platform.isIOS,
+      isAndroid: Platform.isAndroid,
     );
+    if (mode == NativeLibraryLoadMode.androidUnavailable) {
+      throw StateError(
+        'spatial_core is not connected on Android A1 capture-only',
+      );
+    }
     if (mode == NativeLibraryLoadMode.iosProcess) {
       if (Platform.isIOS) {
         print('[YINWEI_IOS] FFI_LOAD process');

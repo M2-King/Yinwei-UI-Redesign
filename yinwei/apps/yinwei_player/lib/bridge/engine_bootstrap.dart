@@ -43,6 +43,7 @@ class EngineBootstrap {
           isLinux: Platform.isLinux,
           isMacOS: Platform.isMacOS,
           isIOS: Platform.isIOS,
+          isAndroid: Platform.isAndroid,
         ),
         YinweiBindings.loadError,
       ),
@@ -61,6 +62,8 @@ class EngineBootstrap {
       case NativeLibraryLoadMode.linuxSo:
       case NativeLibraryLoadMode.macDylib:
         return 'Mock · spatial_core unavailable · ${loadError ?? 'native library missing'}';
+      case NativeLibraryLoadMode.androidUnavailable:
+        return 'Mock · Android A1 capture-only · ${loadError ?? 'spatial_core not connected'}';
     }
   }
 }

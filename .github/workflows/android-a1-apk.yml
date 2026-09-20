@@ -1,0 +1,86 @@
+# Yinwei / 音围 — Android A1 playback-capture APK
+#
+# Capture-only probe. Does not spatialize, does not play captured audio,
+# and does not modify Windows Live Transfer, iOS ScreenCaptureKit, or
+# spatial_core.
+#
+# Flutter: 3.47.2 stable — pinned to the current development baseline.
+
+name: Yinwei Android A1 APK
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - yinwei-ui-redesign
+
+permissions:
+  contents: read
+
+env:
+  FLUTTER_PIN: "3.47.2"
+
+jobs:
+  build_apk:
+    name: Build Android A1 APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      PLAYER: ${{ github.workspace }}/yinwei/apps/yinwei_player
+      GIT_SHA: ${{ github.sha }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Setup JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Flutter ${{ env.FLUTTER_PIN }}
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: "3.47.2"
+          channel: stable
+          cache: true
+
+      - name: Flutter tests
+        working-directory: ${{ env.PLAYER }}
+        run: flutter test
+
+      - name: Build release APK
+        working-directory: ${{ env.PLAYER }}
+        run: |
+          SHORT_SHA="${GITHUB_SHA:0:7}"
+          flutter build apk --release \
+            --dart-define=YINWEI_GIT_SHA="$GITHUB_SHA" \
+            --dart-define=YINWEI_BUILD_NUMBER="$GITHUB_RUN_NUMBER" \
+            --dart-define=YINWEI_BUILD_TIMESTAMP="$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            --dart-define=YINWEI_FLUTTER_VERSION="$FLUTTER_PIN" \
+            --dart-define=YINWEI_WORKFLOW="android-a1-apk" \
+            --dart-define=YINWEI_PHASE=A1
+          mkdir -p "$GITHUB_WORKSPACE/dist"
+          cp build/app/outputs/flutter-apk/app-release.apk \
+            "$GITHUB_WORKSPACE/dist/yinwei-android-live-transfer-a1-${SHORT_SHA}.apk"
+          echo "APK_PATH=$GITHUB_WORKSPACE/dist/yinwei-android-live-transfer-a1-${SHORT_SHA}.apk" >> "$GITHUB_ENV"
+
+      - name: Android unit tests
+        working-directory: ${{ env.PLAYER }}/android
+        run: |
+          chmod +x ./gradlew
+          ./gradlew :app:testDebugUnitTest --stacktrace
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: yinwei-android-live-transfer-a1
+          path: ${{ github.workspace }}/dist/*.apk
+          if-no-files-found: error

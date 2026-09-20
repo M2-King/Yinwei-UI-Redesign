@@ -17,7 +17,8 @@ abstract class MediaFileAcquisition {
     Future<Directory> Function()? resolveOwnedDirectory,
   }) {
     final ios = isIOS ?? (!kIsWeb && Platform.isIOS);
-    if (ios && capabilities.mobileFileImport) {
+    final android = !kIsWeb && Platform.isAndroid;
+    if ((ios || android) && capabilities.mobileFileImport) {
       return CopyingMediaFileAcquisition(
         resolveDirectory: resolveOwnedDirectory ??
             () async => Directory(

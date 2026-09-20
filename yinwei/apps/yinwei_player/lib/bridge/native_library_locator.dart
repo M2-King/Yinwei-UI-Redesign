@@ -2,7 +2,13 @@
 ///
 /// iOS links `libspatial_core.a` into the Runner process. Lookups must use
 /// [DynamicLibrary.process], never a Windows DLL path.
-enum NativeLibraryLoadMode { windowsDll, linuxSo, macDylib, iosProcess }
+enum NativeLibraryLoadMode {
+  windowsDll,
+  linuxSo,
+  macDylib,
+  iosProcess,
+  androidUnavailable,
+}
 
 abstract final class NativeLibraryLocator {
   static const processToken = 'process';
@@ -12,11 +18,13 @@ abstract final class NativeLibraryLocator {
     required bool isLinux,
     required bool isMacOS,
     required bool isIOS,
+    bool isAndroid = false,
   }) {
     if (isWindows) return NativeLibraryLoadMode.windowsDll;
     if (isLinux) return NativeLibraryLoadMode.linuxSo;
     if (isMacOS) return NativeLibraryLoadMode.macDylib;
     if (isIOS) return NativeLibraryLoadMode.iosProcess;
+    if (isAndroid) return NativeLibraryLoadMode.androidUnavailable;
     throw UnsupportedError('Unsupported platform');
   }
 }
