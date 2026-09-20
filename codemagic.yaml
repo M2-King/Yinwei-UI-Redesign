@@ -71,7 +71,8 @@ workflows:
           cd "$PLAYER"
           flutter build ios --config-only --release --no-codesign
           if [[ -f ios/Podfile ]]; then
-            (cd ios && pod install)
+            echo "Podfile present — running pod install"
+            (cd ios && pod install --verbose)
           else
             echo "No Podfile; using Flutter Swift Package Manager + Runner.xcworkspace"
           fi
@@ -90,7 +91,13 @@ workflows:
 
           cd "$PLAYER_ABS"
           set +e +o pipefail
-          flutter build ios --release --no-codesign
+          flutter build ios --release --no-codesign -- \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            SWIFT_OPTIMIZATION_LEVEL=-Onone \
+            SWIFT_COMPILATION_MODE=incremental \
+            SWIFT_ENABLE_EXPLICIT_MODULES=NO \
+            COMPILER_INDEX_STORE_ENABLE=NO
           flutter_ok=$?
           set -euo pipefail
 

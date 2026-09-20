@@ -186,14 +186,20 @@ jobs:
           set -euo pipefail
 
           mkdir -p "$LOG_DIR"
-          BUILD_CMD="flutter build ios --release --no-codesign"
+          BUILD_CMD="flutter build ios --release --no-codesign + unsigned Swift flags"
           flutter_ok=0
           # Disable pipefail so a Flutter signing/extension failure can fall
           # back to unsigned xcodebuild instead of aborting the job.
           set +e +o pipefail
           (
             cd "$PLAYER"
-            flutter build ios --release --no-codesign
+            flutter build ios --release --no-codesign -- \
+              CODE_SIGNING_ALLOWED=NO \
+              CODE_SIGNING_REQUIRED=NO \
+              SWIFT_OPTIMIZATION_LEVEL=-Onone \
+              SWIFT_COMPILATION_MODE=incremental \
+              SWIFT_ENABLE_EXPLICIT_MODULES=NO \
+              COMPILER_INDEX_STORE_ENABLE=NO
           ) 2>&1 | tee "$LOG_DIR/flutter-build-ios.log"
           flutter_ok=${PIPESTATUS[0]}
           set -euo pipefail
