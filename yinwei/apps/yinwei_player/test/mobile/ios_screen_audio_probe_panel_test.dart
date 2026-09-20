@@ -95,6 +95,8 @@ void main() {
     await tester.pump();
     await tester.pump();
     expect(find.text('Live Transfer — iOS 27 PoC'), findsOneWidget);
+    expect(find.text('Start Capture'), findsOneWidget);
+    expect(find.text('Diagnostics'), findsOneWidget);
     expect(find.text('Ready'), findsOneWidget);
 
     await tester.tap(find.byKey(const Key('ios-screen-audio-probe-start')));

@@ -68,6 +68,14 @@ class ScreenAudioProbeStatus {
     this.lastRmsDb,
     this.lastPeakDb,
     this.lastError,
+    this.pickerState = 'idle',
+    this.selectedCaptureMode = 'full-display',
+    this.lastCallbackOutputType,
+    this.capturesAudio = false,
+    this.lastFrameCount,
+    this.interleaved,
+    this.formatDescription,
+    this.osVersion,
   });
 
   final bool supported;
@@ -87,6 +95,14 @@ class ScreenAudioProbeStatus {
   final bool excludesCurrentProcessAudioSupported;
   final bool excludesCurrentProcessAudio;
   final String? lastError;
+  final String pickerState;
+  final String? selectedCaptureMode;
+  final String? lastCallbackOutputType;
+  final bool capturesAudio;
+  final int? lastFrameCount;
+  final bool? interleaved;
+  final String? formatDescription;
+  final String? osVersion;
 
   static const unavailable = ScreenAudioProbeStatus(
     supported: false,
@@ -160,6 +176,18 @@ class ScreenAudioProbeStatus {
           map['excludesCurrentProcessAudioSupported'] == true,
       excludesCurrentProcessAudio: map['excludesCurrentProcessAudio'] == true,
       lastError: (error == null || error.isEmpty) ? null : error,
+      pickerState: map['pickerState']?.toString() ??
+          (map['pickerActive'] == true
+              ? 'presenting'
+              : (map['captureActive'] == true ? 'capturing' : 'idle')),
+      selectedCaptureMode: map['selectedCaptureMode']?.toString() ??
+          'full-display',
+      lastCallbackOutputType: map['lastCallbackOutputType']?.toString(),
+      capturesAudio: map['capturesAudio'] == true,
+      lastFrameCount: _intOrNull(map['lastFrameCount']),
+      interleaved: map['interleaved'] is bool ? map['interleaved'] as bool : null,
+      formatDescription: map['formatDescription']?.toString(),
+      osVersion: map['osVersion']?.toString(),
     );
   }
 

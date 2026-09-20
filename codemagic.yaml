@@ -201,3 +201,245 @@ workflows:
       - Yinwei-unsigned.ipa
       - Yinwei-build-info.txt
       - /tmp/xcodebuild_logs/*.log
+
+  ios-27-live-transfer:
+    name: Yinwei iOS 27 Live Transfer
+    # Experimental Live Transfer IPA. Do not change ios-unsigned-ipa above.
+    # xcode: edge currently resolves to Xcode 27 on Codemagic. The first script
+    # fails the build if Xcode major < 27 or iphoneos SDK major < 27.
+    max_build_duration: 120
+    instance_type: mac_mini_m2
+    environment:
+      flutter: 3.47.2
+      xcode: edge
+      cocoapods: default
+      vars:
+        PLAYER: yinwei/apps/yinwei_player
+        YINWEI_ROOT: yinwei
+        YINWEI_PHASE: 7D1
+    triggering:
+      events:
+        - push
+      branch_patterns:
+        - pattern: yinwei-ui-redesign
+          include: true
+          source: true
+      cancel_previous_builds: true
+    scripts:
+      - name: Verify Xcode 27 and iOS 27 SDK
+        script: |
+          set -euo pipefail
+          mkdir -p "$CM_BUILD_DIR/ios27_artifacts"
+          bash "$YINWEI_ROOT/tools/verify_ios27_toolchain.sh" \
+            "$CM_BUILD_DIR/ios27_artifacts/environment.txt"
+      - name: Install Rust stable and iOS targets
+        script: |
+          set -euo pipefail
+          if ! command -v rustup >/dev/null 2>&1; then
+            curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+          fi
+          # shellcheck disable=SC1090
+          source "$HOME/.cargo/env"
+          rustup toolchain install stable
+          rustup default stable
+          rustup target add aarch64-apple-ios aarch64-apple-ios-sim
+          echo "===== rustc --version ====="
+          rustc --version
+          cargo --version
+          {
+            echo
+            echo "===== rustc --version (after install) ====="
+            rustc --version
+            cargo --version
+          } >> "$CM_BUILD_DIR/ios27_artifacts/environment.txt"
+      - name: Flutter pub get
+        script: |
+          set -euo pipefail
+          cd "$PLAYER"
+          flutter pub get
+      - name: cargo test -p spatial_core
+        script: |
+          set -euo pipefail
+          source "$HOME/.cargo/env"
+          cd "$YINWEI_ROOT"
+          cargo test -p spatial_core 2>&1 | tee "$CM_BUILD_DIR/ios27_artifacts/cargo-test.txt"
+          if grep -q 'test result: FAILED' "$CM_BUILD_DIR/ios27_artifacts/cargo-test.txt"; then
+            echo "ERROR: cargo test reported FAILED" >&2
+            exit 1
+          fi
+      - name: flutter test
+        script: |
+          set -euo pipefail
+          cd "$PLAYER"
+          flutter test 2>&1 | tee "$CM_BUILD_DIR/ios27_artifacts/flutter-test.txt"
+          if ! grep -Eq 'All tests passed!|[1-9][0-9]* tests passed' "$CM_BUILD_DIR/ios27_artifacts/flutter-test.txt"; then
+            echo "ERROR: flutter test did not report passing tests" >&2
+            exit 1
+          fi
+      - name: Generate iOS tooling
+        script: |
+          set -euo pipefail
+          cd "$PLAYER"
+          python3 "$CM_BUILD_DIR/$YINWEI_ROOT/tools/patch_ios_file_picker_no_dkcamera.py" \
+            "$CM_BUILD_DIR/$PLAYER"
+          XCODE_VER="$(xcodebuild -version | tr '\n' ' ' | sed 's/[[:space:]]*$//')"
+          IOS_SDK="$(xcrun --sdk iphoneos --show-sdk-version)"
+          FLUTTER_VER="$(flutter --version | awk 'NR==1 {print}')"
+          BUILD_TS="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          flutter build ios --config-only --release --no-codesign \
+            --dart-define="YINWEI_GIT_SHA=${CM_COMMIT}" \
+            --dart-define="YINWEI_BUILD_NUMBER=${CM_BUILD_ID}" \
+            --dart-define="YINWEI_BUILD_TIMESTAMP=${BUILD_TS}" \
+            --dart-define="YINWEI_FLUTTER_VERSION=${FLUTTER_VER}" \
+            --dart-define="YINWEI_XCODE_VERSION=${XCODE_VER}" \
+            --dart-define="YINWEI_IOS_SDK_VERSION=${IOS_SDK}" \
+            --dart-define="YINWEI_WORKFLOW=ios-27-live-transfer" \
+            --dart-define="YINWEI_PHASE=7D1"
+          python3 "$CM_BUILD_DIR/$YINWEI_ROOT/tools/patch_ios_file_picker_no_dkcamera.py" \
+            "$CM_BUILD_DIR/$PLAYER/ios" \
+            "$CM_BUILD_DIR/$PLAYER/ios/Flutter/ephemeral"
+          if [[ -f ios/Podfile ]]; then
+            echo "Podfile present — running pod install"
+            (cd ios && pod install --verbose)
+          else
+            echo "No Podfile; using Flutter Swift Package Manager + Runner.xcworkspace"
+          fi
+      - name: Build spatial_core for iOS
+        script: |
+          set -euo pipefail
+          source "$HOME/.cargo/env"
+          bash "$YINWEI_ROOT/tools/build_native_ios.sh" all
+          test -f "$YINWEI_ROOT/target/aarch64-apple-ios/release/libspatial_core.a"
+          test -f "$PLAYER/ios/Native/libspatial_core.xcframework/Info.plist"
+          test -f "$PLAYER/ios/Flutter/spatial_core_force_load.xcconfig"
+          test -f "$PLAYER/ios/Runner/spatial_core_ffi_keep.c"
+          grep -q "libspatial_core.xcframework in Frameworks" \
+            "$PLAYER/ios/Runner.xcodeproj/project.pbxproj"
+          echo "===== spatial_core_force_load.xcconfig ====="
+          cat "$PLAYER/ios/Flutter/spatial_core_force_load.xcconfig"
+      - name: Build unsigned iOS 27 capture-probe IPA
+        script: |
+          set -euo pipefail
+          source "$HOME/.cargo/env"
+          export COPYFILE_DISABLE=1
+          export XCODEBUILD_LOG_DIR="/tmp/xcodebuild_logs"
+          mkdir -p "$XCODEBUILD_LOG_DIR" "$CM_BUILD_DIR/ios27_artifacts"
+          PLAYER_ABS="$CM_BUILD_DIR/$PLAYER"
+          YINWEI_ABS="$CM_BUILD_DIR/$YINWEI_ROOT"
+          SHA12="$(printf '%s' "${CM_COMMIT}" | cut -c1-12)"
+          ART="$CM_BUILD_DIR/ios27_artifacts"
+
+          cd "$PLAYER_ABS"
+          flutter_ok=1
+
+          find_runner_app() {
+            local candidate found="" p
+            local -a preferred=(
+              "$PLAYER_ABS/build/ios_ci_derived/Build/Products/Release-iphoneos/Runner.app"
+              "$PLAYER_ABS/build/ios/Release-iphoneos/Runner.app"
+              "$PLAYER_ABS/ios/build/Release-iphoneos/Runner.app"
+              "$PLAYER_ABS/build/ios/iphoneos/Runner.app"
+            )
+            for candidate in "${preferred[@]}"; do
+              if [[ -f "$candidate/Runner" ]]; then
+                echo "$candidate"
+                return 0
+              fi
+            done
+            while IFS= read -r p; do
+              [[ -z "$p" ]] && continue
+              case "$p" in
+                *iphonesimulator*|*simulator*) continue ;;
+              esac
+              if [[ -f "$p/Runner" ]]; then
+                echo "$p"
+                return 0
+              fi
+            done < <(find "$PLAYER_ABS/build" "$PLAYER_ABS/ios/build" -name Runner.app -type d 2>/dev/null || true)
+            return 1
+          }
+
+          is_iphoneos_binary() {
+            local bin="$1"
+            [[ -f "$bin" ]] || return 1
+            echo "$bin" | grep -Eqi 'iphonesimulator|simulator' && return 1
+            vtool -show-build "$bin" 2>/dev/null | grep -qi IOSSIMULATOR && return 1
+            file "$bin" | grep -qi 'arm64' || return 1
+            return 0
+          }
+
+          RUNNER_APP=""
+          if [[ "$flutter_ok" -eq 0 ]] && RUNNER_APP="$(find_runner_app)" && is_iphoneos_binary "$RUNNER_APP/Runner"; then
+            echo "Flutter --no-codesign produced $RUNNER_APP"
+          else
+            echo "Falling back to unsigned xcodebuild"
+            bash "$YINWEI_ABS/tools/xcodebuild_ios_unsigned.sh" \
+              "$PLAYER_ABS/ios" \
+              "$PLAYER_ABS/build/ios_ci_derived"
+            if [[ -f "$XCODEBUILD_LOG_DIR/runner-app-path.txt" ]]; then
+              RUNNER_APP="$(tr -d '\r\n' < "$XCODEBUILD_LOG_DIR/runner-app-path.txt")"
+            else
+              RUNNER_APP="$(find_runner_app)"
+            fi
+          fi
+
+          test -d "$RUNNER_APP"
+          test -f "$RUNNER_APP/Runner"
+          file "$RUNNER_APP/Runner"
+          bash "$YINWEI_ABS/tools/verify_ios_ffi.sh" "$RUNNER_APP/Runner"
+
+          rm -rf "$CM_BUILD_DIR/ipa_staging_ios27"
+          mkdir -p "$CM_BUILD_DIR/ipa_staging_ios27/Payload"
+          cp -R "$RUNNER_APP" "$CM_BUILD_DIR/ipa_staging_ios27/Payload/Runner.app"
+          IPA="$ART/yinwei-ios27-live-transfer-${SHA12}.ipa"
+          (
+            cd "$CM_BUILD_DIR/ipa_staging_ios27"
+            /usr/bin/zip -qry "$IPA" Payload
+          )
+          test -f "$IPA"
+          unzip -l "$IPA" > "$ART/ipa_listing.txt"
+          if ! grep -q 'Payload/Runner.app/' "$ART/ipa_listing.txt"; then
+            echo "ERROR: IPA is missing Payload/Runner.app/" >&2
+            exit 1
+          fi
+
+          printf '%s\n' "${CM_COMMIT}" > "$ART/yinwei-ios27-live-transfer-${SHA12}-gitsha.txt"
+          {
+            echo "Yinwei / 音围 iOS 27 Live Transfer — 7D1 capture probe"
+            echo "UNSIGNED BUILD — SIGN BEFORE INSTALLATION"
+            echo "This IPA is capture-only. It does not spatialize captured PCM."
+            echo
+            echo "git SHA: ${CM_COMMIT}"
+            echo "branch: ${CM_BRANCH}"
+            echo "workflow: ios-27-live-transfer"
+            echo "Xcode requested: edge (must resolve to Xcode 27+)"
+            echo "Xcode: $(xcodebuild -version | tr '\n' ' ')"
+            echo "iOS SDK: $(xcrun --sdk iphoneos --show-sdk-version)"
+            echo "Flutter: $(flutter --version | awk 'NR==1 {print}')"
+            echo "Rust: $(rustc --version)"
+            echo "IPA SHA-256: $(shasum -a 256 "$IPA" | awk '{print $1}')"
+            echo
+            echo "UNSIGNED BUILD — SIGN BEFORE INSTALLATION"
+          } | tee "$ART/yinwei-ios27-live-transfer-${SHA12}-environment.txt"
+          cat "$CM_BUILD_DIR/ios27_artifacts/environment.txt" >> \
+            "$ART/yinwei-ios27-live-transfer-${SHA12}-environment.txt" || true
+
+          {
+            echo "===== cargo test -p spatial_core ====="
+            cat "$ART/cargo-test.txt"
+            echo
+            echo "===== flutter test ====="
+            cat "$ART/flutter-test.txt"
+          } > "$ART/yinwei-ios27-live-transfer-${SHA12}-tests.txt"
+
+          python3 "$YINWEI_ABS/tools/write_ios27_source_manifest.py" \
+            "$ART/yinwei-ios27-live-transfer-${SHA12}-source-diagnostics-manifest.txt" \
+            "$CM_BUILD_DIR"
+          echo "Packaged $IPA"
+    artifacts:
+      - ios27_artifacts/yinwei-ios27-live-transfer-*.ipa
+      - ios27_artifacts/yinwei-ios27-live-transfer-*-environment.txt
+      - ios27_artifacts/yinwei-ios27-live-transfer-*-tests.txt
+      - ios27_artifacts/yinwei-ios27-live-transfer-*-gitsha.txt
+      - ios27_artifacts/yinwei-ios27-live-transfer-*-source-diagnostics-manifest.txt
+      - /tmp/xcodebuild_logs/*.log

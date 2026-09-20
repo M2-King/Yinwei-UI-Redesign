@@ -70,6 +70,7 @@ final class YinweiUnavailableScreenAudioCapture: YinweiScreenAudioCapturing {
       "supported": false,
       "sdkCompiled": sdkCompiled,
       "reason": reason,
+      "osVersion": UIDevice.current.systemVersion,
     ]
   }
 
@@ -102,11 +103,18 @@ struct YinweiScreenAudioProbeStatus {
   var supported = false
   var captureActive = false
   var pickerActive = false
+  var pickerState = "idle"
+  var selectedCaptureMode = "full-display"
   var audioBufferCount = 0
   var microphoneBufferCount = 0
   var screenBufferCount = 0
   var sampleRate: Int?
   var channelCount: Int?
+  var lastFrameCount: Int?
+  var interleaved: Bool?
+  var formatDescription: String?
+  var lastCallbackOutputType: String?
+  var capturesAudio = false
   var lastRmsDb: Double?
   var lastPeakDb: Double?
   var receivingSystemAudio = false
@@ -128,18 +136,26 @@ struct YinweiScreenAudioProbeStatus {
       "supported": supported,
       "captureActive": captureActive,
       "pickerActive": pickerActive,
+      "pickerState": pickerState,
+      "selectedCaptureMode": selectedCaptureMode,
       "audioBufferCount": audioBufferCount,
       "microphoneBufferCount": microphoneBufferCount,
       "screenBufferCount": screenBufferCount,
+      "capturesAudio": capturesAudio,
       "receivingSystemAudio": receivingSystemAudio,
       "receivingMicrophone": receivingMicrophone,
       "audioSilent": audioSilent,
       "pickerCancelled": pickerCancelled,
       "excludesCurrentProcessAudioSupported": excludesCurrentProcessAudioSupported,
       "excludesCurrentProcessAudio": excludesCurrentProcessAudio,
+      "osVersion": UIDevice.current.systemVersion,
     ]
     if let sampleRate { map["sampleRate"] = sampleRate }
     if let channelCount { map["channelCount"] = channelCount }
+    if let lastFrameCount { map["lastFrameCount"] = lastFrameCount }
+    if let interleaved { map["interleaved"] = interleaved }
+    if let formatDescription { map["formatDescription"] = formatDescription }
+    if let lastCallbackOutputType { map["lastCallbackOutputType"] = lastCallbackOutputType }
     if let lastRmsDb, lastRmsDb.isFinite { map["lastRmsDb"] = lastRmsDb }
     if let lastPeakDb, lastPeakDb.isFinite { map["lastPeakDb"] = lastPeakDb }
     if let lastError, !lastError.isEmpty { map["lastError"] = lastError }
@@ -171,6 +187,7 @@ final class YinweiIOS27ScreenAudioCapture: NSObject, YinweiScreenAudioCapturing,
       "supported": true,
       "sdkCompiled": true,
       "pickerAvailable": SCContentSharingPicker.shared.isAvailable,
+      "osVersion": UIDevice.current.systemVersion,
     ]
   }
 
@@ -202,7 +219,10 @@ final class YinweiIOS27ScreenAudioCapture: NSObject, YinweiScreenAudioCapturing,
       status.pickerCancelled = false
       status.lastError = nil
       status.pickerActive = true
+      status.pickerState = "presenting"
+      status.selectedCaptureMode = "full-display"
     }
+    YinweiDeveloperDiagnostics.shared.log("CAPTURE", "picker opened isAvailable=\(SCContentSharingPicker.shared.isAvailable)")
     let picker = SCContentSharingPicker.shared
     if !observerRegistered {
       picker.add(self)
@@ -227,8 +247,10 @@ final class YinweiIOS27ScreenAudioCapture: NSObject, YinweiScreenAudioCapturing,
     didCancelFor stream: SCStream?
   ) {
     print("[YINWEI_CAPTURE] picker cancelled")
+    YinweiDeveloperDiagnostics.shared.log("CAPTURE", "picker cancelled")
     update { status in
       status.pickerActive = false
+      status.pickerState = "cancelled"
       status.pickerCancelled = true
       status.lastError = nil
     }
@@ -240,9 +262,15 @@ final class YinweiIOS27ScreenAudioCapture: NSObject, YinweiScreenAudioCapturing,
     for stream: SCStream?
   ) {
     print("[YINWEI_CAPTURE] picker selected micEnabled=\(filter.isMicrophoneEnabled)")
+    YinweiDeveloperDiagnostics.shared.log(
+      "CAPTURE",
+      "picker selected mode=full-display micEnabled=\(filter.isMicrophoneEnabled) filter=\(String(describing: filter))"
+    )
     update { status in
       status.pickerActive = false
+      status.pickerState = "selected"
       status.pickerCancelled = false
+      status.selectedCaptureMode = "full-display"
       status.lastError = nil
     }
     Task {
@@ -252,8 +280,10 @@ final class YinweiIOS27ScreenAudioCapture: NSObject, YinweiScreenAudioCapturing,
 
   func contentSharingPickerStartDidFailWithError(_ error: any Error) {
     print("[YINWEI_CAPTURE] picker failed \(error)")
+    YinweiDeveloperDiagnostics.shared.markCaptureStream(started: false, error: String(describing: error))
     update { status in
       status.pickerActive = false
+      status.pickerState = "error"
       status.lastError = String(describing: error)
     }
   }
@@ -278,9 +308,17 @@ final class YinweiIOS27ScreenAudioCapture: NSObject, YinweiScreenAudioCapturing,
       try newStream.addStreamOutput(self, type: .screen, sampleHandlerQueue: sampleQueue)
       try await newStream.startCapture()
       stream = newStream
+      YinweiDeveloperDiagnostics.shared.markCaptureStream(started: true)
+      YinweiDeveloperDiagnostics.shared.log(
+        "CAPTURE",
+        "SCStream started capturesAudio=true microphone=false sampleRate=48000 channelCount=2 excludesCurrentProcessAudio=\(config.excludesCurrentProcessAudio)"
+      )
       update { status in
         status.captureActive = true
         status.pickerActive = false
+        status.pickerState = "capturing"
+        status.selectedCaptureMode = "full-display"
+        status.capturesAudio = true
         status.excludesCurrentProcessAudioSupported = true
         status.excludesCurrentProcessAudio = true
         status.audioBufferCount = 0
@@ -289,13 +327,20 @@ final class YinweiIOS27ScreenAudioCapture: NSObject, YinweiScreenAudioCapturing,
         status.receivingSystemAudio = false
         status.receivingMicrophone = false
         status.audioSilent = false
+        status.lastCallbackOutputType = nil
         status.lastError = nil
       }
       print("[YINWEI_CAPTURE] SCStream started capturesAudio=true sampleRate=48000 channelCount=2")
     } catch {
       print("[YINWEI_CAPTURE] SCStream start failed \(error)")
+      YinweiDeveloperDiagnostics.shared.markCaptureStream(
+        started: false,
+        error: String(describing: error)
+      )
       update { status in
         status.captureActive = false
+        status.capturesAudio = false
+        status.pickerState = "error"
         status.lastError = String(describing: error)
       }
     }
@@ -316,9 +361,14 @@ final class YinweiIOS27ScreenAudioCapture: NSObject, YinweiScreenAudioCapturing,
     loggedOutputTypes.removeAll()
     lastAudioLog = 0
     lastNoAudioLog = 0
+    if current != nil || error != nil {
+      YinweiDeveloperDiagnostics.shared.markCaptureStream(started: false, error: error)
+    }
     update { status in
       status.captureActive = false
       status.pickerActive = false
+      status.pickerState = cancelled ? "cancelled" : (error == nil ? "idle" : "error")
+      status.capturesAudio = false
       if cancelled {
         status.pickerCancelled = true
         status.lastError = nil
@@ -330,8 +380,14 @@ final class YinweiIOS27ScreenAudioCapture: NSObject, YinweiScreenAudioCapturing,
 
   func stream(_ stream: SCStream, didStopWithError error: any Error) {
     print("[YINWEI_CAPTURE] stream stopped \(error)")
+    YinweiDeveloperDiagnostics.shared.markCaptureStream(
+      started: false,
+      error: String(describing: error)
+    )
     update { status in
       status.captureActive = false
+      status.capturesAudio = false
+      status.pickerState = "error"
       status.lastError = String(describing: error)
     }
   }
@@ -354,6 +410,10 @@ final class YinweiIOS27ScreenAudioCapture: NSObject, YinweiScreenAudioCapturing,
     }
     if loggedOutputTypes.insert(label).inserted {
       print("[YINWEI_CAPTURE] outputType=\(label)")
+      YinweiDeveloperDiagnostics.shared.log("CAPTURE", "first callback outputType=\(label)")
+    }
+    update { status in
+      status.lastCallbackOutputType = label
     }
 
     switch type {
@@ -376,9 +436,13 @@ final class YinweiIOS27ScreenAudioCapture: NSObject, YinweiScreenAudioCapturing,
     let now = Date().timeIntervalSince1970
     update { status in
       status.audioBufferCount += 1
+      status.lastCallbackOutputType = "audio"
       if let inspection {
         status.sampleRate = Int(inspection.sampleRate.rounded())
         status.channelCount = inspection.channels
+        status.lastFrameCount = inspection.frames
+        status.interleaved = inspection.interleaved
+        status.formatDescription = inspection.formatSummary
         status.audioSilent = inspection.silent
         if inspection.silent {
           status.lastRmsDb = nil
@@ -397,15 +461,25 @@ final class YinweiIOS27ScreenAudioCapture: NSObject, YinweiScreenAudioCapturing,
     let peak = snapshot.lastPeakDb
     let rate = snapshot.sampleRate ?? 0
     let channels = snapshot.channelCount ?? 0
+    let frames = snapshot.lastFrameCount ?? 0
+    let interleaved = snapshot.interleaved
     lock.unlock()
 
     if count == 1, let inspection {
       print("[YINWEI_CAPTURE] audio format \(inspection.formatSummary) pts=\(inspection.pts)")
+      YinweiDeveloperDiagnostics.shared.log(
+        "AUDIO",
+        "format \(inspection.formatSummary) frames=\(inspection.frames) pts=\(inspection.pts)"
+      )
     }
     if now - lastAudioLog >= 1.0 {
       lastAudioLog = now
       if silent || rms == nil {
         print("[YINWEI_CAPTURE] type=audio buffers=\(count) rms=-inf/silent")
+        YinweiDeveloperDiagnostics.shared.log(
+          "AUDIO",
+          "type=audio buffers=\(count) rate=\(rate) channels=\(channels) frames=\(frames) interleaved=\(interleaved.map(String.init) ?? "?") rms=-inf/silent"
+        )
       } else if let rms, let peak {
         print(
           String(
@@ -414,7 +488,21 @@ final class YinweiIOS27ScreenAudioCapture: NSObject, YinweiScreenAudioCapturing,
             count,
             rate,
             channels,
-            inspection?.frames ?? 0,
+            frames,
+            rms,
+            peak
+          )
+        )
+        YinweiDeveloperDiagnostics.shared.log(
+          "AUDIO",
+          String(
+            format:
+              "type=audio buffers=%d rate=%d channels=%d frames=%d interleaved=%@ rms=%.1fdB peak=%.1fdB",
+            count,
+            rate,
+            channels,
+            frames,
+            (interleaved ?? false) ? "true" : "false",
             rms,
             peak
           )
@@ -433,6 +521,7 @@ final class YinweiIOS27ScreenAudioCapture: NSObject, YinweiScreenAudioCapturing,
     if captureActive && audioCount == 0 && now - lastNoAudioLog >= 1.0 {
       lastNoAudioLog = now
       print("[YINWEI_CAPTURE] no system-audio buffers received")
+      YinweiDeveloperDiagnostics.shared.log("CAPTURE", "no system-audio buffers received")
     }
   }
 
@@ -449,6 +538,7 @@ enum YinweiAudioBufferInspector {
     var rmsDb: Double
     var peakDb: Double
     var silent: Bool
+    var interleaved: Bool
     var pts: String
     var formatSummary: String
   }
@@ -562,6 +652,7 @@ enum YinweiAudioBufferInspector {
       rmsDb: rmsDb,
       peakDb: peakDb,
       silent: silent,
+      interleaved: !isNonInterleaved,
       pts: pts,
       formatSummary: formatSummary
     )

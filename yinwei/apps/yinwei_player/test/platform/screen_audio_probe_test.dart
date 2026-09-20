@@ -73,6 +73,37 @@ void main() {
     expect(status.receivingSystemAudio, isTrue);
     expect(status.receivingMicrophone, isFalse);
     expect(status.phase, ScreenAudioProbePhase.receivingSystemAudio);
+    expect(status.lastCallbackOutputType, isNull);
+  });
+
+  test('audio output type fields map from native capture status', () {
+    final status = ScreenAudioProbeStatus.fromChannel({
+      'supported': true,
+      'captureActive': true,
+      'pickerActive': false,
+      'pickerState': 'capturing',
+      'selectedCaptureMode': 'full-display',
+      'audioBufferCount': 9,
+      'microphoneBufferCount': 0,
+      'screenBufferCount': 3,
+      'lastCallbackOutputType': 'audio',
+      'capturesAudio': true,
+      'lastFrameCount': 512,
+      'interleaved': false,
+      'formatDescription': 'rate=48000 channels=2 bits=32 float=true interleaved=false',
+      'receivingSystemAudio': true,
+      'receivingMicrophone': false,
+      'audioSilent': false,
+      'excludesCurrentProcessAudioSupported': true,
+      'excludesCurrentProcessAudio': true,
+    });
+    expect(status.lastCallbackOutputType, 'audio');
+    expect(status.capturesAudio, isTrue);
+    expect(status.selectedCaptureMode, 'full-display');
+    expect(status.pickerState, 'capturing');
+    expect(status.lastFrameCount, 512);
+    expect(status.interleaved, isFalse);
+    expect(status.formatDescription, contains('rate=48000'));
   });
 
   test('start/stop lifecycle: picker waiting then capturing then ready', () async {
@@ -220,6 +251,13 @@ Map<String, dynamic> _status({
   bool excludesCurrentProcessAudioSupported = false,
   bool excludesCurrentProcessAudio = false,
   String? lastError,
+  String pickerState = 'idle',
+  String selectedCaptureMode = 'full-display',
+  String? lastCallbackOutputType,
+  bool capturesAudio = false,
+  int? lastFrameCount,
+  bool? interleaved,
+  String? formatDescription,
 }) {
   return {
     'supported': supported,
@@ -240,6 +278,13 @@ Map<String, dynamic> _status({
         excludesCurrentProcessAudioSupported,
     'excludesCurrentProcessAudio': excludesCurrentProcessAudio,
     'lastError': lastError,
+    'pickerState': pickerState,
+    'selectedCaptureMode': selectedCaptureMode,
+    'lastCallbackOutputType': lastCallbackOutputType,
+    'capturesAudio': capturesAudio,
+    'lastFrameCount': lastFrameCount,
+    'interleaved': interleaved,
+    'formatDescription': formatDescription,
   };
 }
 

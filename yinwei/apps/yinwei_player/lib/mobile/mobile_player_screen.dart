@@ -160,7 +160,10 @@ class _MobilePlayerScreenState extends State<MobilePlayerScreen> {
                     onMotion: widget.onMotionChanged,
                   ),
                   const SizedBox(height: 8),
-                  const IosScreenAudioProbePanel(),
+                  IosScreenAudioProbePanel(
+                    controller: c,
+                    backend: widget.backend,
+                  ),
                   const SizedBox(height: 8),
                   MobileTransport(
                     controller: c,

@@ -1,14 +1,24 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:yinwei_player/bridge/engine_bootstrap.dart';
+import 'package:yinwei_player/mobile/developer_diagnostics_page.dart';
 import 'package:yinwei_player/platform/screen_audio_probe.dart';
+import 'package:yinwei_player/state/engine_controller.dart';
 import 'package:yinwei_player/theme/yinwei_theme.dart';
 
 /// Development-only iOS 27 capture probe. Does not replace Open file playback.
 class IosScreenAudioProbePanel extends StatefulWidget {
-  const IosScreenAudioProbePanel({super.key, this.probe});
+  const IosScreenAudioProbePanel({
+    super.key,
+    this.probe,
+    this.controller,
+    this.backend,
+  });
 
   final ScreenAudioProbe? probe;
+  final EngineController? controller;
+  final EngineBackend? backend;
 
   @override
   State<IosScreenAudioProbePanel> createState() =>
@@ -170,6 +180,34 @@ class _IosScreenAudioProbePanelState extends State<IosScreenAudioProbePanel> {
                   ),
                 ),
               ],
+            ),
+            const SizedBox(height: 4),
+            SizedBox(
+              width: double.infinity,
+              height: 32,
+              child: OutlinedButton(
+                key: const Key('ios-developer-diagnostics-open'),
+                onPressed: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (_) => DeveloperDiagnosticsPage(
+                        controller: widget.controller,
+                        backend: widget.backend,
+                        probe: _probe,
+                      ),
+                    ),
+                  );
+                },
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: YinweiColors.textPrimary,
+                  visualDensity: VisualDensity.compact,
+                  side: const BorderSide(color: YinweiColors.hairlineStrong),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                ),
+                child: const Text('Diagnostics'),
+              ),
             ),
           ],
         ),

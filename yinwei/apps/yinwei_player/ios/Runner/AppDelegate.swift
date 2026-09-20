@@ -18,6 +18,7 @@ import AVFoundation
     YinweiLiveActivityChannel.register(messenger: messenger)
     YinweiAudioSessionChannel.register(messenger: messenger)
     YinweiScreenAudioProbeChannel.register(messenger: messenger)
+    YinweiDeveloperDiagnosticsChannel.register(messenger: messenger)
     print("[YINWEI_IOS] native channels registered")
   }
 
