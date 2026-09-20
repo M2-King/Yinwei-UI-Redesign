@@ -12,9 +12,7 @@ import UIKit
 
   func didInitializeImplicitFlutterEngine(_ engineBridge: FlutterImplicitEngineBridge) {
     GeneratedPluginRegistrant.register(with: engineBridge.pluginRegistry)
-    let messenger = engineBridge.pluginRegistry
-      .registrar(forPlugin: "YinweiNativeBridges")
-      .messenger()
+    let messenger = engineBridge.applicationRegistrar.messenger()
     YinweiLiveActivityChannel.register(messenger: messenger)
     YinweiAudioSessionChannel.register(messenger: messenger)
   }
