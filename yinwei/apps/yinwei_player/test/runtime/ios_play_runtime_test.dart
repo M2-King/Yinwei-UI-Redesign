@@ -2,11 +2,15 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:yinwei_player/bridge/engine_bootstrap.dart';
 import 'package:yinwei_player/bridge/mock_engine.dart';
+import 'package:yinwei_player/bridge/yinwei_bindings.dart';
 import 'package:yinwei_player/models/spatial_params.dart';
 import 'package:yinwei_player/contracts/coordinate_frame_v1.dart';
 import 'package:yinwei_player/mobile/mobile_player_screen.dart';
 import 'package:yinwei_player/platform/audio_session_coordinator.dart';
+import 'package:yinwei_player/platform/live_activity_bridge.dart';
+import 'package:yinwei_player/platform/media_file_acquisition.dart';
 import 'package:yinwei_player/platform/platform_capabilities.dart';
+import 'package:yinwei_player/platform/screen_audio_probe.dart';
 import 'package:yinwei_player/runtime/spatial_runtime_adapter.dart';
 import 'package:yinwei_player/runtime/spatial_scene_bridge.dart';
 import 'package:yinwei_player/screens/player_screen.dart';
@@ -70,16 +74,50 @@ class _TraceSession implements AudioSessionCoordinator {
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
+  setUp(() {
+    YinweiBindings.loadError = null;
+  });
+
   Future<void> phone(WidgetTester tester) async {
     tester.view.physicalSize = const Size(390, 844);
     tester.view.devicePixelRatio = 1;
+    tester.view.padding = FakeViewPadding.zero;
+    tester.view.viewInsets = FakeViewPadding.zero;
+    tester.view.viewPadding = FakeViewPadding.zero;
+    tester.platformDispatcher.textScaleFactorTestValue = 1.0;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
+    addTearDown(tester.view.resetPadding);
+    addTearDown(tester.view.resetViewInsets);
+    addTearDown(tester.view.resetViewPadding);
+    addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+  }
+
+  Future<void> flushAsync(WidgetTester tester) async {
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
   }
 
   FilledButton playButton(WidgetTester tester) {
-    return tester.widget<FilledButton>(
-      find.widgetWithText(FilledButton, 'Play'),
+    return tester.widget<FilledButton>(find.byKey(const Key('ios-play-button')));
+  }
+
+  Widget iosPlayer({
+    required EngineController ctrl,
+    AudioSessionCoordinator? audioSession,
+    Future<String?> Function()? pickPlaybackFile,
+  }) {
+    return MaterialApp(
+      theme: YinweiTheme.dark().copyWith(platform: TargetPlatform.iOS),
+      home: PlayerScreen(
+        controller: ctrl,
+        capabilities: PlatformCapabilities.ios,
+        audioSession: audioSession,
+        mediaFiles: const PassthroughMediaFileAcquisition(),
+        liveActivity: const UnavailableLiveActivityBridge(),
+        screenAudioProbe: const UnavailableScreenAudioProbe(),
+        pickPlaybackFile: pickPlaybackFile,
+      ),
     );
   }
 
@@ -93,20 +131,12 @@ void main() {
     )..hasOpenedFile = true;
 
     await tester.pumpWidget(
-      MaterialApp(
-        theme: YinweiTheme.dark(),
-        home: PlayerScreen(
-          controller: ctrl,
-          capabilities: PlatformCapabilities.ios,
-          audioSession: _TraceSession(trace),
-        ),
-      ),
+      iosPlayer(ctrl: ctrl, audioSession: _TraceSession(trace)),
     );
     await tester.pump();
 
-    await tester.tap(find.text('Play'));
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 400));
+    await tester.tap(find.byKey(const Key('ios-play-button')));
+    await flushAsync(tester);
 
     expect(trace, ['session', 'play']);
     await tester.pumpWidget(const SizedBox.shrink());
@@ -122,20 +152,12 @@ void main() {
     )..hasOpenedFile = true;
 
     await tester.pumpWidget(
-      MaterialApp(
-        theme: YinweiTheme.dark(),
-        home: PlayerScreen(
-          controller: ctrl,
-          capabilities: PlatformCapabilities.ios,
-          audioSession: _TraceSession(trace),
-        ),
-      ),
+      iosPlayer(ctrl: ctrl, audioSession: _TraceSession(trace)),
     );
     await tester.pump();
 
-    await tester.tap(find.text('Play'));
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 50));
+    await tester.tap(find.byKey(const Key('ios-play-button')));
+    await flushAsync(tester);
 
     expect(trace, ['session', 'deactivate']);
     expect(ctrl.playing, isFalse);
@@ -154,21 +176,14 @@ void main() {
     );
 
     await tester.pumpWidget(
-      MaterialApp(
-        theme: YinweiTheme.dark(),
-        home: PlayerScreen(
-          controller: ctrl,
-          capabilities: PlatformCapabilities.ios,
-          audioSession: _TraceSession(trace),
-        ),
-      ),
+      iosPlayer(ctrl: ctrl, audioSession: _TraceSession(trace)),
     );
     await tester.pump();
 
     expect(playButton(tester).onPressed, isNull);
-    await tester.tap(find.text('Play'), warnIfMissed: false);
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 50));
+    await tester.tap(find.byKey(const Key('ios-play-button')),
+        warnIfMissed: false);
+    await flushAsync(tester);
 
     expect(trace.contains('play'), isFalse);
     expect(ctrl.playing, isFalse);
@@ -189,22 +204,17 @@ void main() {
     )..lastError = 'Bad state: NoTrackLoaded: no track loaded';
 
     await tester.pumpWidget(
-      MaterialApp(
-        theme: YinweiTheme.dark(),
-        home: PlayerScreen(
-          controller: ctrl,
-          capabilities: PlatformCapabilities.ios,
-          audioSession: _TraceSession(trace),
-          pickPlaybackFile: () async => '/tmp/point-source.wav',
-        ),
+      iosPlayer(
+        ctrl: ctrl,
+        audioSession: _TraceSession(trace),
+        pickPlaybackFile: () async => 'point-source.wav',
       ),
     );
     await tester.pump();
     expect(playButton(tester).onPressed, isNull);
 
-    await tester.tap(find.text('Open'));
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 80));
+    await tester.tap(find.byKey(const Key('ios-open-file-button')));
+    await flushAsync(tester);
 
     expect(ctrl.hasOpenedFile, isTrue);
     expect(ctrl.track.title, 'point-source');
@@ -225,21 +235,16 @@ void main() {
     );
 
     await tester.pumpWidget(
-      MaterialApp(
-        theme: YinweiTheme.dark(),
-        home: PlayerScreen(
-          controller: ctrl,
-          capabilities: PlatformCapabilities.ios,
-          audioSession: _TraceSession(trace),
-          pickPlaybackFile: () async => null,
-        ),
+      iosPlayer(
+        ctrl: ctrl,
+        audioSession: _TraceSession(trace),
+        pickPlaybackFile: () async => null,
       ),
     );
     await tester.pump();
 
-    await tester.tap(find.text('Open'));
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 50));
+    await tester.tap(find.byKey(const Key('ios-open-file-button')));
+    await flushAsync(tester);
 
     expect(trace, isEmpty);
     expect(ctrl.hasOpenedFile, isFalse);
@@ -260,20 +265,15 @@ void main() {
     );
 
     await tester.pumpWidget(
-      MaterialApp(
-        theme: YinweiTheme.dark(),
-        home: PlayerScreen(
-          controller: ctrl,
-          capabilities: PlatformCapabilities.ios,
-          pickPlaybackFile: () async => 'missing.wav',
-        ),
+      iosPlayer(
+        ctrl: ctrl,
+        pickPlaybackFile: () async => 'missing.wav',
       ),
     );
     await tester.pump();
 
-    await tester.tap(find.text('Open'));
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 80));
+    await tester.tap(find.byKey(const Key('ios-open-file-button')));
+    await flushAsync(tester);
 
     expect(ctrl.hasOpenedFile, isFalse);
     expect(ctrl.playing, isFalse);
@@ -295,12 +295,13 @@ void main() {
 
     await tester.pumpWidget(
       MaterialApp(
-        theme: YinweiTheme.dark(),
+        theme: YinweiTheme.dark().copyWith(platform: TargetPlatform.iOS),
         home: MobilePlayerScreen(
           controller: ctrl,
           backend: EngineBackend.mock,
           loadError: 'Failed to lookup symbol (yinwei_open)',
           capabilities: PlatformCapabilities.ios,
+          screenAudioProbe: const UnavailableScreenAudioProbe(),
           sceneSnapshot: () => adapter.snapshot() ?? const <String, dynamic>{},
           telemetry: telemetry,
           onSceneIntent: SpatialSceneBridge(adapter: adapter).handleMessage,
@@ -328,11 +329,12 @@ void main() {
 
     await tester.pumpWidget(
       MaterialApp(
-        theme: YinweiTheme.dark(),
+        theme: YinweiTheme.dark().copyWith(platform: TargetPlatform.iOS),
         home: MobilePlayerScreen(
           controller: ctrl,
           backend: EngineBackend.native,
           capabilities: PlatformCapabilities.ios,
+          screenAudioProbe: const UnavailableScreenAudioProbe(),
           sceneSnapshot: () => adapter.snapshot() ?? const <String, dynamic>{},
           telemetry: telemetry,
           onSceneIntent: SpatialSceneBridge(adapter: adapter).handleMessage,

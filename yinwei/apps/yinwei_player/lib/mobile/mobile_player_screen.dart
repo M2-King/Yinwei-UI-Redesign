@@ -11,6 +11,7 @@ import 'package:yinwei_player/mobile/mobile_transport.dart';
 import 'package:yinwei_player/mobile/mobile_visual_pose.dart';
 import 'package:yinwei_player/models/spatial_params.dart';
 import 'package:yinwei_player/platform/platform_capabilities.dart';
+import 'package:yinwei_player/platform/screen_audio_probe.dart';
 import 'package:yinwei_player/presentation/yinwei_live_presentation.dart';
 import 'package:yinwei_player/runtime/island_spatial_controls.dart';
 import 'package:yinwei_player/runtime/orbit_pose_math.dart';
@@ -34,6 +35,7 @@ class MobilePlayerScreen extends StatefulWidget {
     this.onTogglePlay,
     this.onMotionChanged,
     this.onPlaybackMode,
+    this.screenAudioProbe,
   });
 
   final EngineController controller;
@@ -47,6 +49,7 @@ class MobilePlayerScreen extends StatefulWidget {
   final VoidCallback? onTogglePlay;
   final ValueChanged<MotionMode>? onMotionChanged;
   final ValueChanged<PlaybackMode>? onPlaybackMode;
+  final ScreenAudioProbe? screenAudioProbe;
 
   @override
   State<MobilePlayerScreen> createState() => _MobilePlayerScreenState();
@@ -163,6 +166,7 @@ class _MobilePlayerScreenState extends State<MobilePlayerScreen> {
                   IosScreenAudioProbePanel(
                     controller: c,
                     backend: widget.backend,
+                    probe: widget.screenAudioProbe,
                   ),
                   const SizedBox(height: 8),
                   MobileTransport(

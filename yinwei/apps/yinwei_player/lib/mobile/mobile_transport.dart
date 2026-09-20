@@ -22,6 +22,7 @@ class MobileTransport extends StatelessWidget {
           child: SizedBox(
             height: 48,
             child: FilledButton(
+              key: const Key('ios-play-button'),
               onPressed: !controller.hasOpenedFile
                   ? null
                   : (onTogglePlay ?? () => controller.togglePlay()),
@@ -40,6 +41,7 @@ class MobileTransport extends StatelessWidget {
         SizedBox(
           height: 48,
           child: OutlinedButton(
+            key: const Key('ios-open-file-button'),
             onPressed: onOpen,
             style: OutlinedButton.styleFrom(
               foregroundColor: YinweiColors.textPrimary,

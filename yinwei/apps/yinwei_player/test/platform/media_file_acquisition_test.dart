@@ -33,4 +33,28 @@ void main() {
     expect(out, isNot(src.path));
     expect(File(out).readAsBytesSync(), [1, 2, 3, 4]);
   });
+
+  test('copy vs passthrough follows injected isIOS, not the CI host', () {
+    expect(
+      MediaFileAcquisition.create(
+        capabilities: PlatformCapabilities.ios,
+        isIOS: false,
+      ),
+      isA<PassthroughMediaFileAcquisition>(),
+    );
+    expect(
+      MediaFileAcquisition.create(
+        capabilities: PlatformCapabilities.ios,
+        isIOS: true,
+      ),
+      isA<CopyingMediaFileAcquisition>(),
+    );
+    expect(
+      MediaFileAcquisition.create(
+        capabilities: PlatformCapabilities.windows,
+        isIOS: true,
+      ),
+      isA<PassthroughMediaFileAcquisition>(),
+    );
+  });
 }

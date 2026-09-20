@@ -43,6 +43,7 @@ import 'package:yinwei_player/platform/audio_session_coordinator.dart';
 import 'package:yinwei_player/platform/live_activity_bridge.dart';
 import 'package:yinwei_player/platform/live_activity_coordinator.dart';
 import 'package:yinwei_player/platform/media_file_acquisition.dart';
+import 'package:yinwei_player/platform/screen_audio_probe.dart';
 import 'package:yinwei_player/mobile/mobile_visual_pose.dart';
 import 'package:yinwei_player/presentation/yinwei_live_presentation.dart';
 
@@ -59,6 +60,7 @@ class PlayerScreen extends StatefulWidget {
     this.mediaFiles,
     this.audioSession,
     this.pickPlaybackFile,
+    this.screenAudioProbe,
   });
 
   final EngineController? controller;
@@ -72,6 +74,7 @@ class PlayerScreen extends StatefulWidget {
 
   /// Test seam for iOS Open. Production uses FilePicker.
   final Future<String?> Function()? pickPlaybackFile;
+  final ScreenAudioProbe? screenAudioProbe;
 
   @override
   State<PlayerScreen> createState() => _PlayerScreenState();
@@ -757,6 +760,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
         onOpen: () => unawaited(_onOpen()),
         onTogglePlay: () => unawaited(_onIosTogglePlay()),
         onPlaybackMode: _onPlaybackMode,
+        screenAudioProbe: widget.screenAudioProbe,
         onMotionChanged: (motion) {
           final next = _ctrl.params.copy()..motion = motion;
           _applySpatialFromUi(next);
