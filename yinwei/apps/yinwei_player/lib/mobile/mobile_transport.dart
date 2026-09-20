@@ -22,7 +22,9 @@ class MobileTransport extends StatelessWidget {
           child: SizedBox(
             height: 48,
             child: FilledButton(
-              onPressed: onTogglePlay ?? () => controller.togglePlay(),
+              onPressed: !controller.hasOpenedFile
+                  ? null
+                  : (onTogglePlay ?? () => controller.togglePlay()),
               style: FilledButton.styleFrom(
                 backgroundColor: YinweiColors.accent,
                 foregroundColor: Colors.white,

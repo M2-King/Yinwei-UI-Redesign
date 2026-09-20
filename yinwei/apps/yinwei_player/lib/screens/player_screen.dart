@@ -58,6 +58,7 @@ class PlayerScreen extends StatefulWidget {
     this.liveActivity,
     this.mediaFiles,
     this.audioSession,
+    this.pickPlaybackFile,
   });
 
   final EngineController? controller;
@@ -68,6 +69,9 @@ class PlayerScreen extends StatefulWidget {
   final LiveActivityBridge? liveActivity;
   final MediaFileAcquisition? mediaFiles;
   final AudioSessionCoordinator? audioSession;
+
+  /// Test seam for iOS Open. Production uses FilePicker.
+  final Future<String?> Function()? pickPlaybackFile;
 
   @override
   State<PlayerScreen> createState() => _PlayerScreenState();
@@ -303,6 +307,10 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
       'hasFile=${_ctrl.hasOpenedFile} backend=$_backend '
       'loadError=${YinweiBindings.loadError} lastError=${_ctrl.lastError}',
     );
+    if (!_ctrl.hasOpenedFile) {
+      print('[YINWEI_IOS] PLAY_SKIP no track loaded');
+      return;
+    }
     if (!_ctrl.playing && _audioSession.available) {
       print('[YINWEI_IOS] IOS_CHANNEL_PLAY_RECEIVED');
       try {
@@ -1278,16 +1286,8 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
 
   Future<void> _onOpen() async {
     try {
-      final result = await FilePicker.platform.pickFiles(
-        type: FileType.custom,
-        allowedExtensions: _mediaExts.toList()..sort(),
-        dialogTitle: '打开音频或视频（自动提取音轨）',
-      );
-      if (result == null || result.files.isEmpty) return;
-      final path = result.files.single.path;
-      if (path == null || path.isEmpty) {
-        throw StateError('无法读取文件路径');
-      }
+      final path = await _pickPlaybackPath();
+      if (path == null || path.isEmpty) return;
       await _openMediaPath(path);
     } catch (e) {
       if (!mounted) return;
@@ -1295,6 +1295,23 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
         SnackBar(content: Text('$e'), behavior: SnackBarBehavior.floating),
       );
     }
+  }
+
+  Future<String?> _pickPlaybackPath() async {
+    if (widget.pickPlaybackFile != null) {
+      return widget.pickPlaybackFile!();
+    }
+    final result = await FilePicker.platform.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: _mediaExts.toList()..sort(),
+      dialogTitle: '打开音频或视频（自动提取音轨）',
+    );
+    if (result == null || result.files.isEmpty) return null;
+    final path = result.files.single.path;
+    if (path == null || path.isEmpty) {
+      throw StateError('无法读取文件路径');
+    }
+    return path;
   }
 
   Future<void> _openMediaPath(String path) async {

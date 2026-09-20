@@ -33,6 +33,20 @@ class IosRuntimeStatusBanner extends StatelessWidget {
     return 'RUNNING';
   }
 
+  static String? visibleDetail({
+    required bool hasOpenedFile,
+    String? lastError,
+    String? loadError,
+  }) {
+    if (lastError != null &&
+        lastError.contains('NoTrackLoaded') &&
+        !hasOpenedFile) {
+      if (loadError == null || loadError.isEmpty) return null;
+      return loadError;
+    }
+    return lastError ?? loadError;
+  }
+
   @override
   Widget build(BuildContext context) {
     final engine = engineLabel(backend);
@@ -42,7 +56,11 @@ class IosRuntimeStatusBanner extends StatelessWidget {
       playing: controller.playing,
       lastError: controller.lastError,
     );
-    final detail = controller.lastError ?? loadError;
+    final detail = visibleDetail(
+      hasOpenedFile: controller.hasOpenedFile,
+      lastError: controller.lastError,
+      loadError: loadError,
+    );
     final style = Theme.of(context).textTheme.labelSmall?.copyWith(
           color: YinweiColors.textSecondary,
           height: 1.35,
