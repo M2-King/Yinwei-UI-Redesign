@@ -264,18 +264,11 @@ jobs:
           fi
 
           if [[ "$need_xcodebuild" -eq 1 ]]; then
-            BUILD_CMD="xcodebuild -workspace ios/Runner.xcworkspace -scheme Runner -configuration Release -destination generic/platform=iOS CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO build"
+            BUILD_CMD="xcodebuild_ios_unsigned.sh (Release iphoneos, no sign, Swift -Onone for DKCamera)"
             (
-              cd "$PLAYER/ios"
-              xcodebuild \
-                -workspace Runner.xcworkspace \
-                -scheme Runner \
-                -configuration Release \
-                -destination 'generic/platform=iOS' \
-                -derivedDataPath "$PLAYER/build/ios_ci_derived" \
-                CODE_SIGNING_ALLOWED=NO \
-                CODE_SIGNING_REQUIRED=NO \
-                build
+              bash "$YINWEI_ROOT/tools/xcodebuild_ios_unsigned.sh" \
+                "$PLAYER/ios" \
+                "$PLAYER/build/ios_ci_derived"
             ) 2>&1 | tee "$LOG_DIR/xcodebuild-unsigned.log"
             RUNNER_APP="$(find_runner_app)" || {
               echo "ERROR: xcodebuild finished but Runner.app was not found." >&2

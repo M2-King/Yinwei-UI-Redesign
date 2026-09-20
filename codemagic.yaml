@@ -135,18 +135,9 @@ workflows:
             echo "Flutter --no-codesign produced $RUNNER_APP"
           else
             echo "Falling back to unsigned xcodebuild"
-            (
-              cd "$PLAYER_ABS/ios"
-              xcodebuild \
-                -workspace Runner.xcworkspace \
-                -scheme Runner \
-                -configuration Release \
-                -destination 'generic/platform=iOS' \
-                -derivedDataPath "$PLAYER_ABS/build/ios_ci_derived" \
-                CODE_SIGNING_ALLOWED=NO \
-                CODE_SIGNING_REQUIRED=NO \
-                build
-            )
+            bash "$YINWEI_ABS/tools/xcodebuild_ios_unsigned.sh" \
+              "$PLAYER_ABS/ios" \
+              "$PLAYER_ABS/build/ios_ci_derived"
             RUNNER_APP="$(find_runner_app)"
           fi
 

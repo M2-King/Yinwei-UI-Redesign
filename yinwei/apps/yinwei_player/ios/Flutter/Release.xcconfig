@@ -1,3 +1,4 @@
 #include "Generated.xcconfig"
 #include "spatial_core_link.xcconfig"
 #include? "spatial_core_force_load.xcconfig"
+SWIFT_ENABLE_EXPLICIT_MODULES = NO
