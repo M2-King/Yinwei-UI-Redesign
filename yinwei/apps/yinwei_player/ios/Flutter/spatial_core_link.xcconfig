@@ -2,8 +2,11 @@
 // Unconditional so $(inherited) from Generated.xcconfig is preserved.
 // Do NOT use OTHER_LDFLAGS[sdk=*]: that assignment replaces Flutter's flags
 // instead of appending, and is dropped by unsigned generic/platform=iOS.
-// The Rust archive itself is linked via Runner Frameworks (xcframework) plus
-// literal -u roots and Runner/spatial_core_ffi_keep.c. Not the App Clip.
+// The Rust archive is linked into Runner only:
+//   Native/libspatial_core.xcframework in Frameworks
+//   -Wl,-force_load,$(SPATIAL_CORE_LIB) plus literal -u roots in pbxproj
+//   Runner/spatial_core_ffi_keep.c
+// Not the App Clip.
 OTHER_LDFLAGS = $(inherited) -framework AVFoundation -framework AudioToolbox -framework CoreAudio -framework Accelerate -lc++
 CODE_SIGN_STYLE = Automatic
 CODE_SIGN_IDENTITY[sdk=iphoneos*] = Apple Development

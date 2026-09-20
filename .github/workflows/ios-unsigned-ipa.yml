@@ -133,15 +133,17 @@ jobs:
         run: |
           set -euo pipefail
           flutter test 2>&1 | tee "$LOG_DIR/flutter-test.log"
-          if ! grep -q 'All tests passed!' "$LOG_DIR/flutter-test.log"; then
-            echo "ERROR: flutter test did not report All tests passed" >&2
+          # Flutter 3.47 prints "🎉 N tests passed, M skipped." instead of
+          # always emitting the older "All tests passed!" footer.
+          if ! grep -Eq 'All tests passed!|[1-9][0-9]* tests passed' "$LOG_DIR/flutter-test.log"; then
+            echo "ERROR: flutter test did not report passing tests" >&2
             exit 1
           fi
           passed="$(
-            grep -Eo '\+[0-9]+' "$LOG_DIR/flutter-test.log" \
-              | sed 's/+//' \
-              | sort -n \
-              | tail -1
+            {
+              grep -Eo '\+[0-9]+' "$LOG_DIR/flutter-test.log" | sed 's/+//'
+              grep -Eo '[0-9]+ tests passed' "$LOG_DIR/flutter-test.log" | awk '{print $1}'
+            } | grep -E '^[0-9]+$' | sort -n | tail -1
           )"
           echo "flutter tests passed: ${passed:-unknown}"
           echo "FLUTTER_TEST_PASSED=${passed:-0}" >> "$GITHUB_ENV"
@@ -214,10 +216,10 @@ jobs:
           find_runner_app() {
             local candidate found="" p
             local -a preferred=(
-              "$PLAYER/build/ios/iphoneos/Runner.app"
+              "$PLAYER/build/ios_ci_derived/Build/Products/Release-iphoneos/Runner.app"
               "$PLAYER/build/ios/Release-iphoneos/Runner.app"
               "$PLAYER/ios/build/Release-iphoneos/Runner.app"
-              "$PLAYER/build/ios_ci_derived/Build/Products/Release-iphoneos/Runner.app"
+              "$PLAYER/build/ios/iphoneos/Runner.app"
             )
             for candidate in "${preferred[@]}"; do
               if [[ -f "$candidate/Runner" ]]; then
@@ -279,14 +281,19 @@ jobs:
           if [[ "$need_xcodebuild" -eq 1 ]]; then
             BUILD_CMD="xcodebuild_ios_unsigned.sh (Release iphoneos, no sign, Swift -Onone for DKCamera)"
             (
+              export XCODEBUILD_LOG_DIR="$LOG_DIR"
               bash "$YINWEI_ROOT/tools/xcodebuild_ios_unsigned.sh" \
                 "$PLAYER/ios" \
                 "$PLAYER/build/ios_ci_derived"
             ) 2>&1 | tee "$LOG_DIR/xcodebuild-unsigned.log"
-            RUNNER_APP="$(find_runner_app)" || {
-              echo "ERROR: xcodebuild finished but Runner.app was not found." >&2
-              exit 1
-            }
+            if [[ -f "$LOG_DIR/runner-app-path.txt" ]]; then
+              RUNNER_APP="$(tr -d '\r\n' < "$LOG_DIR/runner-app-path.txt")"
+            else
+              RUNNER_APP="$(find_runner_app)" || {
+                echo "ERROR: xcodebuild finished but Runner.app was not found." >&2
+                exit 1
+              }
+            fi
             if ! is_iphoneos_binary "$RUNNER_APP/Runner"; then
               echo "ERROR: xcodebuild product is not an iphoneos/device binary: $RUNNER_APP" >&2
               file "$RUNNER_APP/Runner" || true

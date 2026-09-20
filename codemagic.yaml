@@ -113,10 +113,10 @@ workflows:
           find_runner_app() {
             local candidate found="" p
             local -a preferred=(
-              "$PLAYER_ABS/build/ios/iphoneos/Runner.app"
+              "$PLAYER_ABS/build/ios_ci_derived/Build/Products/Release-iphoneos/Runner.app"
               "$PLAYER_ABS/build/ios/Release-iphoneos/Runner.app"
               "$PLAYER_ABS/ios/build/Release-iphoneos/Runner.app"
-              "$PLAYER_ABS/build/ios_ci_derived/Build/Products/Release-iphoneos/Runner.app"
+              "$PLAYER_ABS/build/ios/iphoneos/Runner.app"
             )
             for candidate in "${preferred[@]}"; do
               if [[ -f "$candidate/Runner" ]]; then
@@ -154,7 +154,11 @@ workflows:
             bash "$YINWEI_ABS/tools/xcodebuild_ios_unsigned.sh" \
               "$PLAYER_ABS/ios" \
               "$PLAYER_ABS/build/ios_ci_derived"
-            RUNNER_APP="$(find_runner_app)"
+            if [[ -f "$XCODEBUILD_LOG_DIR/runner-app-path.txt" ]]; then
+              RUNNER_APP="$(tr -d '\r\n' < "$XCODEBUILD_LOG_DIR/runner-app-path.txt")"
+            else
+              RUNNER_APP="$(find_runner_app)"
+            fi
           fi
 
           test -d "$RUNNER_APP"

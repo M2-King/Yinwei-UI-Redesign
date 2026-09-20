@@ -125,7 +125,10 @@ while i < len(lines):
 if "_yinwei_open" not in runner:
     print("ERROR: resolved Runner OTHER_LDFLAGS does not contain _yinwei_open", file=sys.stderr)
     sys.exit(1)
-print("PROOF: resolved Runner settings contain _yinwei_open")
+if "force_load" not in runner:
+    print("ERROR: resolved Runner OTHER_LDFLAGS does not contain force_load", file=sys.stderr)
+    sys.exit(1)
+print("PROOF: resolved Runner settings contain _yinwei_open and force_load")
 PY
   echo "===== end Runner resolved settings ====="
 }
@@ -155,7 +158,7 @@ if not hits:
     sys.exit(0)
 print(hits[-1])
 blob = hits[-1]
-for token in ("libspatial_core", "-u", "_yinwei_open"):
+for token in ("libspatial_core", "force_load", "-u", "_yinwei_open"):
     status = "YES" if token in blob else "NO"
     print(f"Ld contains {token}: {status}")
 PY
@@ -163,6 +166,80 @@ PY
   echo "===== derived-data spatial_core references ====="
   grep -R -l "libspatial_core" "$DERIVED/Build/Intermediates.noindex" 2>/dev/null | head -n 20 || true
   echo "===== end derived-data spatial_core references ====="
+}
+
+verify_built_runner_ffi() {
+  echo "===== compile evidence: spatial_core_ffi_keep.c ====="
+  if [[ -f "$LOG" ]]; then
+    grep -n "spatial_core_ffi_keep.c" "$LOG" | head -n 40 || echo "WARNING: keep.c not mentioned in xcodebuild log"
+  fi
+  echo "===== end compile evidence ====="
+  echo "===== Runner.app candidates ====="
+  local player_dir
+  player_dir="$(cd "$IOS_DIR/.." && pwd)"
+  find "$player_dir/build" "$DERIVED" -name Runner.app -type d 2>/dev/null | while IFS= read -r p; do
+    echo "$p"
+    if [[ -f "$p/Runner" ]]; then
+      nm "$p/Runner" 2>/dev/null | grep -i yinwei | head -n 8 || echo "  (no yinwei symbols)"
+    else
+      echo "  (missing Runner executable)"
+    fi
+  done
+  echo "===== end Runner.app candidates ====="
+
+  python3 - "$SETTINGS_LOG" "$LOG_DIR/runner-app-path.txt" "$SCRIPT_DIR/verify_ios_ffi.sh" "$DERIVED" <<'PY'
+import os, re, subprocess, sys
+settings_path, out_path, verifier = sys.argv[1], sys.argv[2], sys.argv[3]
+derived = sys.argv[4] if len(sys.argv) > 4 else ""
+text = open(settings_path, encoding="utf-8", errors="replace").read()
+blocks = re.split(r"(?=Build settings for action )", text)
+runner = next((b for b in blocks if re.search(r"target Runner:\s*$", b, re.M)), None)
+if runner is None:
+    runner = next((b for b in blocks if "target Runner:" in b and "RunnerTests" not in b.split("\n", 1)[0]), None)
+if runner is None:
+    print("ERROR: could not isolate Runner target build settings", file=sys.stderr)
+    sys.exit(1)
+
+def setting(name):
+    m = re.search(r"^\s*" + re.escape(name) + r"\s*=\s*(.+?)\s*$", runner, re.M)
+    return m.group(1) if m else ""
+
+def yinwei_lines(path):
+    nm = subprocess.run(["nm", path], capture_output=True, text=True)
+    return [ln for ln in nm.stdout.splitlines() if "yinwei" in ln.lower()]
+
+target_dir = setting("TARGET_BUILD_DIR")
+exec_path = setting("EXECUTABLE_PATH") or "Runner.app/Runner"
+print(f"TARGET_BUILD_DIR={target_dir}")
+print(f"EXECUTABLE_PATH={exec_path}")
+candidates = []
+if target_dir:
+    candidates.append(os.path.join(target_dir, exec_path))
+if derived:
+    candidates.append(os.path.join(derived, "Build/Products/Release-iphoneos/Runner.app/Runner"))
+seen = set()
+chosen = None
+chosen_hits = []
+for binary in candidates:
+    if not binary or binary in seen:
+        continue
+    seen.add(binary)
+    print(f"CANDIDATE {binary}")
+    if not os.path.isfile(binary):
+        print("  missing")
+        continue
+    hits = yinwei_lines(binary)
+    print("===== nm yinwei =====")
+    print("\n".join(hits) if hits else "(none)")
+    if hits and chosen is None:
+        chosen, chosen_hits = binary, hits
+if chosen is None:
+    print("ERROR: no xcodebuild Runner product contains yinwei_* symbols", file=sys.stderr)
+    sys.exit(1)
+print(f"PROOF: {len(chosen_hits)} yinwei nm lines in {chosen}")
+open(out_path, "w", encoding="utf-8").write(os.path.dirname(chosen) + "\n")
+raise SystemExit(subprocess.call(["bash", verifier, chosen]))
+PY
 }
 
 run_unsigned_xcodebuild() {
@@ -210,5 +287,8 @@ fi
 echo "===== end xcodebuild errors ====="
 
 extract_ld_runner || true
+if [[ "$xc_ok" -eq 0 ]]; then
+  verify_built_runner_ffi
+fi
 
 exit "$xc_ok"

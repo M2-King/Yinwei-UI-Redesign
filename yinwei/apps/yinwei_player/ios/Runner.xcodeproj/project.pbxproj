@@ -629,6 +629,7 @@
 				);
 				OTHER_LDFLAGS = (
 					"$(inherited)",
+					"-Wl,-force_load,$(SPATIAL_CORE_LIB)",
 					"-u",
 					"_yinwei_last_error",
 					"-u",
@@ -826,6 +827,7 @@
 				);
 				OTHER_LDFLAGS = (
 					"$(inherited)",
+					"-Wl,-force_load,$(SPATIAL_CORE_LIB)",
 					"-u",
 					"_yinwei_last_error",
 					"-u",
@@ -864,6 +866,7 @@
 				);
 				OTHER_LDFLAGS = (
 					"$(inherited)",
+					"-Wl,-force_load,$(SPATIAL_CORE_LIB)",
 					"-u",
 					"_yinwei_last_error",
 					"-u",
