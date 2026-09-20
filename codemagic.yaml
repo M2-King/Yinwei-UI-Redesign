@@ -86,6 +86,10 @@ workflows:
           set -euo pipefail
           source "$HOME/.cargo/env"
           bash "$YINWEI_ROOT/tools/build_native_ios.sh" all
+          test -f "$YINWEI_ROOT/target/aarch64-apple-ios/release/libspatial_core.a"
+          test -f "$PLAYER/ios/Flutter/spatial_core_force_load.xcconfig"
+          echo "===== spatial_core_force_load.xcconfig ====="
+          cat "$PLAYER/ios/Flutter/spatial_core_force_load.xcconfig"
       - name: Build unsigned iphoneos app and IPA
         script: |
           set -euo pipefail

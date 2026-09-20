@@ -1,6 +1,9 @@
 #include "Generated.xcconfig"
 #include "spatial_core_link.xcconfig"
 #include? "spatial_core_force_load.xcconfig"
+// Keep global yinwei_* names for DynamicLibrary.process() / dlsym.
+STRIP_STYLE = non-global
+STRIP_INSTALLED_PRODUCT = NO
 SWIFT_ENABLE_EXPLICIT_MODULES = NO
 _EXPERIMENTAL_SWIFT_EXPLICIT_MODULES = NO
 SWIFT_EMIT_MODULE_INTERFACE = NO
