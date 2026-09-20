@@ -36,7 +36,8 @@ done
 
 if ((${#missing[@]} > 0)); then
   echo "ERROR: linked Runner is missing: ${missing[*]}" >&2
-  echo "Run tools/build_native_ios.sh so -force_load is generated, then rebuild." >&2
+  echo "Runner must link Native/libspatial_core.xcframework and compile Runner/spatial_core_ffi_keep.c." >&2
+  echo "Run tools/build_native_ios.sh, then rebuild the unsigned iphoneos Runner." >&2
   echo "===== nm globals (head) =====" >&2
   echo "$exports" | head -n 40 >&2 || true
   echo "===== nm yinwei =====" >&2

@@ -1,6 +1,9 @@
-// Frameworks + -force_load live in generated spatial_core_force_load.xcconfig
-// as SPATIAL_CORE_FORCE_LDFLAGS so they append instead of replacing Flutter
-// OTHER_LDFLAGS. A missing archive does not break the first Xcode compile
-// (Dart then reports Mock honestly).
+// Apple frameworks required by cpal / CoreAudio when Runner links spatial_core.
+// Unconditional so $(inherited) from Generated.xcconfig is preserved.
+// Do NOT use OTHER_LDFLAGS[sdk=*]: that assignment replaces Flutter's flags
+// instead of appending, and is dropped by unsigned generic/platform=iOS.
+// The Rust archive itself is linked via Runner Frameworks (xcframework) plus
+// literal -u roots and Runner/spatial_core_ffi_keep.c. Not the App Clip.
+OTHER_LDFLAGS = $(inherited) -framework AVFoundation -framework AudioToolbox -framework CoreAudio -framework Accelerate -lc++
 CODE_SIGN_STYLE = Automatic
 CODE_SIGN_IDENTITY[sdk=iphoneos*] = Apple Development

@@ -2,7 +2,7 @@
 # Unsigned iphoneos xcodebuild for CI. Does not modify DSP/HRTF/audio.
 #
 # Usage:
-#   ./yinwei/tools/xcodebuild_ios_unsigned.sh <ios_dir> <derived_data_dir>
+#   ./yinwei/tools/xcodebuild_ios_unsigned.sh <ios_dir> <derived_data_directory>
 set -euo pipefail
 
 IOS_DIR="${1:?ios directory}"
@@ -10,37 +10,47 @@ DERIVED="${2:?derived data directory}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 YINWEI_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 DEVICE_A="$YINWEI_ROOT/target/aarch64-apple-ios/release/libspatial_core.a"
-FORCE_LOAD_XCCONFIG="$IOS_DIR/Flutter/spatial_core_force_load.xcconfig"
+XCFRAMEWORK="$IOS_DIR/Native/libspatial_core.xcframework"
+PBX="$IOS_DIR/Runner.xcodeproj/project.pbxproj"
+KEEP_C="$IOS_DIR/Runner/spatial_core_ffi_keep.c"
 LOG_DIR="${XCODEBUILD_LOG_DIR:-/tmp/xcodebuild_logs}"
 mkdir -p "$LOG_DIR" "$DERIVED"
 LOG="$LOG_DIR/xcodebuild-unsigned.log"
+SETTINGS_LOG="$LOG_DIR/runner-show-build-settings.log"
 
 if [[ ! -f "$DEVICE_A" ]]; then
   echo "ERROR: missing $DEVICE_A" >&2
   echo "Run tools/build_native_ios.sh so libspatial_core.a exists, then rebuild." >&2
   exit 1
 fi
-if [[ ! -f "$FORCE_LOAD_XCCONFIG" ]]; then
-  echo "ERROR: missing $FORCE_LOAD_XCCONFIG" >&2
-  echo "Run tools/build_native_ios.sh so -force_load is generated, then rebuild." >&2
+if [[ ! -d "$XCFRAMEWORK" ]]; then
+  echo "ERROR: missing $XCFRAMEWORK" >&2
+  echo "Run tools/build_native_ios.sh so the xcframework is in Runner Frameworks." >&2
+  exit 1
+fi
+if [[ ! -f "$KEEP_C" ]]; then
+  echo "ERROR: missing $KEEP_C" >&2
+  exit 1
+fi
+if ! grep -q "libspatial_core.xcframework in Frameworks" "$PBX"; then
+  echo "ERROR: Runner Frameworks phase does not link libspatial_core.xcframework" >&2
+  exit 1
+fi
+if ! grep -q '"_yinwei_open"' "$PBX"; then
+  echo "ERROR: Runner OTHER_LDFLAGS is missing literal -u _yinwei_open" >&2
+  exit 1
+fi
+if grep -q 'SPATIAL_CORE_FORCE_LDFLAGS' "$PBX"; then
+  echo "ERROR: nested SPATIAL_CORE_FORCE_LDFLAGS must not be used for Runner OTHER_LDFLAGS" >&2
   exit 1
 fi
 
-echo "===== spatial_core_force_load.xcconfig ====="
-cat "$FORCE_LOAD_XCCONFIG"
-echo "===== end spatial_core_force_load.xcconfig ====="
+echo "===== spatial_core artifacts ====="
 echo "DEVICE_A=$DEVICE_A"
-
-# Nested OTHER_LDFLAGS[sdk=iphoneos*] in included xcconfigs is dropped by
-# this xcodebuild destination. Pass -force_load on the command line so the
-# static archive is actually linked. -u keeps Dart FFI dlsym roots alive
-# through Release dead-strip. Do not use -exported_symbols_list (exclusive).
-KEEP_SYMS="-u _yinwei_last_error -u _yinwei_open -u _yinwei_set_params -u _yinwei_play -u _yinwei_current_azimuth_deg -u _yinwei_dispose"
-COREAUDIO_LIBS="-framework AVFoundation -framework AudioToolbox -framework CoreAudio -framework Accelerate -lc++"
-# Appended by Runner OTHER_LDFLAGS = $(inherited) $(SPATIAL_CORE_FORCE_LDFLAGS).
-# Do not assign OTHER_LDFLAGS here — that replaces Flutter's linker flags.
-FORCE_LDFLAGS="-force_load ${DEVICE_A} ${KEEP_SYMS} ${COREAUDIO_LIBS}"
-echo "SPATIAL_CORE_FORCE_LDFLAGS=$FORCE_LDFLAGS"
+ls -la "$DEVICE_A"
+echo "XCFRAMEWORK=$XCFRAMEWORK"
+ls -la "$XCFRAMEWORK"
+echo "===== end spatial_core artifacts ====="
 
 cd "$IOS_DIR"
 
@@ -49,6 +59,111 @@ python3 "$SCRIPT_DIR/patch_ios_file_picker_no_dkcamera.py" \
   "$IOS_DIR/Flutter/ephemeral" \
   "$DERIVED" \
   || true
+
+dump_runner_resolved_settings() {
+  echo "===== xcodebuild -showBuildSettings (Runner) ====="
+  # shellcheck disable=SC2046
+  xcodebuild \
+    -workspace Runner.xcworkspace \
+    -scheme Runner \
+    -configuration Release \
+    -destination 'generic/platform=iOS' \
+    -derivedDataPath "$DERIVED" \
+    CODE_SIGNING_ALLOWED=NO \
+    CODE_SIGNING_REQUIRED=NO \
+    CODE_SIGN_IDENTITY=- \
+    STRIP_INSTALLED_PRODUCT=NO \
+    STRIP_STYLE=non-global \
+    -showBuildSettings \
+    >"$SETTINGS_LOG" 2>"$LOG_DIR/runner-show-build-settings.err" || {
+      echo "ERROR: xcodebuild -showBuildSettings failed" >&2
+      cat "$LOG_DIR/runner-show-build-settings.err" >&2 || true
+      exit 1
+    }
+
+  python3 - "$SETTINGS_LOG" <<'PY'
+import re, sys
+path = sys.argv[1]
+text = open(path, encoding="utf-8", errors="replace").read()
+blocks = re.split(r"(?=Build settings for action )", text)
+runner = next((b for b in blocks if re.search(r"target Runner:\s*$", b, re.M)), None)
+if runner is None:
+    runner = next((b for b in blocks if "target Runner:" in b and "RunnerTests" not in b.split("\n", 1)[0]), None)
+if runner is None:
+    print("ERROR: could not isolate Runner target build settings", file=sys.stderr)
+    sys.exit(1)
+keys = (
+    "OTHER_LDFLAGS",
+    "SPATIAL_CORE_FORCE_LDFLAGS",
+    "SPATIAL_CORE_LIB",
+    "STRIP_INSTALLED_PRODUCT",
+    "STRIP_STYLE",
+    "DEAD_CODE_STRIPPING",
+    "PRODUCT_NAME",
+    "TARGET_NAME",
+    "TARGET_BUILD_DIR",
+    "CONFIGURATION_BUILD_DIR",
+    "EXECUTABLE_PATH",
+    "SDKROOT",
+)
+print(runner.splitlines()[0])
+lines = runner.splitlines()
+i = 0
+while i < len(lines):
+    stripped = lines[i].strip()
+    matched = next((key for key in keys if stripped.startswith(key + " =") or stripped.startswith(key + "=")), None)
+    if matched:
+        print(lines[i].rstrip())
+        if stripped.endswith("("):
+            i += 1
+            while i < len(lines):
+                print(lines[i].rstrip())
+                if lines[i].strip().startswith(")"):
+                    break
+                i += 1
+    i += 1
+if "_yinwei_open" not in runner:
+    print("ERROR: resolved Runner OTHER_LDFLAGS does not contain _yinwei_open", file=sys.stderr)
+    sys.exit(1)
+print("PROOF: resolved Runner settings contain _yinwei_open")
+PY
+  echo "===== end Runner resolved settings ====="
+}
+
+extract_ld_runner() {
+  echo "===== Ld Runner (from xcodebuild log) ====="
+  if [[ ! -f "$LOG" ]]; then
+    echo "ERROR: missing $LOG" >&2
+    return 1
+  fi
+  python3 - "$LOG" <<'PY'
+import re, sys
+text = open(sys.argv[1], encoding="utf-8", errors="replace").read().splitlines()
+hits = []
+for i, line in enumerate(text):
+    if re.search(r"\bLd\b.*Runner(\.app/Runner)?\b", line) and "RunnerTests" not in line:
+        chunk = text[i:i+8]
+        hits.append("\n".join(chunk))
+if not hits:
+    # Xcode 16 sometimes prints the clang driver line without a leading Ld token.
+    for i, line in enumerate(text):
+        if "Runner.app/Runner" in line and ("bin/clang" in line or "bin/ld" in line):
+            hits.append("\n".join(text[i:i+6]))
+            break
+if not hits:
+    print("WARNING: could not find an Ld Runner invocation in the xcodebuild log")
+    sys.exit(0)
+print(hits[-1])
+blob = hits[-1]
+for token in ("libspatial_core", "-u", "_yinwei_open"):
+    status = "YES" if token in blob else "NO"
+    print(f"Ld contains {token}: {status}")
+PY
+  echo "===== end Ld Runner ====="
+  echo "===== derived-data spatial_core references ====="
+  grep -R -l "libspatial_core" "$DERIVED/Build/Intermediates.noindex" 2>/dev/null | head -n 20 || true
+  echo "===== end derived-data spatial_core references ====="
+}
 
 run_unsigned_xcodebuild() {
   xcodebuild \
@@ -69,12 +184,14 @@ run_unsigned_xcodebuild() {
     COMPILER_INDEX_STORE_ENABLE=NO \
     STRIP_INSTALLED_PRODUCT=NO \
     STRIP_STYLE=non-global \
-    SPATIAL_CORE_FORCE_LDFLAGS="$FORCE_LDFLAGS" \
     build
 }
 
+dump_runner_resolved_settings
+
 # Command-line settings override Runner xcconfig. file_picker/DKCamera is
 # removed by the patcher; -Onone remains as a belt-and-suspenders override.
+# Do not pass nested SPATIAL_CORE_FORCE_LDFLAGS — it never reached ld.
 set +e +o pipefail
 run_unsigned_xcodebuild 2>&1 | tee "$LOG"
 xc_ok=${PIPESTATUS[0]}
@@ -91,5 +208,7 @@ if [[ -f "$LOG" ]]; then
   grep -E "error:|fatal error:|Owholemodule|BUILD FAILED|undefined symbol" "$LOG" | tail -n 80 || true
 fi
 echo "===== end xcodebuild errors ====="
+
+extract_ld_runner || true
 
 exit "$xc_ok"

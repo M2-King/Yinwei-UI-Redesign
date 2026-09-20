@@ -183,7 +183,10 @@ jobs:
           bash "$YINWEI_ROOT/tools/build_native_ios.sh" all
           test -f "$PLAYER/ios/Native/libspatial_core.xcframework/Info.plist"
           test -f "$PLAYER/ios/Flutter/spatial_core_force_load.xcconfig"
-          echo "Native iOS xcframework and force-load xcconfig ready."
+          test -f "$PLAYER/ios/Runner/spatial_core_ffi_keep.c"
+          grep -q "libspatial_core.xcframework in Frameworks" \
+            "$PLAYER/ios/Runner.xcodeproj/project.pbxproj"
+          echo "Native iOS xcframework is linked in the Runner Frameworks phase."
 
       - name: Build real iPhone app (iphoneos)
         run: |
