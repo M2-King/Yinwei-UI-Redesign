@@ -23,6 +23,13 @@ mod ffi;
 #[cfg(all(feature = "realtime", windows))]
 mod live_transfer;
 
+pub(crate) fn runtime_log(msg: &str) {
+    #[cfg(target_os = "ios")]
+    eprintln!("[YINWEI_IOS] {msg}");
+    #[cfg(not(target_os = "ios"))]
+    let _ = msg;
+}
+
 pub use decode::{save_wav, write_test_sine_wav, DecodedAudio, StereoFrame};
 pub use error::SpatialError;
 pub use hrtf_render::{spherical_to_vec, HrtfRenderer};

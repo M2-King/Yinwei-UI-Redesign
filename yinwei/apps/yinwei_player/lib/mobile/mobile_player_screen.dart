@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:yinwei_player/bridge/engine_bootstrap.dart';
 import 'package:yinwei_player/contracts/coordinate_frame_v1.dart';
+import 'package:yinwei_player/mobile/ios_runtime_status.dart';
 import 'package:yinwei_player/mobile/mobile_now_playing_header.dart';
 import 'package:yinwei_player/mobile/mobile_point_inspector.dart';
 import 'package:yinwei_player/mobile/mobile_spatial_mode_control.dart';
@@ -120,6 +121,12 @@ class _MobilePlayerScreenState extends State<MobilePlayerScreen> {
                     backend: widget.backend,
                     loadError: widget.loadError,
                     status: status,
+                  ),
+                  const SizedBox(height: 8),
+                  IosRuntimeStatusBanner(
+                    backend: widget.backend,
+                    controller: c,
+                    loadError: widget.loadError,
                   ),
                   const SizedBox(height: 14),
                   Expanded(

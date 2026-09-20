@@ -385,12 +385,17 @@ impl RealtimePlayer {
         }
 
         let host = cpal::default_host();
-        let device = host
-            .default_output_device()
-            .ok_or_else(|| SpatialError::AudioDevice("no default output device".into()))?;
-        let supported = device
-            .default_output_config()
-            .map_err(|e| SpatialError::AudioDevice(e.to_string()))?;
+        let device = match host.default_output_device() {
+            Some(d) => d,
+            None => {
+                crate::runtime_log("audio device init FAIL no default output device");
+                return Err(SpatialError::AudioDevice("no default output device".into()));
+            }
+        };
+        let supported = device.default_output_config().map_err(|e| {
+            crate::runtime_log(&format!("audio device init FAIL default_output_config {e}"));
+            SpatialError::AudioDevice(e.to_string())
+        })?;
 
         let sample_format = supported.sample_format();
         let config: StreamConfig = supported.clone().into();
@@ -418,14 +423,26 @@ impl RealtimePlayer {
             SampleFormat::I16 => build_stream::<i16>(&device, &config, shared, channels)?,
             SampleFormat::U16 => build_stream::<u16>(&device, &config, shared, channels)?,
             other => {
+                crate::runtime_log(&format!(
+                    "audio device init FAIL unsupported sample format {other:?}"
+                ));
                 return Err(SpatialError::AudioDevice(format!(
                     "unsupported sample format: {other:?}"
                 )))
             }
         };
+        let device_name = device.name().unwrap_or_else(|_| "unknown".into());
+        crate::runtime_log(&format!(
+            "audio device init name={device_name} sr={} ch={} fmt={sample_format:?}",
+            config.sample_rate.0, config.channels
+        ));
         stream
             .play()
-            .map_err(|e| SpatialError::AudioDevice(e.to_string()))?;
+            .map_err(|e| {
+                crate::runtime_log(&format!("audio stream.play FAIL {e}"));
+                SpatialError::AudioDevice(e.to_string())
+            })?;
+        crate::runtime_log("audio stream.play OK");
         *slot = Some(SendStream(stream));
         Ok(())
     }

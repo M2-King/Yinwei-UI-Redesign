@@ -102,6 +102,9 @@ class YinweiBindings {
       return _instance;
     } catch (e) {
       loadError = e.toString();
+      if (Platform.isIOS) {
+        print('[YINWEI_IOS] FFI_LOAD FAIL $e');
+      }
       return null;
     }
   }
@@ -129,6 +132,9 @@ class YinweiBindings {
       isIOS: Platform.isIOS,
     );
     if (mode == NativeLibraryLoadMode.iosProcess) {
+      if (Platform.isIOS) {
+        print('[YINWEI_IOS] FFI_LOAD process');
+      }
       return (
         lib: DynamicLibrary.process(),
         path: NativeLibraryLocator.processToken,

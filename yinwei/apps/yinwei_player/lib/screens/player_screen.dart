@@ -297,6 +297,31 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
     }
   }
 
+  Future<void> _onIosTogglePlay() async {
+    print(
+      '[YINWEI_IOS] PLAY_BUTTON_PRESSED playing=${_ctrl.playing} '
+      'hasFile=${_ctrl.hasOpenedFile} backend=$_backend '
+      'loadError=${YinweiBindings.loadError} lastError=${_ctrl.lastError}',
+    );
+    if (!_ctrl.playing && _audioSession.available) {
+      print('[YINWEI_IOS] IOS_CHANNEL_PLAY_RECEIVED');
+      try {
+        await _audioSession.activateForPlayback();
+        _audioSessionArmed = true;
+        print('[YINWEI_IOS] IOS_CHANNEL_PLAY_OK');
+      } catch (e) {
+        print('[YINWEI_IOS] IOS_CHANNEL_PLAY_FAIL $e');
+      }
+    } else if (!_ctrl.playing) {
+      print('[YINWEI_IOS] IOS_CHANNEL_PLAY_SKIP session unavailable');
+    }
+    await _ctrl.togglePlay();
+    print(
+      '[YINWEI_IOS] PLAY_BUTTON_DONE playing=${_ctrl.playing} '
+      'lastError=${_ctrl.lastError}',
+    );
+  }
+
   String _shellEpoch() {
     final p = _ctrl.params;
     final a = _ctrl.array;
@@ -713,7 +738,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
         telemetry: _telemetry,
         onSceneIntent: _onSceneIntent,
         onOpen: () => unawaited(_onOpen()),
-        onTogglePlay: () => unawaited(_ctrl.togglePlay()),
+        onTogglePlay: () => unawaited(_onIosTogglePlay()),
         onPlaybackMode: _onPlaybackMode,
         onMotionChanged: (motion) {
           final next = _ctrl.params.copy()..motion = motion;
@@ -1277,6 +1302,12 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
       final readable = await _mediaFiles.prepareReadablePath(path);
       await _ctrl.openPath(readable);
       debugPrint('[Player] opened path=$readable backend=$_backend');
+      if (Platform.isIOS) {
+        print(
+          '[YINWEI_IOS] yinwei_open OK path=$readable backend=$_backend '
+          'title=${_ctrl.track.title}',
+        );
+      }
       if (!mounted) return;
       final label = _backend == EngineBackend.native ? '真引擎' : '演示引擎 Mock';
       final name = path.split(RegExp(r'[\\/]')).last.toLowerCase();
@@ -1297,6 +1328,9 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
         ),
       );
     } catch (e) {
+      if (Platform.isIOS) {
+        print('[YINWEI_IOS] yinwei_open FAIL $e');
+      }
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('$e'), behavior: SnackBarBehavior.floating),

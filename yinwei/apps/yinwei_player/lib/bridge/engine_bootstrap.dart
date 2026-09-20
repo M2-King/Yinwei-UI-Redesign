@@ -18,12 +18,20 @@ class EngineBootstrap {
   static EngineBootstrap create() {
     final native = NativeEngine.tryCreate();
     if (native != null) {
+      if (Platform.isIOS) {
+        print('[YINWEI_IOS] ENGINE_BOOTSTRAP native');
+      }
       return EngineBootstrap._(
         native,
         EngineBackend.native,
         native.supportsExtraSpeakers
             ? 'Native · spatial_core · extra-pts'
             : 'Native · spatial_core',
+      );
+    }
+    if (Platform.isIOS) {
+      print(
+        '[YINWEI_IOS] ENGINE_BOOTSTRAP mock loadError=${YinweiBindings.loadError}',
       );
     }
     return EngineBootstrap._(

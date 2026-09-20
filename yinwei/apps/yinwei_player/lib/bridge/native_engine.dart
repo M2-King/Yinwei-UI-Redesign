@@ -1,4 +1,5 @@
 import 'dart:ffi';
+import 'dart:io';
 import 'dart:isolate';
 
 import 'package:ffi/ffi.dart';
@@ -56,6 +57,9 @@ class NativeEngine implements EngineApi {
 
   @override
   Future<TrackMeta> open(String path) async {
+    if (Platform.isIOS) {
+      print('[YINWEI_IOS] FFI_OPEN_START path=$path');
+    }
     final libPath = _libPath;
     final code = await Isolate.run(() {
       final b = YinweiBindings.loadFromPath(libPath);
@@ -66,6 +70,11 @@ class NativeEngine implements EngineApi {
         malloc.free(p);
       }
     });
+    if (Platform.isIOS) {
+      print(
+        '[YINWEI_IOS] FFI_OPEN_RESULT code=$code err=${_b.readLastError()}',
+      );
+    }
     _check(code);
     return TrackMeta(
       title: _b.readCString(_b.yinweiTrackTitle),
@@ -123,7 +132,20 @@ class NativeEngine implements EngineApi {
   @override
   Future<void> play() async {
     // Stay on the main isolate binding — never reopen the DLL here.
-    _check(_b.yinweiPlay(), allowAudioDevice: true);
+    if (Platform.isIOS) {
+      print('[YINWEI_IOS] FFI_PLAY_START');
+    }
+    try {
+      _check(_b.yinweiPlay(), allowAudioDevice: true);
+      if (Platform.isIOS) {
+        print('[YINWEI_IOS] yinwei_play OK');
+      }
+    } catch (e) {
+      if (Platform.isIOS) {
+        print('[YINWEI_IOS] yinwei_play FAIL $e err=${_b.readLastError()}');
+      }
+      rethrow;
+    }
   }
 
   @override

@@ -172,16 +172,24 @@ pub extern "C" fn yinwei_last_error(out: *mut c_char, cap: usize) -> i32 {
 pub extern "C" fn yinwei_open(path: *const c_char) -> i32 {
     let path = match cstr_to_str(path) {
         Ok(s) => s,
-        Err(c) => return c,
+        Err(c) => {
+            crate::runtime_log("yinwei_open FAIL bad path");
+            return c;
+        }
     };
+    crate::runtime_log(&format!("yinwei_open entry path={path}"));
     match global_session().and_then(|s| s.open(path)) {
         Ok(meta) => {
             if let Ok(mut t) = LAST_TRACK.lock() {
                 *t = Some(meta);
             }
+            crate::runtime_log("yinwei_open OK");
             OK
         }
-        Err(e) => map_err(e),
+        Err(e) => {
+            crate::runtime_log(&format!("yinwei_open FAIL {e}"));
+            map_err(e)
+        }
     }
 }
 
@@ -395,9 +403,16 @@ pub extern "C" fn yinwei_rebuild_preview() -> i32 {
 
 #[no_mangle]
 pub extern "C" fn yinwei_play() -> i32 {
+    crate::runtime_log("yinwei_play entry");
     match global_session().and_then(|s| s.play()) {
-        Ok(()) => OK,
-        Err(e) => map_err(e),
+        Ok(()) => {
+            crate::runtime_log("yinwei_play OK AudioEngine RUNNING");
+            OK
+        }
+        Err(e) => {
+            crate::runtime_log(&format!("yinwei_play FAIL {e}"));
+            map_err(e)
+        }
     }
 }
 

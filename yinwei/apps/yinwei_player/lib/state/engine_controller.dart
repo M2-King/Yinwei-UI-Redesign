@@ -207,16 +207,15 @@ class EngineController extends ChangeNotifier {
     lastError = null;
     try {
       // Streaming path: open() already loaded dry PCM; play starts the DSP worker.
-      try {
-        await _engine.play();
-      } catch (e) {
-        lastError = e.toString();
-      }
+      // A failed native start must not flip the transport to playing — the 33ms
+      // tick would otherwise snap it back with no visible error.
+      await _engine.play();
       playing = true;
       _startTick();
       notifyListeners();
     } catch (e) {
       lastError = e.toString();
+      playing = false;
       busy = false;
       notifyListeners();
     }
