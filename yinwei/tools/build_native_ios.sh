@@ -40,7 +40,31 @@ command -v xcodebuild >/dev/null 2>&1 || fail "xcodebuild not found. Install Xco
 command -v rustup >/dev/null 2>&1 || fail "rustup not found."
 command -v cargo >/dev/null 2>&1 || fail "cargo not found."
 command -v xcrun >/dev/null 2>&1 || fail "xcrun not found."
-command -v nm >/dev/null 2>&1 || fail "nm not found."
+
+rust_llvm_nm() {
+  local sysroot host
+  sysroot="$(rustc --print sysroot 2>/dev/null || true)"
+  host="$(rustc -vV 2>/dev/null | awk '/^host:/{print $2}')"
+  if [[ -n "$sysroot" && -n "$host" && -x "$sysroot/lib/rustlib/$host/bin/llvm-nm" ]]; then
+    echo "$sysroot/lib/rustlib/$host/bin/llvm-nm"
+  fi
+}
+
+# Apple nm from Xcode 26 cannot read object files produced by Rust 1.98+
+# (LLVM 22 attribute kind 105). Prefer rustup's llvm-nm.
+archive_exports() {
+  local archive="$1"
+  local llvm_nm
+  llvm_nm="$(rust_llvm_nm)"
+  if [[ -n "$llvm_nm" ]]; then
+    "$llvm_nm" --defined-only -g "$archive" 2>/dev/null && return 0
+  fi
+  if command -v nm >/dev/null 2>&1; then
+    nm -gU "$archive" 2>/dev/null && return 0
+    nm -g "$archive" 2>/dev/null && return 0
+  fi
+  strings "$archive" 2>/dev/null
+}
 
 need_target() {
   local t="$1"
@@ -53,7 +77,7 @@ verify_archive() {
   local archive="$1"
   [[ -f "$archive" ]] || fail "missing archive: $archive"
   local exports
-  exports="$(nm -gU "$archive" 2>/dev/null || nm -g "$archive")"
+  exports="$(archive_exports "$archive")"
   local missing=()
   local sym
   for sym in "${REQUIRED_SYMBOLS[@]}"; do

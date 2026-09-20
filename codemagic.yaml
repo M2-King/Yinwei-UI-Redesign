@@ -11,7 +11,9 @@ workflows:
     instance_type: mac_mini_m2
     environment:
       flutter: 3.47.2
-      xcode: latest
+      # Pin 16.4 to match GitHub macos-15. `latest` selected Xcode 26.6,
+      # whose nm/linker cannot read Rust 1.98 LLVM 22 object files.
+      xcode: 16.4
       cocoapods: default
       vars:
         PLAYER: yinwei/apps/yinwei_player
