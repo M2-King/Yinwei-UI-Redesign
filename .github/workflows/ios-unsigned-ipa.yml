@@ -432,7 +432,7 @@ jobs:
           echo
           echo "===== unzip -l ====="
           unzip -l "$IPA_PATH" | tee "$LOG_DIR/ipa-listing.txt"
-          if ! unzip -l "$IPA_PATH" | grep -q 'Payload/Runner.app/'; then
+          if ! grep -q 'Payload/Runner.app/' "$LOG_DIR/ipa-listing.txt"; then
             echo "ERROR: IPA is missing Payload/Runner.app/" >&2
             exit 1
           fi
@@ -448,7 +448,7 @@ jobs:
           IOS_SDK="$(xcrun --sdk iphoneos --show-sdk-version 2>/dev/null || true)"
           XCODE_VER="$(xcodebuild -version | tr '\n' ' ')"
           MACOS_VER="$(sw_vers -productVersion) $(sw_vers -buildVersion)"
-          FLUTTER_VER="$(flutter --version | head -n 1)"
+          FLUTTER_VER="$(flutter --version | awk 'NR==1 {print}')"
           RUST_VER="$(rustc --version)"
           {
             echo "Yinwei / 音围 unsigned iPhone IPA"

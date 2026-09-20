@@ -174,19 +174,29 @@ workflows:
             /usr/bin/zip -qry "$CM_BUILD_DIR/Yinwei-unsigned.ipa" Payload
           )
           test -f "$CM_BUILD_DIR/Yinwei-unsigned.ipa"
-          unzip -l "$CM_BUILD_DIR/Yinwei-unsigned.ipa" | grep -q 'Payload/Runner.app/'
+          echo "Packaged $CM_BUILD_DIR/Yinwei-unsigned.ipa"
+          # Do not pipe unzip into grep -q: grep closes early, unzip gets
+          # SIGPIPE, and pipefail turns that into exit 141 after a good IPA.
+          unzip -l "$CM_BUILD_DIR/Yinwei-unsigned.ipa" > "$CM_BUILD_DIR/ipa_listing.txt"
+          if ! grep -q 'Payload/Runner.app/' "$CM_BUILD_DIR/ipa_listing.txt"; then
+            echo "ERROR: IPA is missing Payload/Runner.app/" >&2
+            exit 1
+          fi
           IPA_SHA="$(shasum -a 256 "$CM_BUILD_DIR/Yinwei-unsigned.ipa" | awk '{print $1}')"
+          FLUTTER_VER="$(flutter --version | awk 'NR==1 {print}')"
+          XCODE_VER="$(xcodebuild -version | tr '\n' ' ')"
           {
             echo "Yinwei / 音围 unsigned iPhone IPA"
             echo "UNSIGNED BUILD — SIGN BEFORE INSTALLATION"
             echo "git SHA: ${CM_COMMIT}"
             echo "branch: ${CM_BRANCH}"
-            echo "Flutter: $(flutter --version | head -n 1)"
-            echo "Xcode: $(xcodebuild -version | tr '\n' ' ')"
+            echo "Flutter: ${FLUTTER_VER}"
+            echo "Xcode: ${XCODE_VER}"
             echo "configuration: Release / iphoneos / unsigned"
             echo "IPA SHA-256: ${IPA_SHA}"
             echo "UNSIGNED BUILD — SIGN BEFORE INSTALLATION"
           } > "$CM_BUILD_DIR/Yinwei-build-info.txt"
+          echo "Wrote $CM_BUILD_DIR/Yinwei-build-info.txt"
     artifacts:
       - Yinwei-unsigned.ipa
       - Yinwei-build-info.txt

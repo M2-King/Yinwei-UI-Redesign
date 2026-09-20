@@ -175,14 +175,14 @@ for token in ("libspatial_core", "force_load", "-u", "_yinwei_open"):
 PY
   echo "===== end Ld Runner ====="
   echo "===== derived-data spatial_core references ====="
-  grep -R -l "libspatial_core" "$DERIVED/Build/Intermediates.noindex" 2>/dev/null | head -n 20 || true
+  grep -R -l "libspatial_core" "$DERIVED/Build/Intermediates.noindex" 2>/dev/null | awk 'NR<=20 {print}' || true
   echo "===== end derived-data spatial_core references ====="
 }
 
 verify_built_runner_ffi() {
   echo "===== compile evidence: spatial_core_ffi_keep.c ====="
   if [[ -f "$LOG" ]]; then
-    grep -n "spatial_core_ffi_keep.c" "$LOG" | head -n 40 || echo "WARNING: keep.c not mentioned in xcodebuild log"
+    grep -n "spatial_core_ffi_keep.c" "$LOG" | awk 'NR<=40 {print}' || echo "WARNING: keep.c not mentioned in xcodebuild log"
   fi
   echo "===== end compile evidence ====="
   echo "===== Runner.app candidates ====="
@@ -191,10 +191,20 @@ verify_built_runner_ffi() {
   find "$player_dir/build" "$DERIVED" -name Runner.app -type d 2>/dev/null | while IFS= read -r p; do
     echo "$p"
     if [[ -f "$p/Runner" ]]; then
-      nm "$p/Runner" 2>/dev/null | grep -i yinwei | head -n 8 || echo "  (no yinwei symbols)"
+      hits="$(nm "$p/Runner" 2>/dev/null | grep -i yinwei || true)"
+      if [[ -n "$hits" ]]; then
+        printf '%s\n' "$hits" | awk 'NR<=8 {print}'
+      else
+        echo "  (no yinwei symbols)"
+      fi
       if [[ -f "$p/Runner.debug.dylib" ]]; then
         echo "  WARNING: Runner.debug.dylib present; Dart FFI must be in Runner.app/Runner"
-        nm "$p/Runner.debug.dylib" 2>/dev/null | grep -i yinwei | head -n 8 || echo "  (no yinwei in debug dylib)"
+        dylib_hits="$(nm "$p/Runner.debug.dylib" 2>/dev/null | grep -i yinwei || true)"
+        if [[ -n "$dylib_hits" ]]; then
+          printf '%s\n' "$dylib_hits" | awk 'NR<=8 {print}'
+        else
+          echo "  (no yinwei in debug dylib)"
+        fi
       fi
     else
       echo "  (missing Runner executable)"
