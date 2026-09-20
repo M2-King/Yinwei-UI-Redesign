@@ -622,6 +622,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = "$(FLUTTER_BUILD_NUMBER)";
 				ENABLE_BITCODE = NO;
+				ENABLE_DEBUG_DYLIB = NO;
 				INFOPLIST_FILE = Runner/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -629,7 +630,10 @@
 				);
 				OTHER_LDFLAGS = (
 					"$(inherited)",
-					"-Wl,-force_load,$(SPATIAL_CORE_LIB)",
+					"-Xlinker",
+					"-force_load",
+					"-Xlinker",
+					"$(SPATIAL_CORE_LIB)",
 					"-u",
 					"_yinwei_last_error",
 					"-u",
@@ -820,6 +824,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = "$(FLUTTER_BUILD_NUMBER)";
 				ENABLE_BITCODE = NO;
+				ENABLE_DEBUG_DYLIB = NO;
 				INFOPLIST_FILE = Runner/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -827,7 +832,10 @@
 				);
 				OTHER_LDFLAGS = (
 					"$(inherited)",
-					"-Wl,-force_load,$(SPATIAL_CORE_LIB)",
+					"-Xlinker",
+					"-force_load",
+					"-Xlinker",
+					"$(SPATIAL_CORE_LIB)",
 					"-u",
 					"_yinwei_last_error",
 					"-u",
@@ -859,6 +867,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = "$(FLUTTER_BUILD_NUMBER)";
 				ENABLE_BITCODE = NO;
+				ENABLE_DEBUG_DYLIB = NO;
 				INFOPLIST_FILE = Runner/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -866,7 +875,10 @@
 				);
 				OTHER_LDFLAGS = (
 					"$(inherited)",
-					"-Wl,-force_load,$(SPATIAL_CORE_LIB)",
+					"-Xlinker",
+					"-force_load",
+					"-Xlinker",
+					"$(SPATIAL_CORE_LIB)",
 					"-u",
 					"_yinwei_last_error",
 					"-u",

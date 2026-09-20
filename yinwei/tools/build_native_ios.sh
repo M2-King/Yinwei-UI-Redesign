@@ -147,8 +147,9 @@ PBX="$ROOT/apps/yinwei_player/ios/Runner.xcodeproj/project.pbxproj"
 KEEP_C="$ROOT/apps/yinwei_player/ios/Runner/spatial_core_ffi_keep.c"
 # Archive paths are recorded for diagnostics only. Runner links via:
 #   1. Native/libspatial_core.xcframework in the Runner Frameworks phase
-#   2. literal -u _yinwei_* roots in project.pbxproj OTHER_LDFLAGS
+#   2. -Xlinker -force_load -Xlinker $(SPATIAL_CORE_LIB) plus literal -u _yinwei_* in pbxproj
 #   3. Runner/spatial_core_ffi_keep.c
+#   4. ENABLE_DEBUG_DYLIB=NO so FFI lives in Runner.app/Runner, not a stub
 # Do not put -force_load in a nested SPATIAL_CORE_FORCE_LDFLAGS blob — that
 # assignment never reached the final Ld Runner command.
 {
@@ -168,6 +169,10 @@ grep -q "libspatial_core.xcframework in Frameworks" "$PBX" \
   || fail "Runner Frameworks phase does not link libspatial_core.xcframework"
 grep -q '"_yinwei_open"' "$PBX" \
   || fail "Runner OTHER_LDFLAGS is missing literal -u _yinwei_open"
+grep -q '"-force_load"' "$PBX" \
+  || fail "Runner OTHER_LDFLAGS is missing -force_load"
+grep -q 'ENABLE_DEBUG_DYLIB = NO' "$PBX" \
+  || fail "Runner must set ENABLE_DEBUG_DYLIB = NO"
 if grep -q 'SPATIAL_CORE_FORCE_LDFLAGS' "$PBX"; then
   fail "nested SPATIAL_CORE_FORCE_LDFLAGS must not be used for Runner OTHER_LDFLAGS"
 fi

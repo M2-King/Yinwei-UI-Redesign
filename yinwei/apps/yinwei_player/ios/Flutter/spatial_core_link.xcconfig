@@ -4,7 +4,7 @@
 // instead of appending, and is dropped by unsigned generic/platform=iOS.
 // The Rust archive is linked into Runner only:
 //   Native/libspatial_core.xcframework in Frameworks
-//   -Wl,-force_load,$(SPATIAL_CORE_LIB) plus literal -u roots in pbxproj
+//   -Xlinker -force_load -Xlinker $(SPATIAL_CORE_LIB) plus literal -u roots in pbxproj
 //   Runner/spatial_core_ffi_keep.c
 // Not the App Clip.
 OTHER_LDFLAGS = $(inherited) -framework AVFoundation -framework AudioToolbox -framework CoreAudio -framework Accelerate -lc++

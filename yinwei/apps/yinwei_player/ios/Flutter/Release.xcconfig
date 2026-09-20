@@ -2,8 +2,11 @@
 #include "spatial_core_link.xcconfig"
 #include? "spatial_core_force_load.xcconfig"
 // Keep global yinwei_* names for DynamicLibrary.process() / dlsym.
+// Xcode 16 + -Onone otherwise emits ENABLE_DEBUG_DYLIB, leaving Runner as a
+// stub (___debug_blank_executor_main) and the FFI symbols in Runner.debug.dylib.
 STRIP_STYLE = non-global
 STRIP_INSTALLED_PRODUCT = NO
+ENABLE_DEBUG_DYLIB = NO
 SWIFT_ENABLE_EXPLICIT_MODULES = NO
 _EXPERIMENTAL_SWIFT_EXPLICIT_MODULES = NO
 SWIFT_EMIT_MODULE_INTERFACE = NO

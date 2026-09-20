@@ -208,7 +208,9 @@ jobs:
               SWIFT_OPTIMIZATION_LEVEL=-Onone \
               SWIFT_COMPILATION_MODE=incremental \
               SWIFT_ENABLE_EXPLICIT_MODULES=NO \
-              COMPILER_INDEX_STORE_ENABLE=NO
+              COMPILER_INDEX_STORE_ENABLE=NO \
+              STRIP_INSTALLED_PRODUCT=NO \
+              ENABLE_DEBUG_DYLIB=NO
           ) 2>&1 | tee "$LOG_DIR/flutter-build-ios.log"
           flutter_ok=${PIPESTATUS[0]}
           set -euo pipefail

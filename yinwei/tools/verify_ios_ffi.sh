@@ -27,6 +27,13 @@ REQUIRED=(
 )
 
 exports="$(nm -gU "$BIN" 2>/dev/null || nm -g "$BIN")"
+if grep -q '___debug_blank_executor_main' <<<"$exports"; then
+  echo "ERROR: $BIN is the Xcode 16 debug-dylib stub, not the FFI executable." >&2
+  echo "ENABLE_DEBUG_DYLIB must be NO. Dart DynamicLibrary.process() cannot resolve yinwei_* from this stub." >&2
+  echo "===== nm globals (head) =====" >&2
+  echo "$exports" | head -n 40 >&2 || true
+  exit 1
+fi
 missing=()
 for sym in "${REQUIRED[@]}"; do
   if ! grep -q "$sym" <<<"$exports"; then

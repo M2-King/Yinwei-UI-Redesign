@@ -74,6 +74,7 @@ dump_runner_resolved_settings() {
     CODE_SIGN_IDENTITY=- \
     STRIP_INSTALLED_PRODUCT=NO \
     STRIP_STYLE=non-global \
+    ENABLE_DEBUG_DYLIB=NO \
     -showBuildSettings \
     >"$SETTINGS_LOG" 2>"$LOG_DIR/runner-show-build-settings.err" || {
       echo "ERROR: xcodebuild -showBuildSettings failed" >&2
@@ -105,6 +106,7 @@ keys = (
     "CONFIGURATION_BUILD_DIR",
     "EXECUTABLE_PATH",
     "SDKROOT",
+    "ENABLE_DEBUG_DYLIB",
 )
 print(runner.splitlines()[0])
 lines = runner.splitlines()
@@ -128,7 +130,10 @@ if "_yinwei_open" not in runner:
 if "force_load" not in runner:
     print("ERROR: resolved Runner OTHER_LDFLAGS does not contain force_load", file=sys.stderr)
     sys.exit(1)
-print("PROOF: resolved Runner settings contain _yinwei_open and force_load")
+if not re.search(r"ENABLE_DEBUG_DYLIB\s*=\s*NO\b", runner):
+    print("ERROR: ENABLE_DEBUG_DYLIB must be NO so Runner.app/Runner is the FFI binary, not a debug stub", file=sys.stderr)
+    sys.exit(1)
+print("PROOF: resolved Runner settings contain _yinwei_open, force_load, ENABLE_DEBUG_DYLIB=NO")
 PY
   echo "===== end Runner resolved settings ====="
 }
@@ -145,13 +150,19 @@ text = open(sys.argv[1], encoding="utf-8", errors="replace").read().splitlines()
 hits = []
 for i, line in enumerate(text):
     if re.search(r"\bLd\b.*Runner(\.app/Runner)?\b", line) and "RunnerTests" not in line:
-        chunk = text[i:i+8]
-        hits.append("\n".join(chunk))
+        chunk = text[i:min(i + 12, len(text))]
+        blob = "\n".join(chunk)
+        if "ExecutorLinkFileList" in blob or "debug_blank_executor" in blob:
+            continue
+        hits.append(blob)
 if not hits:
     # Xcode 16 sometimes prints the clang driver line without a leading Ld token.
     for i, line in enumerate(text):
         if "Runner.app/Runner" in line and ("bin/clang" in line or "bin/ld" in line):
-            hits.append("\n".join(text[i:i+6]))
+            blob = "\n".join(text[i:min(i + 8, len(text))])
+            if "ExecutorLinkFileList" in blob or "debug_blank_executor" in blob:
+                continue
+            hits.append(blob)
             break
 if not hits:
     print("WARNING: could not find an Ld Runner invocation in the xcodebuild log")
@@ -181,6 +192,10 @@ verify_built_runner_ffi() {
     echo "$p"
     if [[ -f "$p/Runner" ]]; then
       nm "$p/Runner" 2>/dev/null | grep -i yinwei | head -n 8 || echo "  (no yinwei symbols)"
+      if [[ -f "$p/Runner.debug.dylib" ]]; then
+        echo "  WARNING: Runner.debug.dylib present; Dart FFI must be in Runner.app/Runner"
+        nm "$p/Runner.debug.dylib" 2>/dev/null | grep -i yinwei | head -n 8 || echo "  (no yinwei in debug dylib)"
+      fi
     else
       echo "  (missing Runner executable)"
     fi
@@ -204,9 +219,14 @@ def setting(name):
     m = re.search(r"^\s*" + re.escape(name) + r"\s*=\s*(.+?)\s*$", runner, re.M)
     return m.group(1) if m else ""
 
+def nm_text(path):
+    return subprocess.run(["nm", path], capture_output=True, text=True).stdout
+
 def yinwei_lines(path):
-    nm = subprocess.run(["nm", path], capture_output=True, text=True)
-    return [ln for ln in nm.stdout.splitlines() if "yinwei" in ln.lower()]
+    return [ln for ln in nm_text(path).splitlines() if "yinwei" in ln.lower()]
+
+def is_debug_stub(path):
+    return "___debug_blank_executor_main" in nm_text(path)
 
 target_dir = setting("TARGET_BUILD_DIR")
 exec_path = setting("EXECUTABLE_PATH") or "Runner.app/Runner"
@@ -228,6 +248,16 @@ for binary in candidates:
     if not os.path.isfile(binary):
         print("  missing")
         continue
+    if is_debug_stub(binary):
+        print("  REJECT Xcode 16 debug-dylib stub (___debug_blank_executor_main)")
+        dylib = os.path.join(os.path.dirname(binary), "Runner.debug.dylib")
+        print(f"===== nm yinwei {dylib} (diagnostic only) =====")
+        if os.path.isfile(dylib):
+            hits = yinwei_lines(dylib)
+            print("\n".join(hits) if hits else "(none)")
+        else:
+            print("(missing)")
+        continue
     hits = yinwei_lines(binary)
     print("===== nm yinwei =====")
     print("\n".join(hits) if hits else "(none)")
@@ -235,6 +265,7 @@ for binary in candidates:
         chosen, chosen_hits = binary, hits
 if chosen is None:
     print("ERROR: no xcodebuild Runner product contains yinwei_* symbols", file=sys.stderr)
+    print("ERROR: ENABLE_DEBUG_DYLIB must be NO so Dart process() sees FFI in Runner.app/Runner", file=sys.stderr)
     sys.exit(1)
 print(f"PROOF: {len(chosen_hits)} yinwei nm lines in {chosen}")
 open(out_path, "w", encoding="utf-8").write(os.path.dirname(chosen) + "\n")
@@ -261,6 +292,7 @@ run_unsigned_xcodebuild() {
     COMPILER_INDEX_STORE_ENABLE=NO \
     STRIP_INSTALLED_PRODUCT=NO \
     STRIP_STYLE=non-global \
+    ENABLE_DEBUG_DYLIB=NO \
     build
 }
 
