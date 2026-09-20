@@ -17,6 +17,7 @@ import AVFoundation
     let messenger = engineBridge.applicationRegistrar.messenger()
     YinweiLiveActivityChannel.register(messenger: messenger)
     YinweiAudioSessionChannel.register(messenger: messenger)
+    YinweiScreenAudioProbeChannel.register(messenger: messenger)
     print("[YINWEI_IOS] native channels registered")
   }
 

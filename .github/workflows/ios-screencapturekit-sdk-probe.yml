@@ -1,0 +1,87 @@
+# Yinwei / 音围 — iOS 27 ScreenCaptureKit SDK probe
+#
+# SEPARATE from the unsigned IPA workflow. Does not change the Xcode 16.4 pin.
+# Compile-only / SDK-interface inspection. Not physical capture proof.
+#
+# Required toolchain for the real ScreenCaptureKit iOS 27 APIs:
+#   GitHub-hosted label: xcode-27
+#   Xcode 27 + iOS 27.0 SDK (iphoneos27.0)
+#
+# The production IPA job stays on macos-15 / Xcode 16.4 because Flutter 3.47.2
+# and spatial_core were pinned to that combination.
+
+name: Yinwei iOS 27 ScreenCaptureKit SDK Probe
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  inspect_ios27_screencapturekit:
+    name: Inspect iOS 27 ScreenCaptureKit interfaces
+    runs-on: xcode-27
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Toolchain and SDK interface report
+        run: |
+          set -euo pipefail
+          echo "===== xcodebuild -version ====="
+          xcodebuild -version
+          echo
+          echo "===== xcodebuild -showsdks ====="
+          xcodebuild -showsdks
+          echo
+          echo "===== swift --version ====="
+          swift --version
+          echo
+          echo "===== iPhone OS SDK ====="
+          xcrun --sdk iphoneos --show-sdk-version
+          xcrun --sdk iphoneos --show-sdk-path
+          SDK="$(xcrun --sdk iphoneos --show-sdk-path)"
+          echo
+          echo "===== ScreenCaptureKit module / swiftinterface ====="
+          find "$SDK" -iname '*ScreenCaptureKit*' | head -n 80
+          INTERFACE="$(find "$SDK" -name 'ScreenCaptureKit.swiftinterface' | head -n 1 || true)"
+          if [[ -z "$INTERFACE" ]]; then
+            echo "ERROR: ScreenCaptureKit.swiftinterface was not found in the iOS SDK."
+            exit 1
+          fi
+          echo "Using $INTERFACE"
+          echo
+          echo "===== required API names ====="
+          for name in \
+            ScreenCaptureKit \
+            SCContentSharingPicker \
+            SCContentFilter \
+            SCStream \
+            SCStreamConfiguration \
+            SCStreamOutput \
+            SCStreamOutputType \
+            capturesAudio \
+            sampleRate \
+            channelCount \
+            excludesCurrentProcessAudio \
+            showsMicrophoneControl \
+            mixesAudioWithMicrophone
+          do
+            if grep -q "$name" "$INTERFACE"; then
+              echo "FOUND $name"
+            else
+              echo "MISSING $name"
+            fi
+          done
+          echo
+          echo "===== output types ====="
+          grep -n "enum SCStreamOutputType" -A 20 "$INTERFACE" || true
+          echo
+          echo "===== capturesAudio / excludesCurrentProcessAudio ====="
+          grep -n "capturesAudio\|excludesCurrentProcessAudio\|sampleRate\|channelCount\|microphone" "$INTERFACE" | head -n 80
+          echo
+          echo "This job does not prove physical non-silent system-audio capture."

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:yinwei_player/bridge/engine_bootstrap.dart';
 import 'package:yinwei_player/contracts/coordinate_frame_v1.dart';
 import 'package:yinwei_player/mobile/ios_runtime_status.dart';
+import 'package:yinwei_player/mobile/ios_screen_audio_probe_panel.dart';
 import 'package:yinwei_player/mobile/mobile_now_playing_header.dart';
 import 'package:yinwei_player/mobile/mobile_point_inspector.dart';
 import 'package:yinwei_player/mobile/mobile_spatial_mode_control.dart';
@@ -158,7 +159,9 @@ class _MobilePlayerScreenState extends State<MobilePlayerScreen> {
                     onPlaybackMode: widget.onPlaybackMode,
                     onMotion: widget.onMotionChanged,
                   ),
-                  const SizedBox(height: 10),
+                  const SizedBox(height: 8),
+                  const IosScreenAudioProbePanel(),
+                  const SizedBox(height: 8),
                   MobileTransport(
                     controller: c,
                     onTogglePlay: widget.onTogglePlay,
