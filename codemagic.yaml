@@ -69,7 +69,12 @@ workflows:
         script: |
           set -euo pipefail
           cd "$PLAYER"
+          python3 "$CM_BUILD_DIR/$YINWEI_ROOT/tools/patch_ios_file_picker_no_dkcamera.py" \
+            "$CM_BUILD_DIR/$PLAYER"
           flutter build ios --config-only --release --no-codesign
+          python3 "$CM_BUILD_DIR/$YINWEI_ROOT/tools/patch_ios_file_picker_no_dkcamera.py" \
+            "$CM_BUILD_DIR/$PLAYER/ios" \
+            "$CM_BUILD_DIR/$PLAYER/ios/Flutter/ephemeral"
           if [[ -f ios/Podfile ]]; then
             echo "Podfile present — running pod install"
             (cd ios && pod install --verbose)
@@ -86,20 +91,16 @@ workflows:
           set -euo pipefail
           source "$HOME/.cargo/env"
           export COPYFILE_DISABLE=1
+          export XCODEBUILD_LOG_DIR="/tmp/xcodebuild_logs"
+          mkdir -p "$XCODEBUILD_LOG_DIR"
           PLAYER_ABS="$CM_BUILD_DIR/$PLAYER"
           YINWEI_ABS="$CM_BUILD_DIR/$YINWEI_ROOT"
 
           cd "$PLAYER_ABS"
-          set +e +o pipefail
-          flutter build ios --release --no-codesign -- \
-            CODE_SIGNING_ALLOWED=NO \
-            CODE_SIGNING_REQUIRED=NO \
-            SWIFT_OPTIMIZATION_LEVEL=-Onone \
-            SWIFT_COMPILATION_MODE=incremental \
-            SWIFT_ENABLE_EXPLICIT_MODULES=NO \
-            COMPILER_INDEX_STORE_ENABLE=NO
-          flutter_ok=$?
-          set -euo pipefail
+          # Skip `flutter build ios --release`: it still compiles file_picker's
+          # DKCamera SPM graph and hides the real Swift errors in a long log.
+          # xcodebuild runs Flutter's xcode_backend.sh build phase itself.
+          flutter_ok=1
 
           find_runner_app() {
             local candidate found="" p

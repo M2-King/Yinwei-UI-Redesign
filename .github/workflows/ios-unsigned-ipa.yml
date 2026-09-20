@@ -156,7 +156,11 @@ jobs:
           set -euo pipefail
           # Generates Generated.xcconfig / SPM packages. May also write a
           # Podfile when plugins still require CocoaPods.
+          python3 "$YINWEI_ROOT/tools/patch_ios_file_picker_no_dkcamera.py" "$PLAYER"
           flutter build ios --config-only --release --no-codesign
+          python3 "$YINWEI_ROOT/tools/patch_ios_file_picker_no_dkcamera.py" \
+            "$PLAYER/ios" \
+            "$PLAYER/ios/Flutter/ephemeral"
           cd ios
           echo "Runner.xcworkspace:"
           cat Runner.xcworkspace/contents.xcworkspacedata
