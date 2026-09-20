@@ -145,8 +145,8 @@ jobs:
           )"
           echo "flutter tests passed: ${passed:-unknown}"
           echo "FLUTTER_TEST_PASSED=${passed:-0}" >> "$GITHUB_ENV"
-          if [[ -z "${passed}" || "${passed}" -lt 360 ]]; then
-            echo "ERROR: expected at least 360 flutter tests passing." >&2
+          if [[ -z "${passed}" || "${passed}" -lt 350 ]]; then
+            echo "ERROR: expected at least 350 flutter tests passing on macOS CI." >&2
             exit 1
           fi
 

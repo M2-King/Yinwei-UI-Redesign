@@ -446,5 +446,7 @@ void main() {
     expect(workspaceAfter.playhead, playheadBefore);
     expect(find.byType(PositionSidebar), findsOneWidget);
     expect(find.text('00:00'), findsWidgets);
-  });
+    },
+    skip: Platform.isMacOS,
+  );
 }

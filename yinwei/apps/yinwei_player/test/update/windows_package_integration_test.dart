@@ -14,8 +14,9 @@ void main() {
   final zip = File('dist/windows/$zipName');
   final manifestFile = File('dist/windows/local-release-manifest.json');
 
-  test('Windows update-test zip exists with spatial_core.dll and matching SHA-256',
-      () async {
+  test(
+    'Windows update-test zip exists with spatial_core.dll and matching SHA-256',
+    () async {
     expect(
       zip.existsSync(),
       isTrue,
@@ -58,5 +59,7 @@ void main() {
       () => coordinator.installSilently(zip),
       throwsA(isA<UnsupportedError>()),
     );
-  });
+    },
+    skip: !Platform.isWindows,
+  );
 }

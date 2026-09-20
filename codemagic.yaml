@@ -1,0 +1,180 @@
+# Yinwei / 音围 — unsigned iPhone IPA (Codemagic)
+#
+# BUILD INFRASTRUCTURE ONLY. No Apple signing secrets.
+# Flutter app: yinwei/apps/yinwei_player
+# Artifact: Yinwei-unsigned.ipa — SIGN BEFORE INSTALLATION
+
+workflows:
+  ios-unsigned-ipa:
+    name: Yinwei iOS Unsigned IPA
+    max_build_duration: 120
+    instance_type: mac_mini_m2
+    environment:
+      flutter: 3.47.2
+      xcode: latest
+      cocoapods: default
+      vars:
+        PLAYER: yinwei/apps/yinwei_player
+        YINWEI_ROOT: yinwei
+    triggering:
+      events:
+        - push
+      branch_patterns:
+        - pattern: yinwei-ui-redesign
+          include: true
+          source: true
+      cancel_previous_builds: true
+    scripts:
+      - name: Environment report
+        script: |
+          set -euo pipefail
+          sw_vers
+          uname -m
+          xcodebuild -version
+          xcodebuild -showsdks
+          flutter --version
+          dart --version
+      - name: Install Rust stable and iOS targets
+        script: |
+          set -euo pipefail
+          if ! command -v rustup >/dev/null 2>&1; then
+            curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+          fi
+          # shellcheck disable=SC1090
+          source "$HOME/.cargo/env"
+          rustup toolchain install stable
+          rustup default stable
+          rustup target add aarch64-apple-ios aarch64-apple-ios-sim
+          rustc --version
+          cargo --version
+      - name: Flutter pub get
+        script: |
+          set -euo pipefail
+          cd "$PLAYER"
+          flutter pub get
+      - name: cargo test -p spatial_core
+        script: |
+          set -euo pipefail
+          source "$HOME/.cargo/env"
+          cd "$YINWEI_ROOT"
+          cargo test -p spatial_core
+      - name: flutter test
+        script: |
+          set -euo pipefail
+          cd "$PLAYER"
+          flutter test
+      - name: Generate iOS tooling
+        script: |
+          set -euo pipefail
+          cd "$PLAYER"
+          flutter build ios --config-only --release --no-codesign
+          if [[ -f ios/Podfile ]]; then
+            (cd ios && pod install)
+          else
+            echo "No Podfile; using Flutter Swift Package Manager + Runner.xcworkspace"
+          fi
+      - name: Build spatial_core for iOS
+        script: |
+          set -euo pipefail
+          source "$HOME/.cargo/env"
+          bash "$YINWEI_ROOT/tools/build_native_ios.sh" all
+      - name: Build unsigned iphoneos app and IPA
+        script: |
+          set -euo pipefail
+          source "$HOME/.cargo/env"
+          export COPYFILE_DISABLE=1
+          PLAYER_ABS="$CM_BUILD_DIR/$PLAYER"
+          YINWEI_ABS="$CM_BUILD_DIR/$YINWEI_ROOT"
+
+          cd "$PLAYER_ABS"
+          set +e +o pipefail
+          flutter build ios --release --no-codesign
+          flutter_ok=$?
+          set -euo pipefail
+
+          find_runner_app() {
+            local candidate found="" p
+            local -a preferred=(
+              "$PLAYER_ABS/build/ios/iphoneos/Runner.app"
+              "$PLAYER_ABS/build/ios/Release-iphoneos/Runner.app"
+              "$PLAYER_ABS/ios/build/Release-iphoneos/Runner.app"
+              "$PLAYER_ABS/build/ios_ci_derived/Build/Products/Release-iphoneos/Runner.app"
+            )
+            for candidate in "${preferred[@]}"; do
+              if [[ -f "$candidate/Runner" ]]; then
+                echo "$candidate"
+                return 0
+              fi
+            done
+            while IFS= read -r p; do
+              [[ -z "$p" ]] && continue
+              case "$p" in
+                *iphonesimulator*|*simulator*) continue ;;
+              esac
+              if [[ -f "$p/Runner" ]]; then
+                echo "$p"
+                return 0
+              fi
+            done < <(find "$PLAYER_ABS/build" "$PLAYER_ABS/ios/build" -name Runner.app -type d 2>/dev/null || true)
+            return 1
+          }
+
+          is_iphoneos_binary() {
+            local bin="$1"
+            [[ -f "$bin" ]] || return 1
+            echo "$bin" | grep -Eqi 'iphonesimulator|simulator' && return 1
+            vtool -show-build "$bin" 2>/dev/null | grep -qi IOSSIMULATOR && return 1
+            file "$bin" | grep -qi 'arm64' || return 1
+            return 0
+          }
+
+          RUNNER_APP=""
+          if [[ "$flutter_ok" -eq 0 ]] && RUNNER_APP="$(find_runner_app)" && is_iphoneos_binary "$RUNNER_APP/Runner"; then
+            echo "Flutter --no-codesign produced $RUNNER_APP"
+          else
+            echo "Falling back to unsigned xcodebuild"
+            (
+              cd "$PLAYER_ABS/ios"
+              xcodebuild \
+                -workspace Runner.xcworkspace \
+                -scheme Runner \
+                -configuration Release \
+                -destination 'generic/platform=iOS' \
+                -derivedDataPath "$PLAYER_ABS/build/ios_ci_derived" \
+                CODE_SIGNING_ALLOWED=NO \
+                CODE_SIGNING_REQUIRED=NO \
+                build
+            )
+            RUNNER_APP="$(find_runner_app)"
+          fi
+
+          test -d "$RUNNER_APP"
+          test -f "$RUNNER_APP/Runner"
+          file "$RUNNER_APP/Runner"
+          bash "$YINWEI_ABS/tools/verify_ios_ffi.sh" "$RUNNER_APP/Runner"
+
+          rm -rf "$CM_BUILD_DIR/ipa_staging"
+          mkdir -p "$CM_BUILD_DIR/ipa_staging/Payload"
+          cp -R "$RUNNER_APP" "$CM_BUILD_DIR/ipa_staging/Payload/Runner.app"
+          (
+            cd "$CM_BUILD_DIR/ipa_staging"
+            /usr/bin/zip -qry "$CM_BUILD_DIR/Yinwei-unsigned.ipa" Payload
+          )
+          test -f "$CM_BUILD_DIR/Yinwei-unsigned.ipa"
+          unzip -l "$CM_BUILD_DIR/Yinwei-unsigned.ipa" | grep -q 'Payload/Runner.app/'
+          IPA_SHA="$(shasum -a 256 "$CM_BUILD_DIR/Yinwei-unsigned.ipa" | awk '{print $1}')"
+          {
+            echo "Yinwei / 音围 unsigned iPhone IPA"
+            echo "UNSIGNED BUILD — SIGN BEFORE INSTALLATION"
+            echo "git SHA: ${CM_COMMIT}"
+            echo "branch: ${CM_BRANCH}"
+            echo "Flutter: $(flutter --version | head -n 1)"
+            echo "Xcode: $(xcodebuild -version | tr '\n' ' ')"
+            echo "configuration: Release / iphoneos / unsigned"
+            echo "IPA SHA-256: ${IPA_SHA}"
+            echo "UNSIGNED BUILD — SIGN BEFORE INSTALLATION"
+          } > "$CM_BUILD_DIR/Yinwei-build-info.txt"
+    artifacts:
+      - Yinwei-unsigned.ipa
+      - Yinwei-build-info.txt
+      - /tmp/xcodebuild_logs/*.log
