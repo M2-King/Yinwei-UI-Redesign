@@ -59,6 +59,24 @@ class NativeEngine implements EngineApi {
   Future<TrackMeta> open(String path) async {
     if (Platform.isIOS) {
       print('[YINWEI_IOS] FFI_OPEN_START path=$path');
+      final p = path.toNativeUtf8();
+      final int code;
+      try {
+        code = _b.yinweiOpen(p);
+      } finally {
+        malloc.free(p);
+      }
+      print(
+        '[YINWEI_IOS] FFI_OPEN_RESULT code=$code err=${_b.readLastError()}',
+      );
+      _check(code);
+      return TrackMeta(
+        title: _b.readCString(_b.yinweiTrackTitle),
+        artist: _b.readCString(_b.yinweiTrackArtist),
+        album: _b.readCString(_b.yinweiTrackAlbum),
+        duration: Duration(milliseconds: _b.yinweiTrackDurationMs()),
+        path: _b.readCString(_b.yinweiTrackPath),
+      );
     }
     final libPath = _libPath;
     final code = await Isolate.run(() {
@@ -70,11 +88,6 @@ class NativeEngine implements EngineApi {
         malloc.free(p);
       }
     });
-    if (Platform.isIOS) {
-      print(
-        '[YINWEI_IOS] FFI_OPEN_RESULT code=$code err=${_b.readLastError()}',
-      );
-    }
     _check(code);
     return TrackMeta(
       title: _b.readCString(_b.yinweiTrackTitle),

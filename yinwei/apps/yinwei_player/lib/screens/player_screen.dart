@@ -324,6 +324,15 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
       print('[YINWEI_IOS] IOS_CHANNEL_PLAY_SKIP session unavailable');
     }
     await _ctrl.togglePlay();
+    if (!_ctrl.playing && _ctrl.lastError != null && _audioSession.available) {
+      print('[YINWEI_IOS] PLAY_FAIL release session lastError=${_ctrl.lastError}');
+      try {
+        await _audioSession.deactivate();
+      } catch (e) {
+        print('[YINWEI_IOS] IOS_CHANNEL_DEACTIVATE_FAIL $e');
+      }
+      _audioSessionArmed = false;
+    }
     print(
       '[YINWEI_IOS] PLAY_BUTTON_DONE playing=${_ctrl.playing} '
       'lastError=${_ctrl.lastError}',

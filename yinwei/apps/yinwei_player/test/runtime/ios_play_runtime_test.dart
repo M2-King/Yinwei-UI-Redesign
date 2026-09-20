@@ -30,6 +30,13 @@ class _TraceEngine extends MockEngine {
   }
 }
 
+class _FailingPlayEngine extends MockEngine {
+  @override
+  Future<void> play() async {
+    throw StateError('AudioDevice: no default output device');
+  }
+}
+
 class _FailingOpenEngine extends MockEngine {
   @override
   Future<TrackMeta> open(String path) async {
@@ -55,7 +62,9 @@ class _TraceSession implements AudioSessionCoordinator {
   }
 
   @override
-  Future<void> deactivate() async {}
+  Future<void> deactivate() async {
+    trace.add('deactivate');
+  }
 }
 
 void main() {
@@ -104,6 +113,37 @@ void main() {
     ctrl.dispose();
   });
 
+  testWidgets('failed native play releases the audio session', (tester) async {
+    await phone(tester);
+    final trace = <String>[];
+    final ctrl = EngineController(
+      engine: _FailingPlayEngine(),
+      backendLabel: 'Native · spatial_core',
+    )..hasOpenedFile = true;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: YinweiTheme.dark(),
+        home: PlayerScreen(
+          controller: ctrl,
+          capabilities: PlatformCapabilities.ios,
+          audioSession: _TraceSession(trace),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    await tester.tap(find.text('Play'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
+
+    expect(trace, ['session', 'deactivate']);
+    expect(ctrl.playing, isFalse);
+    expect(ctrl.lastError, contains('AudioDevice'));
+    await tester.pumpWidget(const SizedBox.shrink());
+    ctrl.dispose();
+  });
+
   testWidgets('Play with no file loaded does not call engine.play',
       (tester) async {
     await phone(tester);
@@ -134,6 +174,7 @@ void main() {
     expect(ctrl.playing, isFalse);
     expect(ctrl.lastError, isNull);
     expect(find.textContaining('NoTrackLoaded'), findsNothing);
+    expect(find.text('Across the Room'), findsNothing);
     await tester.pumpWidget(const SizedBox.shrink());
     ctrl.dispose();
   });

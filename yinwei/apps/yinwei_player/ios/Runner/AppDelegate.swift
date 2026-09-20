@@ -23,9 +23,9 @@ import AVFoundation
   static func activatePlaybackSession(reason: String) {
     do {
       let session = AVAudioSession.sharedInstance()
-      try session.setCategory(.playback, mode: .default, options: [])
+      try session.setCategory(.playback, mode: .default, options: [.mixWithOthers])
       try session.setActive(true)
-      print("[YINWEI_IOS] AVAudioSession \(reason) OK category=playback")
+      print("[YINWEI_IOS] AVAudioSession \(reason) OK category=playback mixWithOthers")
     } catch {
       print("[YINWEI_IOS] AVAudioSession \(reason) FAIL \(error)")
     }

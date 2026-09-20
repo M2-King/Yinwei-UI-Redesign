@@ -422,6 +422,8 @@ impl RealtimePlayer {
             SampleFormat::F32 => build_stream::<f32>(&device, &config, shared, channels)?,
             SampleFormat::I16 => build_stream::<i16>(&device, &config, shared, channels)?,
             SampleFormat::U16 => build_stream::<u16>(&device, &config, shared, channels)?,
+            SampleFormat::I32 => build_stream::<i32>(&device, &config, shared, channels)?,
+            SampleFormat::F64 => build_stream::<f64>(&device, &config, shared, channels)?,
             other => {
                 crate::runtime_log(&format!(
                     "audio device init FAIL unsupported sample format {other:?}"

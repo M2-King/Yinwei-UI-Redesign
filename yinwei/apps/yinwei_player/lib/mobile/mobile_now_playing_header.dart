@@ -20,10 +20,10 @@ class MobileNowPlayingHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final native = backend == EngineBackend.native;
-    final title = controller.track.title;
+    final title = controller.hasOpenedFile ? controller.track.title : 'Ready';
     final subtitle = controller.hasOpenedFile
         ? controller.track.artist
-        : 'Ready';
+        : 'Open a file';
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
