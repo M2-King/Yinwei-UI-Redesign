@@ -2,10 +2,10 @@ package dev.yinwei.yinwei_player
 
 import android.os.Bundle
 import androidx.activity.result.contract.ActivityResultContracts
-import io.flutter.embedding.android.FlutterActivity
+import io.flutter.embedding.android.FlutterFragmentActivity
 import io.flutter.embedding.engine.FlutterEngine
 
-class MainActivity : FlutterActivity() {
+class MainActivity : FlutterFragmentActivity() {
     private lateinit var captureChannel: YinweiPlaybackCaptureChannel
 
     private val projectionLauncher = registerForActivityResult(
