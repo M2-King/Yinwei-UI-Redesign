@@ -451,7 +451,20 @@ class YinweiPlaybackCaptureService : Service() {
                 putExtra(EXTRA_RESULT_CODE, resultCode)
                 putExtra(EXTRA_RESULT_DATA, data)
             }
-            androidx.core.content.ContextCompat.startForegroundService(context, intent)
+            try {
+                androidx.core.content.ContextCompat.startForegroundService(context, intent)
+            } catch (e: Exception) {
+                pendingResultCode = 0
+                pendingResultData = null
+                val message = "startForegroundService failed: ${e.message}"
+                YinweiPlaybackCaptureStore.update {
+                    lastError = message
+                    permissionPending = false
+                    captureActive = false
+                    captureHint = message
+                }
+                YinweiPlaybackCaptureStore.log("LIFECYCLE", message)
+            }
         }
 
         fun stop(context: Context) {

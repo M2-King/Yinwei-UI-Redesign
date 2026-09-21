@@ -170,6 +170,20 @@ void main() {
     expect(status.phase, AndroidPlaybackCapturePhase.ready);
   });
 
+  test('captureHint is mapped from native status without becoming lastError', () {
+    final status = AndroidPlaybackCaptureStatus.fromChannel({
+      'supported': true,
+      'androidSdk': 34,
+      'permissionCancelled': true,
+      'captureHint':
+          'Screen audio not granted — tap Start Capture',
+    });
+    expect(status.captureHint,
+        'Screen audio not granted — tap Start Capture');
+    expect(status.lastError, isNull);
+    expect(status.phase, AndroidPlaybackCapturePhase.ready);
+  });
+
   test('RECORD_AUDIO denial maps to Error', () async {
     const channel = MethodChannel(AndroidPlaybackCapture.channelName);
     _mock(channel, {

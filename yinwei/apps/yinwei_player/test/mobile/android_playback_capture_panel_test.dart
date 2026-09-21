@@ -111,6 +111,43 @@ void main() {
     expect(find.text('Error'), findsNothing);
   });
 
+  testWidgets('Android probe panel shows capture-only instruction and native hint',
+      (tester) async {
+    final probe = _FakeAndroidProbe(
+      const AndroidPlaybackCaptureStatus(
+        supported: true,
+        androidSdk: 34,
+        projectionGranted: false,
+        captureActive: false,
+        foregroundServiceRunning: false,
+        audioRecordState: 'UNINITIALIZED',
+        readCount: 0,
+        capturedFrames: 0,
+        silent: false,
+        receivingPlaybackAudio: false,
+        permissionCancelled: true,
+        captureHint: 'Screen audio not granted — tap Start Capture',
+      ),
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: YinweiTheme.dark(),
+        home: Scaffold(body: AndroidPlaybackCapturePanel(probe: probe)),
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+    expect(
+      find.text('Captures other apps’ playback. Does not spatialize. Use Start Capture, not Play.'),
+      findsOneWidget,
+    );
+    expect(
+      find.text('Screen audio not granted — tap Start Capture'),
+      findsOneWidget,
+    );
+    expect(find.text('Error'), findsNothing);
+  });
+
   testWidgets('Android screen keeps Open file playback beside the capture probe',
       (tester) async {
     tester.view.physicalSize = const Size(390, 844);

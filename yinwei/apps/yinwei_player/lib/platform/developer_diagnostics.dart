@@ -304,6 +304,7 @@ class DeveloperDiagnosticsReport {
         'permission denied': _yesNo(capture.permissionDenied),
         'permission cancelled': _yesNo(capture.permissionCancelled),
         'projection revoked': _yesNo(capture.projectionRevoked),
+        'capture hint': capture.captureHint ?? '',
       },
       capture: {
         'AudioPlaybackCapture supported': _yesNo(capture.supported),

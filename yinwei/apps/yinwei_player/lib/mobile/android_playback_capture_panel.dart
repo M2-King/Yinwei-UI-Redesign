@@ -131,18 +131,31 @@ class _AndroidPlaybackCapturePanelState
               ],
             ),
             Text(
+              'Captures other apps’ playback. Does not spatialize. Use Start Capture, not Play.',
+              style: style,
+            ),
+            Text(
               [
                 'Buffers / reads: ${_status.readCount}',
                 'Frames: ${_status.capturedFrames}',
                 if (format.isNotEmpty) format,
                 'RMS: $rms',
                 'Peak: $peak',
-                if (_status.lastError != null) _status.lastError!,
               ].join('   '),
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
               style: style,
             ),
+            if (_status.captureHint != null)
+              Text(
+                _status.captureHint!,
+                style: style,
+              ),
+            if (_status.lastError != null)
+              Text(
+                _status.lastError!,
+                style: style,
+              ),
             const SizedBox(height: 4),
             Row(
               children: [
