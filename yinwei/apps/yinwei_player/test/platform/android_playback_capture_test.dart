@@ -13,7 +13,8 @@ void main() {
     expect(AndroidPlaybackCapture.isSupportedSdk(36), isTrue);
   });
 
-  test('probe is unavailable off Android even if Android capabilities are passed',
+  test(
+      'probe is unavailable off Android even if Android capabilities are passed',
       () {
     final probe = AndroidPlaybackCapture.create(
       capabilities: PlatformCapabilities.android,
@@ -34,7 +35,8 @@ void main() {
     expect(PlatformCapabilities.android.androidPlaybackCapture, isTrue);
   });
 
-  test('Android below API 29 reports unavailable without treating it as an error',
+  test(
+      'Android below API 29 reports unavailable without treating it as an error',
       () async {
     const channel = MethodChannel(AndroidPlaybackCapture.channelName);
     _mock(channel, {
@@ -93,6 +95,39 @@ void main() {
     expect(status.audioRecordSource, 'PLAYBACK_CAPTURE');
     expect(status.phase, AndroidPlaybackCapturePhase.receivingPlaybackAudio);
     expect(status.dataState, PlaybackCaptureDataState.nonSilent);
+  });
+
+  test('status payload maps native DSP counters for A2', () {
+    final status = AndroidPlaybackCaptureStatus.fromChannel({
+      'supported': true,
+      'androidSdk': 34,
+      'projectionGranted': true,
+      'captureActive': true,
+      'foregroundServiceRunning': true,
+      'audioRecordState': 'RECORDING',
+      'readCount': 404,
+      'capturedFrames': 827392,
+      'silent': false,
+      'receivingPlaybackAudio': true,
+      'dspLibraryLoaded': true,
+      'dspState': 'Processing',
+      'nativeInputFrames': 827392,
+      'nativeConsumedFrames': 826880,
+      'nativeDspChunks': 1615,
+      'nativeWetFrames': 826880,
+      'nativeDroppedFrames': 0,
+      'nativeQueueDepthFrames': 512,
+      'nativeWetRmsDb': -15.2,
+      'nativeWetPeakDb': -2.4,
+      'nativeLastError': '',
+    });
+    expect(status.dspLibraryLoaded, isTrue);
+    expect(status.dspBridgeLabel, 'Processing');
+    expect(status.nativeInputFrames, 827392);
+    expect(status.nativeDspChunks, 1615);
+    expect(status.nativeWetRmsDb, closeTo(-15.2, 0.001));
+    expect(status.nativeLastError, isNull);
+    expect(status.phase, AndroidPlaybackCapturePhase.receivingPlaybackAudio);
   });
 
   test('start/stop lifecycle: permission waiting then capturing then ready',
@@ -166,6 +201,19 @@ void main() {
     await probe.requestAndStartCapture();
     final status = await probe.getStatus();
     expect(status.permissionCancelled, isTrue);
+    expect(status.lastError, isNull);
+    expect(status.phase, AndroidPlaybackCapturePhase.ready);
+  });
+
+  test('captureHint is mapped from native status without becoming lastError',
+      () {
+    final status = AndroidPlaybackCaptureStatus.fromChannel({
+      'supported': true,
+      'androidSdk': 34,
+      'permissionCancelled': true,
+      'captureHint': 'Screen audio not granted — tap Start Capture',
+    });
+    expect(status.captureHint, 'Screen audio not granted — tap Start Capture');
     expect(status.lastError, isNull);
     expect(status.phase, AndroidPlaybackCapturePhase.ready);
   });

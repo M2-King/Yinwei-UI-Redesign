@@ -75,7 +75,7 @@ class PlatformCapabilities {
     audioSession: true,
   );
 
-  /// Android product profile: Point + file playback + A1 capture probe.
+  /// Android product profile: Point + file playback + A2 capture/DSP probe.
   /// Windows WASAPI Live Transfer stays off. spatial_core is not connected.
   static const android = PlatformCapabilities(
     desktopWindow: false,

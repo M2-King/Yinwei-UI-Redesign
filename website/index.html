@@ -164,12 +164,12 @@
           </article>
           <article class="card">
             <span class="badge warn">Android Preview</span>
-            <h3>External playback capture validation</h3>
+            <h3>Capture + DSP (no wet output)</h3>
             <p>
-              Android Live Transfer Preview. A1 currently proves MediaProjection
-              → AudioPlaybackCapture → PCM diagnostics. It does not output
-              spatialized external audio. A2 / <code>spatial_core</code>
-              connection has not started.
+              Android A2 Preview. MediaProjection → AudioPlaybackCapture → JNI
+              → <code>spatial_core</code> HRTF DSP. Wet frames are measured and
+              discarded. It does not play spatialized external audio yet. A3
+              output has not started.
             </p>
           </article>
           <article class="card">
@@ -274,23 +274,23 @@
           <article class="card platform" data-platform="android">
             <span class="badge warn">Preview / test build</span>
             <h3>Android</h3>
-            <p>Android A1 Preview — external playback capture validation.</p>
+            <p>Android A2 Preview — capture into spatial_core HRTF DSP. No wet output yet.</p>
             <a
               class="btn btn-primary"
               id="apk-download"
-              href="downloads/Yinwei-Android-A1-Preview.apk"
-              data-cdn="https://ghfast.top/https://github.com/M2-King/Yinwei-UI-Redesign/raw/yinwei-ui-redesign/website/downloads/Yinwei-Android-A1-Preview.apk"
+              href="downloads/Yinwei-Android-A2-Preview.apk"
+              data-cdn="https://ghfast.top/https://github.com/M2-King/Yinwei-UI-Redesign/raw/refs/heads/cursor/android-a2-dsp-bridge-9d7c/website/downloads/Yinwei-Android-A2-Preview.apk"
               download
             >Download APK</a>
             <p class="fineprint">
-              Not a production release. Does not spatialize external audio.
-              Requires Android 10+ for playback capture.
+              Not a production release. DSP runs, but wet audio is not played
+              yet. Requires Android 10+ for playback capture.
             </p>
             <p class="meta">
-              Android A1 Preview<br />
-              Commit 17bdc6b · workflow 35569621376<br />
-              49,607,281 bytes<br />
-              SHA-256 697325d506a6f7d4dd7f8d0b5c9437d400204c4da02af80ad54d6fab2a4b18fb
+              Android A2 Preview<br />
+              Commit dfb1cb6 · workflow 35612161963<br />
+              51,360,447 bytes<br />
+              SHA-256 aaad5aae826e2001e0c62292bbd0d1abe27fc77c5b9800d75a07a6d8a52ab465
             </p>
           </article>
           <article class="card platform" data-platform="ios">

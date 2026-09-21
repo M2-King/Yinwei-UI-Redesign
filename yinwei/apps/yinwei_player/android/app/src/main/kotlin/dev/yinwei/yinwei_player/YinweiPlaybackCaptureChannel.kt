@@ -2,12 +2,17 @@ package dev.yinwei.yinwei_player
 
 import android.Manifest
 import android.app.Activity
+import android.app.AlertDialog
+import android.content.Intent
 import android.content.pm.PackageManager
+import android.media.projection.MediaProjectionConfig
 import android.media.projection.MediaProjectionManager
 import android.os.Build
+import androidx.activity.ComponentActivity
 import androidx.activity.result.ActivityResult
 import androidx.activity.result.ActivityResultLauncher
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.Lifecycle
 import io.flutter.plugin.common.BinaryMessenger
 import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
@@ -20,8 +25,13 @@ class YinweiPlaybackCaptureChannel(
     private val activity: Activity,
     private val projectionLauncher: ActivityResultLauncher<android.content.Intent>,
     private val recordAudioLauncher: ActivityResultLauncher<String>,
+    @Suppress("UnusedPrivateProperty")
     private val notificationsLauncher: ActivityResultLauncher<String>,
 ) : MethodChannel.MethodCallHandler {
+    @Volatile
+    private var pendingProjectionLaunch = false
+    private var confirmDialog: AlertDialog? = null
+
     fun register(messenger: BinaryMessenger) {
         MethodChannel(messenger, CHANNEL).setMethodCallHandler(this)
         YinweiPlaybackCaptureStore.update {
@@ -49,10 +59,12 @@ class YinweiPlaybackCaptureChannel(
 
     fun onRecordAudioResult(granted: Boolean) {
         if (!granted) {
+            pendingProjectionLaunch = false
             YinweiPlaybackCaptureStore.update {
                 permissionPending = false
                 permissionDenied = true
                 lastError = "RECORD_AUDIO denied"
+                captureHint = YinweiPlaybackCaptureStart.HINT_RECORD_DENIED
             }
             YinweiPlaybackCaptureStore.log("PROJECTION", "RECORD_AUDIO denied")
             return
@@ -60,8 +72,11 @@ class YinweiPlaybackCaptureChannel(
         YinweiPlaybackCaptureStore.update {
             permissionDenied = false
             lastError = null
+            permissionPending = true
+            captureHint = YinweiPlaybackCaptureStart.HINT_PROJECTION
         }
-        maybeRequestNotificationsThenProjection()
+        YinweiPlaybackCaptureStore.log("PROJECTION", "RECORD_AUDIO granted; scheduling screen capture intent")
+        scheduleProjectionConsent()
     }
 
     fun onNotificationsResult(granted: Boolean) {
@@ -69,16 +84,24 @@ class YinweiPlaybackCaptureChannel(
             "PROJECTION",
             if (granted) "POST_NOTIFICATIONS granted" else "POST_NOTIFICATIONS denied (capture continues)",
         )
-        launchProjectionConsent()
+        // Notifications must not gate MediaProjection. If a leftover request
+        // completes, continue the pending screen-audio launch.
+        scheduleProjectionConsent()
+    }
+
+    fun onHostResumed() {
+        showNativeConfirmIfResumed()
     }
 
     fun onProjectionResult(result: ActivityResult) {
         if (result.resultCode != Activity.RESULT_OK || result.data == null) {
+            pendingProjectionLaunch = false
             YinweiPlaybackCaptureStore.update {
                 permissionPending = false
                 permissionCancelled = true
                 lastError = null
                 projectionGranted = false
+                captureHint = YinweiPlaybackCaptureStart.HINT_CANCELLED
             }
             YinweiPlaybackCaptureStore.log("PROJECTION", "MediaProjection cancelled")
             return
@@ -88,17 +111,24 @@ class YinweiPlaybackCaptureChannel(
             permissionDenied = false
             permissionPending = false
             lastError = null
+            captureHint = null
         }
         YinweiPlaybackCaptureStore.log("PROJECTION", "MediaProjection approved")
         YinweiPlaybackCaptureService.start(activity, result.resultCode, result.data!!)
     }
 
     private fun requestAndStartCapture() {
-        if (Build.VERSION.SDK_INT < 29) {
+        val action = YinweiPlaybackCaptureStart.nextAction(
+            Build.VERSION.SDK_INT,
+            recordAudioGranted(),
+        )
+        if (action == YinweiPlaybackCaptureStart.Action.Unsupported) {
+            pendingProjectionLaunch = false
             YinweiPlaybackCaptureStore.update {
                 supported = false
                 permissionPending = false
                 lastError = null
+                captureHint = null
             }
             return
         }
@@ -107,6 +137,7 @@ class YinweiPlaybackCaptureChannel(
         ) {
             YinweiPlaybackCaptureService.stop(activity)
         }
+        pendingProjectionLaunch = false
         YinweiPlaybackCaptureStore.resetSession()
         YinweiPlaybackCaptureStore.update {
             supported = true
@@ -115,39 +146,143 @@ class YinweiPlaybackCaptureChannel(
             permissionCancelled = false
             lastError = null
         }
-        if (ContextCompat.checkSelfPermission(activity, Manifest.permission.RECORD_AUDIO)
-            != PackageManager.PERMISSION_GRANTED
-        ) {
-            recordAudioLauncher.launch(Manifest.permission.RECORD_AUDIO)
-            return
+        when (action) {
+            YinweiPlaybackCaptureStart.Action.RequestRecordAudio -> {
+                YinweiPlaybackCaptureStore.update {
+                    captureHint = YinweiPlaybackCaptureStart.HINT_RECORD
+                }
+                YinweiPlaybackCaptureStore.log("PROJECTION", "requesting RECORD_AUDIO")
+                recordAudioLauncher.launch(Manifest.permission.RECORD_AUDIO)
+            }
+            YinweiPlaybackCaptureStart.Action.LaunchProjection -> {
+                YinweiPlaybackCaptureStore.update {
+                    captureHint = YinweiPlaybackCaptureStart.HINT_PROJECTION
+                }
+                scheduleProjectionConsent()
+            }
+            YinweiPlaybackCaptureStart.Action.Unsupported -> {}
         }
-        maybeRequestNotificationsThenProjection()
     }
 
-    private fun maybeRequestNotificationsThenProjection() {
-        if (Build.VERSION.SDK_INT >= 33 &&
-            ContextCompat.checkSelfPermission(activity, Manifest.permission.POST_NOTIFICATIONS)
-            != PackageManager.PERMISSION_GRANTED
-        ) {
-            notificationsLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
-            return
-        }
-        launchProjectionConsent()
+    private fun recordAudioGranted(): Boolean =
+        ContextCompat.checkSelfPermission(activity, Manifest.permission.RECORD_AUDIO) ==
+            PackageManager.PERMISSION_GRANTED
+
+    private fun scheduleProjectionConsent() {
+        pendingProjectionLaunch = true
+        showNativeConfirmIfResumed()
     }
 
-    private fun launchProjectionConsent() {
-        val mgr = activity.getSystemService(Activity.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
-        YinweiPlaybackCaptureStore.update { permissionPending = true }
-        projectionLauncher.launch(mgr.createScreenCaptureIntent())
+    private fun showNativeConfirmIfResumed() {
+        if (!pendingProjectionLaunch) return
+        if (!isHostResumed()) {
+            YinweiPlaybackCaptureStore.log("PROJECTION", "deferring native confirm until resume")
+            return
+        }
+        pendingProjectionLaunch = false
+        showNativeConfirmDialog()
+    }
+
+    private fun showNativeConfirmDialog() {
+        try {
+            confirmDialog?.dismiss()
+        } catch (_: Exception) {
+        }
+        YinweiPlaybackCaptureStore.update {
+            permissionPending = true
+            captureHint = YinweiPlaybackCaptureStart.HINT_PROJECTION
+        }
+        val dialog = AlertDialog.Builder(
+            activity,
+            android.R.style.Theme_DeviceDefault_Dialog_Alert,
+        )
+            .setTitle("Screen audio capture")
+            .setMessage(
+                "Android will ask for 投屏 / screen audio. This captures other apps' playback, not the microphone.",
+            )
+            .setPositiveButton("Continue") { _, _ ->
+                launchProjectionIntent()
+            }
+            .setNegativeButton("Cancel") { _, _ ->
+                onConfirmCancelled()
+            }
+            .setOnCancelListener {
+                onConfirmCancelled()
+            }
+            .create()
+        confirmDialog = dialog
+        dialog.show()
+        YinweiPlaybackCaptureStore.log("PROJECTION", "native confirm dialog shown")
+    }
+
+    private fun onConfirmCancelled() {
+        pendingProjectionLaunch = false
+        YinweiPlaybackCaptureStore.update {
+            permissionPending = false
+            permissionCancelled = true
+            lastError = null
+            captureHint = YinweiPlaybackCaptureStart.HINT_CANCELLED
+        }
+        YinweiPlaybackCaptureStore.log("PROJECTION", "native confirm cancelled")
+    }
+
+    private fun isHostResumed(): Boolean {
+        val host = activity as? ComponentActivity ?: return true
+        return host.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)
+    }
+
+    private fun launchProjectionIntent() {
+        try {
+            val mgr = activity.getSystemService(Activity.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
+            YinweiPlaybackCaptureStore.update {
+                permissionPending = true
+                captureHint = YinweiPlaybackCaptureStart.HINT_PROJECTION
+            }
+            YinweiPlaybackCaptureStore.log("PROJECTION", "launching screen capture intent")
+            projectionLauncher.launch(createProjectionIntent(mgr))
+        } catch (e: Exception) {
+            pendingProjectionLaunch = true
+            val message = "Screen capture intent failed: ${e.message}"
+            YinweiPlaybackCaptureStore.update {
+                permissionPending = true
+                captureHint = "${YinweiPlaybackCaptureStart.HINT_PROJECTION} ($message)"
+            }
+            YinweiPlaybackCaptureStore.log("PROJECTION", message)
+        }
+    }
+
+    private fun createProjectionIntent(mgr: MediaProjectionManager): Intent {
+        if (YinweiPlaybackCaptureStart.usesDefaultDisplayProjectionConfig(Build.VERSION.SDK_INT) &&
+            Build.VERSION.SDK_INT >= 34
+        ) {
+            try {
+                return mgr.createScreenCaptureIntent(
+                    MediaProjectionConfig.createConfigForDefaultDisplay(),
+                )
+            } catch (e: Exception) {
+                YinweiPlaybackCaptureStore.log(
+                    "PROJECTION",
+                    "default display config failed: ${e.message}",
+                )
+            }
+        }
+        return mgr.createScreenCaptureIntent()
     }
 
     private fun stopCapture() {
+        pendingProjectionLaunch = false
+        try {
+            confirmDialog?.dismiss()
+        } catch (_: Exception) {
+        }
+        confirmDialog = null
         if (Build.VERSION.SDK_INT >= 29) {
             YinweiPlaybackCaptureService.stop(activity)
         }
         YinweiPlaybackCaptureStore.update {
             permissionPending = false
             captureActive = false
+            captureHint = null
         }
     }
 

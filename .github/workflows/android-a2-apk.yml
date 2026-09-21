@@ -1,0 +1,156 @@
+# Yinwei / 音围 — Android A2 playback-capture → spatial_core DSP APK
+#
+# A1 capture path is unchanged. This workflow additionally builds
+# libspatial_core.so (arm64-v8a), stages it into jniLibs, and fails if the
+# APK does not contain it.
+#
+# Flutter: 3.47.2 stable — pinned to the current development baseline.
+
+name: Yinwei Android A2 APK
+
+on:
+  workflow_dispatch:
+  pull_request:
+  push:
+    branches:
+      - yinwei-ui-redesign
+
+permissions:
+  contents: read
+
+env:
+  FLUTTER_PIN: "3.47.2"
+
+jobs:
+  build_apk:
+    name: Build Android A2 APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      PLAYER: ${{ github.workspace }}/yinwei/apps/yinwei_player
+      GIT_SHA: ${{ github.sha }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Setup JDK 17
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v4
+        with:
+          packages: 'platform-tools'
+
+      - name: Install Android SDK 36
+        run: |
+          yes | sdkmanager "platform-tools" "platforms;android-36" "build-tools;36.0.0"
+          sdkmanager --list_installed
+
+      - name: Setup Android NDK
+        uses: nttld/setup-ndk@v1
+        id: setup-ndk
+        with:
+          ndk-version: r27c
+          link-to-sdk: true
+
+      - name: Android environment
+        run: |
+          echo "JAVA_HOME=$JAVA_HOME"
+          java -version
+          echo "ANDROID_HOME=$ANDROID_HOME"
+          echo "ANDROID_NDK_HOME=$ANDROID_NDK_HOME"
+          echo "NDK_PATH=${{ steps.setup-ndk.outputs.ndk-path }}"
+
+      - name: Install Flutter ${{ env.FLUTTER_PIN }}
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: "3.47.2"
+          channel: stable
+          cache: true
+
+      - name: Setup Rust stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android
+
+      - name: Install ALSA headers for spatial_core tests
+        run: sudo apt-get update && sudo apt-get install -y libasound2-dev
+
+      - name: cargo test -p spatial_core
+        working-directory: ${{ github.workspace }}/yinwei
+        run: cargo test -p spatial_core
+
+      - name: cargo test -p spatial_core --no-default-features
+        working-directory: ${{ github.workspace }}/yinwei
+        run: cargo test -p spatial_core --no-default-features
+
+      - name: Build arm64-v8a libspatial_core.so
+        working-directory: ${{ github.workspace }}/yinwei
+        env:
+          ANDROID_NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
+          ANDROID_NDK_ROOT: ${{ steps.setup-ndk.outputs.ndk-path }}
+        run: |
+          chmod +x ./scripts/build_android_spatial_core.sh
+          ./scripts/build_android_spatial_core.sh
+
+      - name: Verify staged libspatial_core.so
+        run: |
+          SO="$PLAYER/android/app/src/main/jniLibs/arm64-v8a/libspatial_core.so"
+          test -s "$SO"
+          BYTES="$(wc -c < "$SO" | tr -d ' ')"
+          echo "staged bytes=$BYTES"
+          test "$BYTES" -gt 1000
+          file "$SO"
+
+      - name: Flutter tests
+        working-directory: ${{ env.PLAYER }}
+        run: flutter test
+
+      - name: Android unit tests
+        working-directory: ${{ env.PLAYER }}/android
+        run: |
+          chmod +x ./gradlew
+          ./gradlew :app:testDebugUnitTest --stacktrace
+
+      - name: Build release APK
+        working-directory: ${{ env.PLAYER }}
+        run: |
+          SHORT_SHA="${GITHUB_SHA:0:7}"
+          flutter build apk --release \
+            --dart-define=YINWEI_GIT_SHA="$GITHUB_SHA" \
+            --dart-define=YINWEI_BUILD_NUMBER="$GITHUB_RUN_NUMBER" \
+            --dart-define=YINWEI_BUILD_TIMESTAMP="$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            --dart-define=YINWEI_FLUTTER_VERSION="$FLUTTER_PIN" \
+            --dart-define=YINWEI_WORKFLOW="android-a2-apk" \
+            --dart-define=YINWEI_PHASE=A2
+          mkdir -p "$GITHUB_WORKSPACE/dist"
+          cp build/app/outputs/flutter-apk/app-release.apk \
+            "$GITHUB_WORKSPACE/dist/yinwei-android-live-transfer-a2-${SHORT_SHA}.apk"
+          echo "APK_PATH=$GITHUB_WORKSPACE/dist/yinwei-android-live-transfer-a2-${SHORT_SHA}.apk" >> "$GITHUB_ENV"
+
+      - name: Verify APK contains libspatial_core.so
+        run: |
+          set -euo pipefail
+          APK="$APK_PATH"
+          echo "APK=$APK"
+          zipinfo -1 "$APK" | tee /tmp/apk-list.txt | grep -F "lib/arm64-v8a/libspatial_core.so"
+          BYTES="$(unzip -p "$APK" lib/arm64-v8a/libspatial_core.so | wc -c | tr -d ' ')"
+          echo "apk libspatial_core.so bytes=$BYTES"
+          if [[ "$BYTES" -lt 1000 ]]; then
+            echo "APK native library missing or empty" >&2
+            exit 1
+          fi
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: yinwei-android-live-transfer-a2
+          path: ${{ github.workspace }}/dist/*.apk
+          if-no-files-found: error

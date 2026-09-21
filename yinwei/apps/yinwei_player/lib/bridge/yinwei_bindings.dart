@@ -134,7 +134,7 @@ class YinweiBindings {
     );
     if (mode == NativeLibraryLoadMode.androidUnavailable) {
       throw StateError(
-        'spatial_core is not connected on Android A1 capture-only',
+        'spatial_core is not connected on Android A2 file-engine preview',
       );
     }
     if (mode == NativeLibraryLoadMode.iosProcess) {

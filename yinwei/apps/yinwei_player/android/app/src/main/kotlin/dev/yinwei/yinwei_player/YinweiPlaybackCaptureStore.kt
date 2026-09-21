@@ -39,9 +39,25 @@ object YinweiPlaybackCaptureStore {
         var audioUsages: List<String> = listOf("USAGE_MEDIA", "USAGE_GAME", "USAGE_UNKNOWN"),
         var appForeground: Boolean = true,
         var lastNonSilentAtMs: Long? = null,
+        var captureHint: String? = null,
         var manufacturer: String = Build.MANUFACTURER ?: "unknown",
         var model: String = Build.MODEL ?: "unknown",
         var androidVersion: String = Build.VERSION.RELEASE ?: "unknown",
+        var dspState: String = "Disconnected",
+        var dspLibraryLoaded: Boolean = false,
+        var nativeInputFrames: Long = 0,
+        var nativeConsumedFrames: Long = 0,
+        var nativeDspChunks: Long = 0,
+        var nativeWetFrames: Long = 0,
+        var nativeDroppedFrames: Long = 0,
+        var nativeOverruns: Long = 0,
+        var nativeQueueDepthFrames: Long = 0,
+        var nativeQueueHighWaterFrames: Long = 0,
+        var nativeLastError: String? = null,
+        var nativeWetRmsDb: Double? = null,
+        var nativeWetPeakDb: Double? = null,
+        var nativeEffectiveAzimuthDeg: Double? = null,
+        var nativeEffectiveElevationDeg: Double? = null,
     )
 
     data class LogEntry(
@@ -110,6 +126,21 @@ object YinweiPlaybackCaptureStore {
             sourceCaptureRestricted = false
             lastNonSilentAtMs = null
             projectionRevoked = false
+            captureHint = null
+            dspState = "Disconnected"
+            nativeInputFrames = 0
+            nativeConsumedFrames = 0
+            nativeDspChunks = 0
+            nativeWetFrames = 0
+            nativeDroppedFrames = 0
+            nativeOverruns = 0
+            nativeQueueDepthFrames = 0
+            nativeQueueHighWaterFrames = 0
+            nativeLastError = null
+            nativeWetRmsDb = null
+            nativeWetPeakDb = null
+            nativeEffectiveAzimuthDeg = null
+            nativeEffectiveElevationDeg = null
         }
     }
 
@@ -143,8 +174,33 @@ object YinweiPlaybackCaptureStore {
         s.encoding?.let { map["encoding"] = it }
         s.rmsDb?.let { map["rmsDb"] = it }
         s.peakDb?.let { map["peakDb"] = it }
+        map["dspState"] = s.dspState
+        map["dspLibraryLoaded"] = s.dspLibraryLoaded
+        map["nativeInputFrames"] = s.nativeInputFrames
+        map["nativeConsumedFrames"] = s.nativeConsumedFrames
+        map["nativeDspChunks"] = s.nativeDspChunks
+        map["nativeWetFrames"] = s.nativeWetFrames
+        map["nativeDroppedFrames"] = s.nativeDroppedFrames
+        map["nativeOverruns"] = s.nativeOverruns
+        map["nativeQueueDepthFrames"] = s.nativeQueueDepthFrames
+        map["nativeQueueHighWaterFrames"] = s.nativeQueueHighWaterFrames
+        s.nativeWetRmsDb?.let { map["nativeWetRmsDb"] = it }
+        s.nativeWetPeakDb?.let { map["nativeWetPeakDb"] = it }
+        s.nativeEffectiveAzimuthDeg?.let { map["nativeEffectiveAzimuthDeg"] = it }
+        s.nativeEffectiveElevationDeg?.let { map["nativeEffectiveElevationDeg"] = it }
         s.lastError?.let { if (it.isNotEmpty()) map["lastError"] = it }
+        s.captureHint?.let { if (it.isNotEmpty()) map["captureHint"] = it }
         s.lastNonSilentAtMs?.let { map["lastNonSilentAtMs"] = it }
+        val native = YinweiSpatialCoreBridge.snapshot()
+        for ((key, value) in native) {
+            if (value != null) map[key] = value
+        }
+        if (!map.containsKey("dspState")) {
+            map["dspState"] = s.dspState
+        }
+        if (!map.containsKey("dspLibraryLoaded")) {
+            map["dspLibraryLoaded"] = s.dspLibraryLoaded
+        }
         return map
     }
 

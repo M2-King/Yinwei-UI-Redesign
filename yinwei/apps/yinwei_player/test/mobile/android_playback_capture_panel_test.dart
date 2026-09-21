@@ -91,7 +91,7 @@ void main() {
     );
     await tester.pump();
     await tester.pump();
-    expect(find.text('Live Transfer — Android PoC'), findsOneWidget);
+    expect(find.text('Live Transfer — Android A2'), findsOneWidget);
     expect(find.text('Start Capture'), findsOneWidget);
     expect(find.text('Stop Capture'), findsOneWidget);
     expect(find.text('Diagnostics'), findsOneWidget);
@@ -111,7 +111,95 @@ void main() {
     expect(find.text('Error'), findsNothing);
   });
 
-  testWidgets('Android screen keeps Open file playback beside the capture probe',
+  testWidgets('Android A2 panel shows DSP counters and no wet output',
+      (tester) async {
+    final probe = _FakeAndroidProbe(
+      const AndroidPlaybackCaptureStatus(
+        supported: true,
+        androidSdk: 34,
+        projectionGranted: true,
+        captureActive: true,
+        foregroundServiceRunning: true,
+        audioRecordState: 'RECORDING',
+        readCount: 404,
+        capturedFrames: 827392,
+        sampleRate: 48000,
+        channelCount: 2,
+        encoding: 'PCM_FLOAT',
+        rmsDb: -13.0,
+        peakDb: -1.3,
+        silent: false,
+        receivingPlaybackAudio: true,
+        dspLibraryLoaded: true,
+        dspState: 'Processing',
+        nativeInputFrames: 827392,
+        nativeConsumedFrames: 826880,
+        nativeDspChunks: 1615,
+        nativeWetFrames: 826880,
+        nativeQueueDepthFrames: 512,
+        nativeDroppedFrames: 0,
+        nativeWetRmsDb: -15.2,
+        nativeWetPeakDb: -2.4,
+      ),
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: YinweiTheme.dark(),
+        home: Scaffold(body: AndroidPlaybackCapturePanel(probe: probe)),
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+    expect(find.text('Receiving Playback Audio'), findsOneWidget);
+    expect(find.textContaining('DSP:'), findsOneWidget);
+    expect(find.textContaining('Processing · spatial_core'), findsOneWidget);
+    expect(find.textContaining('Input: 827392'), findsOneWidget);
+    expect(find.textContaining('Wet RMS: -15.2 dB'), findsOneWidget);
+    expect(find.textContaining('NO WET OUTPUT YET'), findsOneWidget);
+  });
+
+  testWidgets(
+      'Android probe panel shows capture-only instruction and native hint',
+      (tester) async {
+    final probe = _FakeAndroidProbe(
+      const AndroidPlaybackCaptureStatus(
+        supported: true,
+        androidSdk: 34,
+        projectionGranted: false,
+        captureActive: false,
+        foregroundServiceRunning: false,
+        audioRecordState: 'UNINITIALIZED',
+        readCount: 0,
+        capturedFrames: 0,
+        silent: false,
+        receivingPlaybackAudio: false,
+        permissionCancelled: true,
+        captureHint: 'Screen audio not granted — tap Start Capture',
+      ),
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: YinweiTheme.dark(),
+        home: Scaffold(body: AndroidPlaybackCapturePanel(probe: probe)),
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+    expect(
+      find.text(
+        'NO WET OUTPUT YET · spatial_core HRTF is measured, not played.',
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.text('Screen audio not granted — tap Start Capture'),
+      findsOneWidget,
+    );
+    expect(find.text('Error'), findsNothing);
+  });
+
+  testWidgets(
+      'Android screen keeps Open file playback beside the capture probe',
       (tester) async {
     tester.view.physicalSize = const Size(390, 844);
     tester.view.devicePixelRatio = 1;
@@ -144,7 +232,45 @@ void main() {
     addTearDown(controller.dispose);
   });
 
-  testWidgets('Android capability profile uses the mobile player with the A1 probe',
+  testWidgets('Android A2 HUD does not present file-engine mock as FAILED',
+      (tester) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final controller = EngineController(
+      backendLabel: 'Android A2 · file engine preview · not connected',
+    );
+    addTearDown(controller.dispose);
+    final adapter = SpatialRuntimeAdapter()..bootstrap(controller.params);
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: YinweiTheme.dark(),
+        home: MobilePlayerScreen(
+          controller: controller,
+          backend: EngineBackend.mock,
+          loadError:
+              'Bad state: spatial_core is not connected on Android A2 file-engine preview',
+          capabilities: PlatformCapabilities.android,
+          sceneSnapshot: () => adapter.snapshot() ?? const <String, dynamic>{},
+          telemetry: ValueNotifier(const PlaybackTelemetryV1()),
+          onSceneIntent: SpatialSceneBridge(adapter: adapter).handleMessage,
+        ),
+      ),
+    );
+    await tester.pump();
+    expect(find.textContaining('File engine: Preview / not connected'),
+        findsOneWidget);
+    expect(find.textContaining('Engine: FAILED'), findsNothing);
+    expect(find.textContaining('Native: ERROR'), findsNothing);
+    expect(find.textContaining('Bad state'), findsNothing);
+    expect(find.text('Start Capture'), findsOneWidget);
+    expect(find.textContaining('NO WET OUTPUT YET'), findsOneWidget);
+  });
+
+  testWidgets(
+      'Android capability profile uses the mobile player with the A1 probe',
       (tester) async {
     tester.view.physicalSize = const Size(390, 844);
     tester.view.devicePixelRatio = 1;
@@ -165,7 +291,7 @@ void main() {
     await tester.pump();
     expect(find.byType(MobilePlayerScreen), findsOneWidget);
     expect(find.byKey(const Key('android-playback-capture')), findsOneWidget);
-    expect(find.text('Live Transfer — Android PoC'), findsOneWidget);
+    expect(find.text('Live Transfer — Android A2'), findsOneWidget);
     expect(find.text('Open'), findsOneWidget);
   });
 }

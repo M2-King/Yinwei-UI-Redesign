@@ -10,6 +10,7 @@ name: Yinwei Android A1 APK
 
 on:
   workflow_dispatch:
+  pull_request:
   push:
     branches:
       - yinwei-ui-redesign
@@ -73,6 +74,12 @@ jobs:
         working-directory: ${{ env.PLAYER }}
         run: flutter test
 
+      - name: Android unit tests
+        working-directory: ${{ env.PLAYER }}/android
+        run: |
+          chmod +x ./gradlew
+          ./gradlew :app:testDebugUnitTest --stacktrace
+
       - name: Build release APK
         working-directory: ${{ env.PLAYER }}
         run: |
@@ -88,12 +95,6 @@ jobs:
           cp build/app/outputs/flutter-apk/app-release.apk \
             "$GITHUB_WORKSPACE/dist/yinwei-android-live-transfer-a1-${SHORT_SHA}.apk"
           echo "APK_PATH=$GITHUB_WORKSPACE/dist/yinwei-android-live-transfer-a1-${SHORT_SHA}.apk" >> "$GITHUB_ENV"
-
-      - name: Android unit tests
-        working-directory: ${{ env.PLAYER }}/android
-        run: |
-          chmod +x ./gradlew
-          ./gradlew :app:testDebugUnitTest --stacktrace
 
       - name: Upload APK
         uses: actions/upload-artifact@v4

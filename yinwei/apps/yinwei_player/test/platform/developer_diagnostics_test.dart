@@ -57,7 +57,8 @@ void main() {
       'channelCount': 2,
       'lastFrameCount': 1024,
       'interleaved': false,
-      'formatDescription': 'rate=48000 channels=2 bits=32 float=true interleaved=false',
+      'formatDescription':
+          'rate=48000 channels=2 bits=32 float=true interleaved=false',
       'lastCallbackOutputType': 'audio',
       'capturesAudio': true,
       'lastRmsDb': -18.5,
@@ -113,7 +114,8 @@ void main() {
     expect(text, contains('capturesAudio: yes'));
     expect(text, contains('excludesCurrentProcessAudio'));
     expect(text, contains('stream input initialized: no (7D1 capture-only)'));
-    expect(text, contains('This report does not contain captured PCM samples.'));
+    expect(
+        text, contains('This report does not contain captured PCM samples.'));
     expect(text.toLowerCase(), isNot(contains('pcmSamples')));
     expect(text, isNot(contains('[0.123')));
     expect(report.asMap()['pcmSamplesIncluded'], isFalse);
@@ -130,7 +132,8 @@ void main() {
           .setMockMethodCallHandler(channel, null);
     });
     final clipboard = _MemoryClipboard();
-    final diagnostics = DeveloperDiagnostics(channel: channel, clipboard: clipboard);
+    final diagnostics =
+        DeveloperDiagnostics(channel: channel, clipboard: clipboard);
     final report = await diagnostics.collect(
       capture: ScreenAudioProbeStatus.unavailable,
       now: DateTime.utc(2026, 9, 20),
@@ -215,7 +218,9 @@ void main() {
     expect(find.text('Share sheet opened'), findsOneWidget);
   });
 
-  test('A1 Android report lists projection/capture and never includes PCM', () {
+  test(
+      'A2 Android report lists capture plus DSP counters and never includes PCM',
+      () {
     final capture = AndroidPlaybackCaptureStatus.fromChannel({
       'supported': true,
       'androidSdk': 34,
@@ -234,6 +239,15 @@ void main() {
       'receivingPlaybackAudio': true,
       'playbackCaptureConfigured': true,
       'audioRecordSource': 'PLAYBACK_CAPTURE',
+      'dspLibraryLoaded': true,
+      'dspState': 'Processing',
+      'nativeInputFrames': 49152,
+      'nativeConsumedFrames': 49152,
+      'nativeDspChunks': 96,
+      'nativeWetFrames': 49152,
+      'nativeDroppedFrames': 0,
+      'nativeWetRmsDb': -15.2,
+      'nativeWetPeakDb': -2.4,
     });
     final report = DeveloperDiagnosticsReport.fromParts(
       native: {
@@ -263,7 +277,7 @@ void main() {
 
     final text = report.asText();
     expect(text, contains('YINWEI ANDROID DIAGNOSTICS'));
-    expect(text, contains('phase: A1 capture-only'));
+    expect(text, contains('phase: A2 capture-only'));
     expect(text, contains('== BUILD =='));
     expect(text, contains('== PROJECTION =='));
     expect(text, contains('== CAPTURE =='));
@@ -272,10 +286,13 @@ void main() {
     expect(text, contains('model: Pixel 8'));
     expect(text, contains('reads: 82'));
     expect(text, contains('frames: 49152'));
-    expect(text, contains('stream input initialized: no (A1 capture-only)'));
-    expect(text, contains('This report does not contain captured PCM samples.'));
+    expect(text, contains('stream input initialized: yes'));
+    expect(text, contains('PCM frames pushed: 49152'));
+    expect(text, contains('playing captured audio: no (A2 no wet output yet)'));
+    expect(
+        text, contains('This report does not contain captured PCM samples.'));
     expect(text, contains('microphone used as source: no'));
     expect(report.asMap()['pcmSamplesIncluded'], isFalse);
-    expect(report.asMap()['phase'], 'A1');
+    expect(report.asMap()['phase'], 'A2');
   });
 }

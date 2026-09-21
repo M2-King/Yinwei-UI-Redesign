@@ -82,6 +82,22 @@ class AndroidPlaybackCaptureStatus {
     this.lastReadFrames = 0,
     this.playbackCaptureConfigured = false,
     this.audioUsages = const ['USAGE_MEDIA', 'USAGE_GAME', 'USAGE_UNKNOWN'],
+    this.captureHint,
+    this.dspState = 'Disconnected',
+    this.dspLibraryLoaded = false,
+    this.nativeInputFrames = 0,
+    this.nativeConsumedFrames = 0,
+    this.nativeDspChunks = 0,
+    this.nativeWetFrames = 0,
+    this.nativeDroppedFrames = 0,
+    this.nativeOverruns = 0,
+    this.nativeQueueDepthFrames = 0,
+    this.nativeQueueHighWaterFrames = 0,
+    this.nativeLastError,
+    this.nativeWetRmsDb,
+    this.nativeWetPeakDb,
+    this.nativeEffectiveAzimuthDeg,
+    this.nativeEffectiveElevationDeg,
   });
 
   final bool supported;
@@ -110,6 +126,22 @@ class AndroidPlaybackCaptureStatus {
   final String audioRecordSource;
   final bool playbackCaptureConfigured;
   final List<String> audioUsages;
+  final String? captureHint;
+  final String dspState;
+  final bool dspLibraryLoaded;
+  final int nativeInputFrames;
+  final int nativeConsumedFrames;
+  final int nativeDspChunks;
+  final int nativeWetFrames;
+  final int nativeDroppedFrames;
+  final int nativeOverruns;
+  final int nativeQueueDepthFrames;
+  final int nativeQueueHighWaterFrames;
+  final String? nativeLastError;
+  final double? nativeWetRmsDb;
+  final double? nativeWetPeakDb;
+  final double? nativeEffectiveAzimuthDeg;
+  final double? nativeEffectiveElevationDeg;
 
   static const unavailable = AndroidPlaybackCaptureStatus(
     supported: false,
@@ -176,9 +208,28 @@ class AndroidPlaybackCaptureStatus {
     }
   }
 
+  String get dspBridgeLabel {
+    if (nativeLastError != null && nativeLastError!.isNotEmpty) {
+      return 'Error';
+    }
+    switch (dspState) {
+      case 'Starting':
+        return 'Starting';
+      case 'Processing':
+        return 'Processing';
+      case 'Error':
+        return 'Error';
+      default:
+        if (dspLibraryLoaded && nativeDspChunks > 0) return 'Processing';
+        if (dspLibraryLoaded && captureActive) return 'Starting';
+        return 'Disconnected';
+    }
+  }
+
   factory AndroidPlaybackCaptureStatus.fromChannel(dynamic raw) {
     final map = raw is Map ? Map<Object?, Object?>.from(raw) : const {};
     final error = map['lastError']?.toString();
+    final hint = map['captureHint']?.toString();
     final usages = map['audioUsages'];
     return AndroidPlaybackCaptureStatus(
       supported: map['supported'] == true,
@@ -210,6 +261,28 @@ class AndroidPlaybackCaptureStatus {
       audioUsages: usages is List
           ? usages.map((item) => item.toString()).toList()
           : const ['USAGE_MEDIA', 'USAGE_GAME', 'USAGE_UNKNOWN'],
+      captureHint: (hint == null || hint.isEmpty) ? null : hint,
+      dspState: map['dspState']?.toString() ?? 'Disconnected',
+      dspLibraryLoaded: map['dspLibraryLoaded'] == true,
+      nativeInputFrames: _int(map['nativeInputFrames']),
+      nativeConsumedFrames: _int(map['nativeConsumedFrames']),
+      nativeDspChunks: _int(map['nativeDspChunks']),
+      nativeWetFrames: _int(map['nativeWetFrames']),
+      nativeDroppedFrames: _int(map['nativeDroppedFrames']),
+      nativeOverruns: _int(map['nativeOverruns']),
+      nativeQueueDepthFrames: _int(map['nativeQueueDepthFrames']),
+      nativeQueueHighWaterFrames: _int(map['nativeQueueHighWaterFrames']),
+      nativeLastError: () {
+        final value = map['nativeLastError']?.toString();
+        if (value == null || value.isEmpty) return null;
+        return value;
+      }(),
+      nativeWetRmsDb: _doubleOrNull(map['nativeWetRmsDb']),
+      nativeWetPeakDb: _doubleOrNull(map['nativeWetPeakDb']),
+      nativeEffectiveAzimuthDeg:
+          _doubleOrNull(map['nativeEffectiveAzimuthDeg']),
+      nativeEffectiveElevationDeg:
+          _doubleOrNull(map['nativeEffectiveElevationDeg']),
     );
   }
 

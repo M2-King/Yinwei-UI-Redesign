@@ -9,3 +9,6 @@ GeneratedPluginRegistrant.java
 key.properties
 **/*.keystore
 **/*.jks
+
+# Staged by CI / scripts/build_android_spatial_core.sh — do not commit .so
+app/src/main/jniLibs/**/*.so

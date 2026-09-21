@@ -129,12 +129,16 @@ class _MobilePlayerScreenState extends State<MobilePlayerScreen> {
                     backend: widget.backend,
                     loadError: widget.loadError,
                     status: status,
+                    androidCaptureOnly:
+                        widget.capabilities.androidPlaybackCapture,
                   ),
                   const SizedBox(height: 8),
                   IosRuntimeStatusBanner(
                     backend: widget.backend,
                     controller: c,
                     loadError: widget.loadError,
+                    androidCaptureOnly:
+                        widget.capabilities.androidPlaybackCapture,
                   ),
                   const SizedBox(height: 14),
                   Expanded(

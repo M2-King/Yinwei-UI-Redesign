@@ -4,5 +4,6 @@ downloads/*.zip
 downloads/*.exe
 downloads/*.msi
 !downloads/Yinwei-Android-A1-Preview.apk
+!downloads/Yinwei-Android-A2-Preview.apk
 .DS_Store
 *.log

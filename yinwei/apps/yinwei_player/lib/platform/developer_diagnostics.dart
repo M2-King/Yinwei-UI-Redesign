@@ -222,7 +222,9 @@ class DeveloperDiagnosticsReport {
         'underrun count': '0',
         'overrun count': '0',
         'DSP state': connected
-            ? (controller?.playing == true ? 'file-mode playing' : 'file-mode idle')
+            ? (controller?.playing == true
+                ? 'file-mode playing'
+                : 'file-mode idle')
             : 'not connected',
         'current spatial parameters': controller == null
             ? 'n/a'
@@ -237,7 +239,8 @@ class DeveloperDiagnosticsReport {
             nativeOutput['currentOutputRoute']?.toString() ?? 'unknown',
         'headphones / speaker / Bluetooth':
             'headphones=${nativeOutput['headphones'] == true} speaker=${nativeOutput['speaker'] == true} bluetooth=${nativeOutput['bluetooth'] == true}',
-        'output sample rate': nativeOutput['sampleRate']?.toString() ?? 'unknown',
+        'output sample rate':
+            nativeOutput['sampleRate']?.toString() ?? 'unknown',
         'playing state': controller == null
             ? 'unknown'
             : (controller.playing ? 'playing' : 'not-playing'),
@@ -251,8 +254,10 @@ class DeveloperDiagnosticsReport {
             nativeLifecycle['captureStreamStarted'] == true
                 ? 'started'
                 : 'stopped',
-        'interruption': nativeLifecycle['lastInterruption']?.toString() ?? 'none',
-        'route change': nativeLifecycle['lastRouteChange']?.toString() ?? 'none',
+        'interruption':
+            nativeLifecycle['lastInterruption']?.toString() ?? 'none',
+        'route change':
+            nativeLifecycle['lastRouteChange']?.toString() ?? 'none',
         'capture error': nativeLifecycle['lastCaptureError']?.toString() ??
             capture.lastError ??
             'none',
@@ -274,7 +279,7 @@ class DeveloperDiagnosticsReport {
     return DeveloperDiagnosticsReport(
       generatedAt: generatedAt,
       title: 'YINWEI ANDROID DIAGNOSTICS',
-      phaseName: 'A1',
+      phaseName: 'A2',
       build: {
         'git commit SHA': YinweiBuildStamp.gitSha,
         'build number': YinweiBuildStamp.buildNumber,
@@ -292,7 +297,7 @@ class DeveloperDiagnosticsReport {
             native['bundleShortVersion']?.toString() ??
             '',
         'workflow': YinweiBuildStamp.workflow,
-        'phase': 'A1',
+        'phase': 'A2',
       },
       projection: {
         'permission granted': _yesNo(capture.projectionGranted),
@@ -304,12 +309,14 @@ class DeveloperDiagnosticsReport {
         'permission denied': _yesNo(capture.permissionDenied),
         'permission cancelled': _yesNo(capture.permissionCancelled),
         'projection revoked': _yesNo(capture.projectionRevoked),
+        'capture hint': capture.captureHint ?? '',
       },
       capture: {
         'AudioPlaybackCapture supported': _yesNo(capture.supported),
         'capture state': capture.phaseLabel,
         'AudioRecord state': capture.audioRecordState,
-        'playback capture configured': _yesNo(capture.playbackCaptureConfigured),
+        'playback capture configured':
+            _yesNo(capture.playbackCaptureConfigured),
         'audio usage filters': capture.audioUsages.join(','),
         'audio record source': capture.audioRecordSource,
         'reads': '${capture.readCount}',
@@ -337,20 +344,35 @@ class DeveloperDiagnosticsReport {
         'captured samples': '${capture.capturedSamples}',
       },
       rust: {
-        'spatial_core connected': _yesNo(connected),
-        'stream input initialized': 'no (A1 capture-only)',
-        'PCM frames pushed': '0',
-        'PCM frames consumed': '0',
-        'underrun count': '0',
-        'overrun count': '0',
-        'DSP state': 'not connected',
+        'spatial_core file engine': _yesNo(connected),
+        'JNI live ingress loaded': _yesNo(capture.dspLibraryLoaded),
+        'DSP bridge': capture.dspBridgeLabel,
+        'stream input initialized': capture.dspLibraryLoaded &&
+                (capture.captureActive || capture.nativeInputFrames > 0)
+            ? 'yes'
+            : 'no',
+        'PCM frames pushed': '${capture.nativeInputFrames}',
+        'PCM frames consumed': '${capture.nativeConsumedFrames}',
+        'DSP chunks': '${capture.nativeDspChunks}',
+        'wet frames': '${capture.nativeWetFrames}',
+        'queue depth frames': '${capture.nativeQueueDepthFrames}',
+        'queue high water frames': '${capture.nativeQueueHighWaterFrames}',
+        'dropped frames': '${capture.nativeDroppedFrames}',
+        'overrun count': '${capture.nativeOverruns}',
+        'wet RMS dBFS': capture.nativeWetRmsDb?.toStringAsFixed(1) ?? 'none',
+        'wet peak dBFS': capture.nativeWetPeakDb?.toStringAsFixed(1) ?? 'none',
+        'effective azimuth deg':
+            capture.nativeEffectiveAzimuthDeg?.toStringAsFixed(1) ?? 'none',
+        'effective elevation deg':
+            capture.nativeEffectiveElevationDeg?.toStringAsFixed(1) ?? 'none',
         'current spatial parameters': controller == null
             ? 'n/a'
             : 'mode=${controller.mode.name} motion=${controller.params.motion.name} az=${controller.params.azimuthDeg.toStringAsFixed(1)} el=${controller.params.elevationDeg.toStringAsFixed(1)} dist=${controller.params.distanceM.toStringAsFixed(2)}',
-        'last Rust error': controller?.lastError ?? 'none',
+        'last Rust error':
+            capture.nativeLastError ?? controller?.lastError ?? 'none',
       },
       output: {
-        'playing captured audio': 'no (A1 capture-only)',
+        'playing captured audio': 'no (A2 no wet output yet)',
         'saving captured PCM': 'no',
       },
       lifecycle: {
@@ -360,9 +382,8 @@ class DeveloperDiagnosticsReport {
           capture.projectionRevoked ||
               nativeLifecycle['projectionRevoked'] == true,
         ),
-        'service started/stopped': capture.foregroundServiceRunning
-            ? 'started'
-            : 'stopped',
+        'service started/stopped':
+            capture.foregroundServiceRunning ? 'started' : 'stopped',
         'capture error': nativeLifecycle['lastCaptureError']?.toString() ??
             capture.lastError ??
             'none',
