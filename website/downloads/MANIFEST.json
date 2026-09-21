@@ -1,0 +1,33 @@
+{
+  "android": {
+    "available": true,
+    "status": "preview",
+    "label": "Android A1 Preview",
+    "publicFileName": "Yinwei-Android-A1-Preview.apk",
+    "sourceFileName": "yinwei-android-live-transfer-a1-17bdc6b.apk",
+    "commit": "17bdc6be55f30b9475fe9bb6b1ba366cb2185003",
+    "shortSha": "17bdc6b",
+    "workflowRun": 35569621376,
+    "artifactId": 10625776010,
+    "artifactName": "yinwei-android-live-transfer-a1",
+    "bytes": 49607281,
+    "sha256": "697325d506a6f7d4dd7f8d0b5c9437d400204c4da02af80ad54d6fab2a4b18fb",
+    "minAndroid": "10",
+    "notes": "External playback capture validation. Not production. Not HRTF Live Transfer."
+  },
+  "windows": {
+    "available": false,
+    "status": "workstation-exists",
+    "notes": "Windows is the current desktop workstation with local HRTF and Live Transfer. No public installer package is published in this repository yet."
+  },
+  "ios": {
+    "available": false,
+    "status": "development-preview",
+    "notes": "Unsigned CI IPA is a developer artifact and must be signed before install. iOS Live Transfer is not complete. 7D1 is ScreenCaptureKit capture probe only."
+  },
+  "macos": {
+    "available": false,
+    "status": "in-development",
+    "notes": "No downloadable macOS build yet."
+  }
+}

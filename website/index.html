@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#07080a" />
+    <title>音围 Yinwei — Spatial Audio</title>
+    <meta
+      name="description"
+      content="Local HRTF spatial audio for Windows, with Android, iPhone, and macOS in progress. Yinwei processes sound on-device and places it in a controllable 3D listening space."
+    />
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="音围 Yinwei — Spatial Audio" />
+    <meta
+      property="og:description"
+      content="Local HRTF spatial audio for Windows, Android, iPhone and macOS. Platforms are not at feature parity."
+    />
+    <meta property="og:image" content="img/spatial-workspace.png" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <link rel="icon" href="img/favicon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="img/mark.svg" />
+    <link rel="stylesheet" href="css/site.css" />
+  </head>
+  <body>
+    <a class="skip" href="#main">Skip to content</a>
+    <header class="nav">
+      <a class="brand" href="#top">
+        <img src="img/mark.svg" width="32" height="32" alt="" />
+        <span>音围 Yinwei<small>Spatial Audio</small></span>
+      </a>
+      <button class="nav-toggle" type="button" aria-expanded="false" aria-controls="nav-links">Menu</button>
+      <nav id="nav-links" class="nav-links">
+        <a href="#spatial">Spatial</a>
+        <a href="#live">Live Transfer</a>
+        <a href="#local">Local</a>
+        <a href="#workspace">Workspace</a>
+        <a href="#privacy">Privacy</a>
+        <a class="btn btn-primary" href="#downloads">Download</a>
+      </nav>
+    </header>
+
+    <main id="main">
+      <section class="wrap hero" id="top">
+        <div>
+          <div class="kicker">音围 · Yinwei</div>
+          <h1>Turn ordinary audio into space.</h1>
+          <p class="subhead">
+            把普通声音，放进空间。Yinwei is a local spatial-audio workstation that
+            processes audio using HRTF and places sound in a controllable 3D
+            listening space.
+          </p>
+          <div class="hero-actions">
+            <a class="btn btn-primary" href="#downloads">Download</a>
+            <a class="btn btn-ghost" href="#spatial">Explore Yinwei</a>
+          </div>
+        </div>
+        <div class="stage-card" aria-hidden="true">
+          <div class="stage">
+            <div class="room">
+              <div class="floor"></div>
+              <div class="orbit"></div>
+              <span class="speaker" style="left:50%;top:8%;transform:translate(-50%,0)"></span>
+              <span class="speaker" style="left:78%;top:18%"></span>
+              <span class="speaker" style="left:90%;top:42%"></span>
+              <span class="speaker" style="left:78%;top:70%"></span>
+              <span class="speaker" style="left:50%;top:82%;transform:translate(-50%,0)"></span>
+              <span class="speaker" style="left:16%;top:70%"></span>
+              <span class="speaker" style="left:6%;top:42%"></span>
+              <span class="speaker" style="left:16%;top:18%"></span>
+              <div class="listener"></div>
+              <div class="orbit-arm">
+                <div class="source"><span class="source-glow"></span></div>
+              </div>
+            </div>
+          </div>
+          <div class="stage-caption">
+            <span>Listener · 8 speakers · spatial source</span>
+            <span>Azimuth · Elevation · Distance</span>
+          </div>
+        </div>
+      </section>
+
+      <section class="wrap reveal" id="spatial">
+        <div class="section-title">
+          <h2>Spatial Audio</h2>
+          <p>
+            HRTF-based rendering places a source around the listener. You control
+            azimuth, elevation, and distance, then choose Fixed or Orbit motion.
+            Stereo and array layouts are available where the workstation supports them.
+          </p>
+        </div>
+        <div class="grid-2">
+          <article class="card spatial-play">
+            <div class="dial" aria-hidden="true">
+              <svg viewBox="0 0 220 220">
+                <circle cx="110" cy="110" r="88" fill="none" stroke="rgba(186,206,224,0.16)" />
+                <circle cx="110" cy="110" r="56" fill="none" stroke="rgba(186,206,224,0.1)" />
+                <circle cx="110" cy="110" r="6" fill="#f3f6f8" />
+                <circle id="source-dot" cx="110" cy="22" r="7" fill="#b7c9d8" />
+              </svg>
+            </div>
+            <div class="controls">
+              <label>Azimuth <span class="metric" id="az-val">90°</span>
+                <input id="az" type="range" min="-180" max="180" value="90" />
+              </label>
+              <label>Elevation <span class="metric" id="el-val">0°</span>
+                <input id="el" type="range" min="-40" max="80" value="0" />
+              </label>
+              <label>Distance <span class="metric" id="dist-val">1.8 m</span>
+                <input id="dist" type="range" min="8" max="40" value="18" />
+              </label>
+              <p class="fineprint">
+                0° is front of the listener. Positive azimuth is to the right.
+                This control is a visual explanation only; it does not play audio.
+              </p>
+            </div>
+          </article>
+          <div class="grid-3" style="grid-template-columns:1fr">
+            <article class="card">
+              <h3>HRTF</h3>
+              <p>Head-related transfer functions render direction and distance over headphones through <code>spatial_core</code>.</p>
+            </article>
+            <article class="card">
+              <h3>Fixed / Orbit</h3>
+              <p>Hold a pose, or let the source move continuously around the listening space.</p>
+            </article>
+            <article class="card">
+              <h3>Layouts</h3>
+              <p>Point source and stereo / array presentation where the current workstation build supports them.</p>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section class="wrap reveal" id="live">
+        <div class="section-title">
+          <h2>Live Transfer</h2>
+          <p>
+            The idea is simple: sound that is already playing elsewhere can be
+            brought into Yinwei, rendered through HRTF, and heard on headphones.
+            Platforms are not at feature parity.
+          </p>
+        </div>
+        <div class="flow" aria-label="Live Transfer concept">
+          <span class="chip">Music app / browser</span>
+          <span class="chip arrow">→</span>
+          <span class="chip">Yinwei</span>
+          <span class="chip arrow">→</span>
+          <span class="chip">spatial_core</span>
+          <span class="chip arrow">→</span>
+          <span class="chip">HRTF</span>
+          <span class="chip arrow">→</span>
+          <span class="chip">Headphones</span>
+        </div>
+        <div class="grid-3" style="margin-top:28px">
+          <article class="card">
+            <span class="badge">Windows</span>
+            <h3>Live Transfer</h3>
+            <p>
+              Windows can present current Live Transfer: a playing session is
+              captured and passed through local spatial rendering. This is the
+              current desktop path.
+            </p>
+          </article>
+          <article class="card">
+            <span class="badge warn">Android Preview</span>
+            <h3>External playback capture validation</h3>
+            <p>
+              Android Live Transfer Preview. A1 currently proves MediaProjection
+              → AudioPlaybackCapture → PCM diagnostics. It does not output
+              spatialized external audio. A2 / <code>spatial_core</code>
+              connection has not started.
+            </p>
+          </article>
+          <article class="card">
+            <span class="badge warn">iOS Preview</span>
+            <h3>Development status</h3>
+            <p>
+              iOS Live Transfer is not complete. Current work is a
+              ScreenCaptureKit capture probe. Unsigned CI builds are developer
+              artifacts, not an App Store release.
+            </p>
+          </article>
+        </div>
+      </section>
+
+      <section class="wrap reveal" id="local">
+        <div class="grid-2">
+          <div class="section-title">
+            <h2>Local, offline processing</h2>
+            <p>
+              Yinwei’s DSP runs on the device. Core processing is
+              audio → <code>spatial_core</code> → HRTF → output. It does not
+              require cloud processing. Downloaded or local media can be
+              processed without Wi-Fi or mobile data where the source platform
+              permits playback or capture.
+            </p>
+            <p class="fineprint">
+              Third-party streaming apps and DRM-protected catalogs can still
+              impose their own playback or capture limits. Yinwei does not
+              claim to bypass those policies.
+            </p>
+          </div>
+          <article class="card">
+            <h3>On-device path</h3>
+            <p>Open a local file, preview Original vs Spatial, move the source, and export a WAV — without uploading PCM for DSP.</p>
+            <div class="flow">
+              <span class="chip">Audio</span>
+              <span class="chip arrow">→</span>
+              <span class="chip">spatial_core</span>
+              <span class="chip arrow">→</span>
+              <span class="chip">HRTF</span>
+              <span class="chip arrow">→</span>
+              <span class="chip">Output</span>
+            </div>
+          </article>
+        </div>
+      </section>
+
+      <section class="wrap reveal" id="workspace">
+        <div class="section-title">
+          <h2>Professional workspace</h2>
+          <p>
+            A dark, restrained workstation: 3D room, listener, spatial source,
+            array / speaker controls, and realtime Original / Spatial comparison.
+          </p>
+        </div>
+        <div class="grid-2">
+          <figure class="shot">
+            <img
+              src="img/workstation.png"
+              alt="Yinwei Windows workstation with spatial workspace, playback, Original/Spatial, and position controls"
+              width="1600"
+              height="900"
+            />
+          </figure>
+          <figure class="shot">
+            <img
+              src="img/spatial-workspace.png"
+              alt="Realtime 3D spatial workspace with listener, eight loudspeakers, and a positioned source"
+              width="1600"
+              height="1200"
+            />
+          </figure>
+        </div>
+      </section>
+
+      <section class="wrap reveal" id="privacy">
+        <article class="card">
+          <h2>Privacy</h2>
+          <p>
+            Audio processing is local. Yinwei does not need to upload captured
+            PCM to a cloud service for DSP.
+          </p>
+        </article>
+      </section>
+
+      <section class="wrap reveal" id="downloads">
+        <div class="section-title">
+          <h2>Download</h2>
+          <p>
+            Only real, currently available packages are linked. Other platforms
+            stay visible so you can see status without fake buttons.
+          </p>
+        </div>
+        <div class="platforms">
+          <article class="card platform" data-platform="windows">
+            <span class="badge">Windows</span>
+            <h3>Windows</h3>
+            <p>Current desktop workstation with local HRTF and Live Transfer.</p>
+            <p class="disabled-note">No public installer is published yet.</p>
+            <p class="meta">Status: available as a desktop product in development builds, not as a downloadable package on this site.</p>
+          </article>
+          <article class="card platform" data-platform="android">
+            <span class="badge warn">Preview / test build</span>
+            <h3>Android</h3>
+            <p>Android A1 Preview — external playback capture validation.</p>
+            <a class="btn btn-primary" href="downloads/Yinwei-Android-A1-Preview.apk" download>Download APK</a>
+            <p class="fineprint">
+              Not a production release. Does not spatialize external audio.
+              Requires Android 10+ for playback capture.
+            </p>
+            <p class="meta">
+              Android A1 Preview<br />
+              Commit 17bdc6b · workflow 35569621376<br />
+              49,607,281 bytes<br />
+              SHA-256 697325d506a6f7d4dd7f8d0b5c9437d400204c4da02af80ad54d6fab2a4b18fb
+            </p>
+          </article>
+          <article class="card platform" data-platform="ios">
+            <span class="badge warn">Developer / unsigned preview</span>
+            <h3>iPhone / iPad</h3>
+            <p>iOS Live Transfer is not complete. Unsigned CI IPAs must be signed before install.</p>
+            <p class="disabled-note">No public iOS download on this site.</p>
+            <p class="meta">Not an App Store release.</p>
+          </article>
+          <article class="card platform" data-platform="macos">
+            <span class="badge">In development</span>
+            <h3>macOS</h3>
+            <p>A downloadable macOS build is not available yet.</p>
+            <p class="disabled-note">In development</p>
+            <p class="meta">No download link until a real package exists.</p>
+          </article>
+        </div>
+      </section>
+    </main>
+
+    <footer class="wrap">
+      <p>音围 Yinwei — local spatial audio. Platforms do not have feature parity.</p>
+    </footer>
+    <script src="js/site.js"></script>
+  </body>
+</html>

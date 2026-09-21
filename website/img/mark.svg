@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="στ Yinwei">
+  <rect width="64" height="64" rx="16" fill="#0A0A0C"/>
+  <ellipse cx="32" cy="38" rx="22" ry="11" fill="none" stroke="#D7E2EC" stroke-opacity="0.28" stroke-width="1.25"/>
+  <ellipse cx="32" cy="38" rx="13.5" ry="6.8" fill="none" stroke="#D7E2EC" stroke-opacity="0.16" stroke-width="1"/>
+  <circle cx="32" cy="38" r="3.1" fill="#F3F6F9"/>
+  <circle cx="49.5" cy="31.5" r="3.4" fill="#B7C9D8"/>
+  <circle cx="49.5" cy="31.5" r="7.2" fill="none" stroke="#B7C9D8" stroke-opacity="0.35" stroke-width="1"/>
+</svg>

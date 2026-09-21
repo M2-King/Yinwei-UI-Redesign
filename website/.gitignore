@@ -1,0 +1,7 @@
+downloads/*.apk
+downloads/*.ipa
+downloads/*.zip
+downloads/*.exe
+downloads/*.msi
+.DS_Store
+*.log
