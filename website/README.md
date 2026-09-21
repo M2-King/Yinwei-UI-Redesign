@@ -8,11 +8,11 @@ This is not the Flutter app and does not use Flutter Web.
 
 The live site is on **Tencent EdgeOne Makers (China)**:
 
-https://workspace-jf3znr8o-wyagttnf.edgeone.cool/
+https://workspace-khz2prs8-qjvhzxns.edgeone.cool/
 
-The Android APK is **not** uploaded through EdgeOne COS from this environment (50MB uploads stall). It is stored in git and served by **JSDMirror**, a jsDelivr-compatible CDN on EdgeOne, which domestic networks can fetch:
+The Android APK is served through a China-reachable GitHub proxy (**ghfast.top**). JSDMirror rejects this 49.6MB file (403). Direct GitHub is often unreachable on mainland networks.
 
-https://cdn.jsdmirror.com/gh/M2-King/Yinwei-UI-Redesign@yinwei-ui-redesign/website/downloads/Yinwei-Android-A1-Preview.apk
+https://ghfast.top/https://github.com/M2-King/Yinwei-UI-Redesign/raw/yinwei-ui-redesign/website/downloads/Yinwei-Android-A1-Preview.apk
 
 Anonymous EdgeOne projects must be **claimed** in the Tencent Cloud China console or they are removed. Claim from the CLI output of `scripts/deploy-edgeone-china.sh`. Do not commit API tokens or claim secrets.
 
