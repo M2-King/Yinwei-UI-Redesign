@@ -209,6 +209,9 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
         if (mounted) unawaited(_window.enterIsland());
       });
     }
+    // Position is intentionally absent from _shellEpoch. Seed after init so a
+    // playhead-only notify publishes telemetry without reconstructing the shell.
+    _lastShellEpoch = _shellEpoch();
     _islandAnim = Timer.periodic(const Duration(milliseconds: 80), (_) {
       final wasRunning = _live.running;
       if (wasRunning) {

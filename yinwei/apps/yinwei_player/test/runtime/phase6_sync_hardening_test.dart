@@ -7,6 +7,7 @@ import 'package:yinwei_player/bridge/mock_engine.dart';
 import 'package:yinwei_player/contracts/coordinate_frame_v1.dart';
 import 'package:yinwei_player/contracts/spatial_scene_store.dart';
 import 'package:yinwei_player/models/spatial_params.dart';
+import 'package:yinwei_player/platform/platform_capabilities.dart';
 import 'package:yinwei_player/runtime/spatial_runtime_adapter.dart';
 import 'package:yinwei_player/runtime/spatial_scene_bridge.dart';
 import 'package:yinwei_player/screens/player_screen.dart';
@@ -42,6 +43,21 @@ Map<String, dynamic> _poseIntent({
     'basedOnRevision': basedOnRevision,
   };
 }
+
+/// Desktop workstation contract for this file — not host OS detection.
+/// Avoids Win32 chrome, SMTC, WASAPI, and a real Three.js WebView.
+const _testDesktopCaps = PlatformCapabilities(
+  desktopWindow: true,
+  nativeWindowChrome: false,
+  floatingIsland: false,
+  systemMedia: false,
+  liveTransfer: false,
+  desktopDrop: false,
+  threeJsWebView: false,
+  filePlayback: true,
+  pointSpatial: true,
+  array: true,
+);
 
 void main() {
   const trig = 1e-6;
@@ -424,7 +440,10 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         theme: YinweiTheme.dark(),
-        home: PlayerScreen(controller: ctrl),
+        home: PlayerScreen(
+          controller: ctrl,
+          capabilities: _testDesktopCaps,
+        ),
       ),
     );
     await tester.pump();
@@ -446,7 +465,5 @@ void main() {
     expect(workspaceAfter.playhead, playheadBefore);
     expect(find.byType(PositionSidebar), findsOneWidget);
     expect(find.text('00:00'), findsWidgets);
-    },
-    skip: Platform.isMacOS,
-  );
+  });
 }
