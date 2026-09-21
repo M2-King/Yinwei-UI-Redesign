@@ -43,4 +43,10 @@ class YinweiPlaybackCaptureStartTest {
             ),
         )
     }
-}
+
+    @Test
+    fun api34AndAboveUseDefaultDisplayProjectionConfig() {
+        assertEquals(false, YinweiPlaybackCaptureStart.usesDefaultDisplayProjectionConfig(33))
+        assertEquals(true, YinweiPlaybackCaptureStart.usesDefaultDisplayProjectionConfig(34))
+        assertEquals(true, YinweiPlaybackCaptureStart.usesDefaultDisplayProjectionConfig(36))
+    }

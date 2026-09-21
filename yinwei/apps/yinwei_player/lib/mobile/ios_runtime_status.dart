@@ -10,23 +10,37 @@ class IosRuntimeStatusBanner extends StatelessWidget {
     required this.backend,
     required this.controller,
     this.loadError,
+    this.androidCaptureOnly = false,
   });
 
   final EngineBackend backend;
   final EngineController controller;
   final String? loadError;
+  final bool androidCaptureOnly;
 
-  static String engineLabel(EngineBackend backend) =>
-      backend == EngineBackend.native ? 'READY' : 'FAILED';
+  static String engineLabel(
+    EngineBackend backend, {
+    bool androidCaptureOnly = false,
+  }) {
+    if (androidCaptureOnly) return 'CAPTURE-ONLY';
+    return backend == EngineBackend.native ? 'READY' : 'FAILED';
+  }
 
-  static String nativeLabel(EngineBackend backend) =>
-      backend == EngineBackend.native ? 'CONNECTED' : 'ERROR';
+  static String nativeLabel(
+    EngineBackend backend, {
+    bool androidCaptureOnly = false,
+  }) {
+    if (androidCaptureOnly) return 'A1 (no spatial_core)';
+    return backend == EngineBackend.native ? 'CONNECTED' : 'ERROR';
+  }
 
   static String audioLabel({
     required EngineBackend backend,
     required bool playing,
     required String? lastError,
+    bool androidCaptureOnly = false,
   }) {
+    if (androidCaptureOnly) return 'IDLE';
     if (backend != EngineBackend.native || !playing || lastError != null) {
       return 'STOPPED';
     }
@@ -37,7 +51,11 @@ class IosRuntimeStatusBanner extends StatelessWidget {
     required bool hasOpenedFile,
     String? lastError,
     String? loadError,
+    bool androidCaptureOnly = false,
   }) {
+    if (androidCaptureOnly) {
+      return 'Expected on Android A1. Use Start Capture — Play does not spatialize.';
+    }
     if (lastError != null &&
         lastError.contains('NoTrackLoaded') &&
         !hasOpenedFile) {
@@ -49,17 +67,25 @@ class IosRuntimeStatusBanner extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final engine = engineLabel(backend);
-    final native = nativeLabel(backend);
+    final engine = engineLabel(
+      backend,
+      androidCaptureOnly: androidCaptureOnly,
+    );
+    final native = nativeLabel(
+      backend,
+      androidCaptureOnly: androidCaptureOnly,
+    );
     final audio = audioLabel(
       backend: backend,
       playing: controller.playing,
       lastError: controller.lastError,
+      androidCaptureOnly: androidCaptureOnly,
     );
     final detail = visibleDetail(
       hasOpenedFile: controller.hasOpenedFile,
       lastError: controller.lastError,
       loadError: loadError,
+      androidCaptureOnly: androidCaptureOnly,
     );
     final style = Theme.of(context).textTheme.labelSmall?.copyWith(
           color: YinweiColors.textSecondary,

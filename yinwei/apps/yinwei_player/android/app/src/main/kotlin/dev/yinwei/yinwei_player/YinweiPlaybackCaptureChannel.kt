@@ -2,7 +2,10 @@ package dev.yinwei.yinwei_player
 
 import android.Manifest
 import android.app.Activity
+import android.app.AlertDialog
+import android.content.Intent
 import android.content.pm.PackageManager
+import android.media.projection.MediaProjectionConfig
 import android.media.projection.MediaProjectionManager
 import android.os.Build
 import androidx.activity.ComponentActivity
@@ -27,6 +30,7 @@ class YinweiPlaybackCaptureChannel(
 ) : MethodChannel.MethodCallHandler {
     @Volatile
     private var pendingProjectionLaunch = false
+    private var confirmDialog: AlertDialog? = null
 
     fun register(messenger: BinaryMessenger) {
         MethodChannel(messenger, CHANNEL).setMethodCallHandler(this)
@@ -86,7 +90,7 @@ class YinweiPlaybackCaptureChannel(
     }
 
     fun onHostResumed() {
-        launchProjectionConsentIfPending()
+        showNativeConfirmIfResumed()
     }
 
     fun onProjectionResult(result: ActivityResult) {
@@ -166,17 +170,60 @@ class YinweiPlaybackCaptureChannel(
 
     private fun scheduleProjectionConsent() {
         pendingProjectionLaunch = true
-        launchProjectionConsentIfPending()
+        showNativeConfirmIfResumed()
     }
 
-    private fun launchProjectionConsentIfPending() {
+    private fun showNativeConfirmIfResumed() {
         if (!pendingProjectionLaunch) return
         if (!isHostResumed()) {
-            YinweiPlaybackCaptureStore.log("PROJECTION", "deferring screen capture intent until resume")
+            YinweiPlaybackCaptureStore.log("PROJECTION", "deferring native confirm until resume")
             return
         }
         pendingProjectionLaunch = false
-        launchProjectionConsent()
+        showNativeConfirmDialog()
+    }
+
+    private fun showNativeConfirmDialog() {
+        try {
+            confirmDialog?.dismiss()
+        } catch (_: Exception) {
+        }
+        YinweiPlaybackCaptureStore.update {
+            permissionPending = true
+            captureHint = YinweiPlaybackCaptureStart.HINT_PROJECTION
+        }
+        val dialog = AlertDialog.Builder(
+            activity,
+            android.R.style.Theme_DeviceDefault_Dialog_Alert,
+        )
+            .setTitle("Screen audio capture")
+            .setMessage(
+                "Android will ask for 投屏 / screen audio. This captures other apps' playback, not the microphone.",
+            )
+            .setPositiveButton("Continue") { _, _ ->
+                launchProjectionIntent()
+            }
+            .setNegativeButton("Cancel") { _, _ ->
+                onConfirmCancelled()
+            }
+            .setOnCancelListener {
+                onConfirmCancelled()
+            }
+            .create()
+        confirmDialog = dialog
+        dialog.show()
+        YinweiPlaybackCaptureStore.log("PROJECTION", "native confirm dialog shown")
+    }
+
+    private fun onConfirmCancelled() {
+        pendingProjectionLaunch = false
+        YinweiPlaybackCaptureStore.update {
+            permissionPending = false
+            permissionCancelled = true
+            lastError = null
+            captureHint = YinweiPlaybackCaptureStart.HINT_CANCELLED
+        }
+        YinweiPlaybackCaptureStore.log("PROJECTION", "native confirm cancelled")
     }
 
     private fun isHostResumed(): Boolean {
@@ -184,7 +231,7 @@ class YinweiPlaybackCaptureChannel(
         return host.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)
     }
 
-    private fun launchProjectionConsent() {
+    private fun launchProjectionIntent() {
         try {
             val mgr = activity.getSystemService(Activity.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
             YinweiPlaybackCaptureStore.update {
@@ -192,7 +239,7 @@ class YinweiPlaybackCaptureChannel(
                 captureHint = YinweiPlaybackCaptureStart.HINT_PROJECTION
             }
             YinweiPlaybackCaptureStore.log("PROJECTION", "launching screen capture intent")
-            projectionLauncher.launch(mgr.createScreenCaptureIntent())
+            projectionLauncher.launch(createProjectionIntent(mgr))
         } catch (e: Exception) {
             pendingProjectionLaunch = true
             val message = "Screen capture intent failed: ${e.message}"
@@ -204,8 +251,31 @@ class YinweiPlaybackCaptureChannel(
         }
     }
 
+    private fun createProjectionIntent(mgr: MediaProjectionManager): Intent {
+        if (YinweiPlaybackCaptureStart.usesDefaultDisplayProjectionConfig(Build.VERSION.SDK_INT) &&
+            Build.VERSION.SDK_INT >= 34
+        ) {
+            try {
+                return mgr.createScreenCaptureIntent(
+                    MediaProjectionConfig.createConfigForDefaultDisplay(),
+                )
+            } catch (e: Exception) {
+                YinweiPlaybackCaptureStore.log(
+                    "PROJECTION",
+                    "default display config failed: ${e.message}",
+                )
+            }
+        }
+        return mgr.createScreenCaptureIntent()
+    }
+
     private fun stopCapture() {
         pendingProjectionLaunch = false
+        try {
+            confirmDialog?.dismiss()
+        } catch (_: Exception) {
+        }
+        confirmDialog = null
         if (Build.VERSION.SDK_INT >= 29) {
             YinweiPlaybackCaptureService.stop(activity)
         }

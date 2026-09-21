@@ -13,7 +13,7 @@ object YinweiPlaybackCaptureStart {
     const val HINT_RECORD =
         "Allow Recording (playback capture, not microphone), then tap Start Capture again"
 
-    const val HINT_PROJECTION = "Allow screen audio capture"
+    const val HINT_PROJECTION = "Tap Continue, then allow screen audio / 投屏"
 
     const val HINT_CANCELLED = "Screen audio not granted — tap Start Capture"
 
@@ -31,4 +31,6 @@ object YinweiPlaybackCaptureStart {
         if (!recordAudioGranted) return Action.RequestRecordAudio
         return Action.LaunchProjection
     }
+
+    fun usesDefaultDisplayProjectionConfig(sdkInt: Int): Boolean = sdkInt >= 34
 }
