@@ -52,6 +52,9 @@ class MainActivity : FlutterFragmentActivity() {
     override fun onResume() {
         super.onResume()
         YinweiDeveloperDiagnostics.setAppForeground(true)
+        if (::captureChannel.isInitialized) {
+            captureChannel.onHostResumed()
+        }
     }
 
     override fun onPause() {

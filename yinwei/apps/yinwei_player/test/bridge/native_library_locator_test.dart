@@ -46,6 +46,13 @@ void main() {
     expect(detail.toLowerCase(), contains('android a1'));
     expect(detail.toLowerCase(), isNot(contains('dll')));
     expect(detail, contains('not connected'));
+    expect(detail.toLowerCase(), isNot(contains('bad state')));
+    final messy = EngineBootstrap.missingEngineDetailFor(
+      NativeLibraryLoadMode.androidUnavailable,
+      'Bad state: spatial_core is not connected on Android A1 capture-only',
+    );
+    expect(messy.toLowerCase(), isNot(contains('bad state')));
+    expect(messy.toLowerCase(), isNot(contains('failed')));
   });
 
   test('unknown hosts stay explicit unsupported platforms', () {

@@ -12,7 +12,7 @@ https://workspace-khz2prs8-qjvhzxns.edgeone.cool/
 
 The Android APK is served through a China-reachable GitHub proxy (**ghfast.top**). JSDMirror rejects this 49.6MB file (403). Direct GitHub is often unreachable on mainland networks.
 
-https://ghfast.top/https://github.com/M2-King/Yinwei-UI-Redesign/raw/yinwei-ui-redesign/website/downloads/Yinwei-Android-A1-Preview.apk
+https://ghfast.top/https://github.com/M2-King/Yinwei-UI-Redesign/raw/refs/heads/cursor/android-a1-capture-consent-9d7c/website/downloads/Yinwei-Android-A1-Preview.apk
 
 Anonymous EdgeOne projects must be **claimed** in the Tencent Cloud China console or they are removed. Claim from the CLI output of `scripts/deploy-edgeone-china.sh`. Do not commit API tokens or claim secrets.
 
@@ -48,9 +48,9 @@ website/
 
 File: `downloads/Yinwei-Android-A1-Preview.apk`
 
-- Commit `17bdc6b` · workflow `35569621376`
+- Commit `fbe47c9` · workflow `35605274210`
 - 49,607,281 bytes
-- SHA-256 `697325d506a6f7d4dd7f8d0b5c9437d400204c4da02af80ad54d6fab2a4b18fb`
+- SHA-256 `d636a88b2bef4141a4394487fda9ecace1ab18338ce1a4aea7467a519709eb67`
 - Preview / test build. Not production. Not HRTF Live Transfer.
 - Android 10+ for playback capture.
 

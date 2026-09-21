@@ -39,6 +39,7 @@ object YinweiPlaybackCaptureStore {
         var audioUsages: List<String> = listOf("USAGE_MEDIA", "USAGE_GAME", "USAGE_UNKNOWN"),
         var appForeground: Boolean = true,
         var lastNonSilentAtMs: Long? = null,
+        var captureHint: String? = null,
         var manufacturer: String = Build.MANUFACTURER ?: "unknown",
         var model: String = Build.MODEL ?: "unknown",
         var androidVersion: String = Build.VERSION.RELEASE ?: "unknown",
@@ -110,6 +111,7 @@ object YinweiPlaybackCaptureStore {
             sourceCaptureRestricted = false
             lastNonSilentAtMs = null
             projectionRevoked = false
+            captureHint = null
         }
     }
 
@@ -144,6 +146,7 @@ object YinweiPlaybackCaptureStore {
         s.rmsDb?.let { map["rmsDb"] = it }
         s.peakDb?.let { map["peakDb"] = it }
         s.lastError?.let { if (it.isNotEmpty()) map["lastError"] = it }
+        s.captureHint?.let { if (it.isNotEmpty()) map["captureHint"] = it }
         s.lastNonSilentAtMs?.let { map["lastNonSilentAtMs"] = it }
         return map
     }

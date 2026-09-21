@@ -82,6 +82,7 @@ class AndroidPlaybackCaptureStatus {
     this.lastReadFrames = 0,
     this.playbackCaptureConfigured = false,
     this.audioUsages = const ['USAGE_MEDIA', 'USAGE_GAME', 'USAGE_UNKNOWN'],
+    this.captureHint,
   });
 
   final bool supported;
@@ -110,6 +111,7 @@ class AndroidPlaybackCaptureStatus {
   final String audioRecordSource;
   final bool playbackCaptureConfigured;
   final List<String> audioUsages;
+  final String? captureHint;
 
   static const unavailable = AndroidPlaybackCaptureStatus(
     supported: false,
@@ -179,6 +181,7 @@ class AndroidPlaybackCaptureStatus {
   factory AndroidPlaybackCaptureStatus.fromChannel(dynamic raw) {
     final map = raw is Map ? Map<Object?, Object?>.from(raw) : const {};
     final error = map['lastError']?.toString();
+    final hint = map['captureHint']?.toString();
     final usages = map['audioUsages'];
     return AndroidPlaybackCaptureStatus(
       supported: map['supported'] == true,
@@ -210,6 +213,7 @@ class AndroidPlaybackCaptureStatus {
       audioUsages: usages is List
           ? usages.map((item) => item.toString()).toList()
           : const ['USAGE_MEDIA', 'USAGE_GAME', 'USAGE_UNKNOWN'],
+      captureHint: (hint == null || hint.isEmpty) ? null : hint,
     );
   }
 
