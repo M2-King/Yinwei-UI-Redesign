@@ -29,7 +29,8 @@ class AndroidPlaybackCapturePanel extends StatefulWidget {
 class _AndroidPlaybackCapturePanelState
     extends State<AndroidPlaybackCapturePanel> {
   late final AndroidPlaybackCapture _probe;
-  AndroidPlaybackCaptureStatus _status = AndroidPlaybackCaptureStatus.unavailable;
+  AndroidPlaybackCaptureStatus _status =
+      AndroidPlaybackCaptureStatus.unavailable;
   Timer? _poll;
 
   @override
@@ -116,7 +117,7 @@ class _AndroidPlaybackCapturePanelState
               children: [
                 Expanded(
                   child: Text(
-                    'Live Transfer — Android PoC',
+                    'Live Transfer — Android A2',
                     style: Theme.of(context)
                         .textTheme
                         .titleSmall
@@ -131,19 +132,43 @@ class _AndroidPlaybackCapturePanelState
               ],
             ),
             Text(
-              'Captures other apps’ playback. Does not spatialize. Use Start Capture, not Play.',
+              'NO WET OUTPUT YET · spatial_core HRTF is measured, not played.',
+              key: const Key('android-playback-no-wet-output'),
               style: style,
             ),
             Text(
               [
-                'Buffers / reads: ${_status.readCount}',
-                'Frames: ${_status.capturedFrames}',
+                'Capture:',
+                '${_status.readCount} reads',
+                '${_status.capturedFrames} frames',
                 if (format.isNotEmpty) format,
                 'RMS: $rms',
                 'Peak: $peak',
               ].join('   '),
-              maxLines: 2,
+              maxLines: 1,
               overflow: TextOverflow.ellipsis,
+              style: style,
+            ),
+            Text(
+              [
+                'DSP:',
+                _status.dspLibraryLoaded
+                    ? '${_status.dspBridgeLabel} · spatial_core'
+                    : _status.dspBridgeLabel,
+                'Input: ${_status.nativeInputFrames}',
+                'Consumed: ${_status.nativeConsumedFrames}',
+                'Chunks: ${_status.nativeDspChunks}',
+                'Wet: ${_status.nativeWetFrames}',
+                'Queue: ${_status.nativeQueueDepthFrames}',
+                'Dropped: ${_status.nativeDroppedFrames}',
+                if (_status.nativeWetRmsDb != null)
+                  'Wet RMS: ${_status.nativeWetRmsDb!.toStringAsFixed(1)} dB',
+                if (_status.nativeWetPeakDb != null)
+                  'Wet Peak: ${_status.nativeWetPeakDb!.toStringAsFixed(1)} dB',
+              ].join('   '),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              key: const Key('android-playback-dsp'),
               style: style,
             ),
             if (_status.captureHint != null)
@@ -156,19 +181,25 @@ class _AndroidPlaybackCapturePanelState
                 _status.lastError!,
                 style: style,
               ),
-            const SizedBox(height: 4),
+            if (_status.nativeLastError != null)
+              Text(
+                _status.nativeLastError!,
+                style: style,
+              ),
+            const SizedBox(height: 2),
             Row(
               children: [
                 Expanded(
                   child: SizedBox(
-                    height: 32,
+                    height: 28,
                     child: OutlinedButton(
                       key: const Key('android-playback-capture-start'),
                       onPressed: _status.supported ? _start : null,
                       style: OutlinedButton.styleFrom(
                         foregroundColor: YinweiColors.textPrimary,
                         visualDensity: VisualDensity.compact,
-                        side: const BorderSide(color: YinweiColors.hairlineStrong),
+                        side: const BorderSide(
+                            color: YinweiColors.hairlineStrong),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(10),
                         ),
@@ -180,7 +211,7 @@ class _AndroidPlaybackCapturePanelState
                 const SizedBox(width: 8),
                 Expanded(
                   child: SizedBox(
-                    height: 32,
+                    height: 28,
                     child: OutlinedButton(
                       key: const Key('android-playback-capture-stop'),
                       onPressed: _status.supported || _status.captureActive
@@ -189,7 +220,8 @@ class _AndroidPlaybackCapturePanelState
                       style: OutlinedButton.styleFrom(
                         foregroundColor: YinweiColors.textPrimary,
                         visualDensity: VisualDensity.compact,
-                        side: const BorderSide(color: YinweiColors.hairlineStrong),
+                        side: const BorderSide(
+                            color: YinweiColors.hairlineStrong),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(10),
                         ),
@@ -200,10 +232,10 @@ class _AndroidPlaybackCapturePanelState
                 ),
               ],
             ),
-            const SizedBox(height: 4),
+            const SizedBox(height: 2),
             SizedBox(
               width: double.infinity,
-              height: 32,
+              height: 28,
               child: OutlinedButton(
                 key: const Key('android-developer-diagnostics-open'),
                 onPressed: () {

@@ -22,8 +22,8 @@ import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
 
 /**
- * Owns MediaProjection + AudioRecord for the A1 capture-only probe.
- * Does not play, spatialize, or persist captured PCM.
+ * Owns MediaProjection + AudioRecord for A1 capture + A2 JNI DSP ingress.
+ * Does not play wet PCM (A3).
  */
 class YinweiPlaybackCaptureService : Service() {
     private val mainHandler = Handler(Looper.getMainLooper())
@@ -34,6 +34,7 @@ class YinweiPlaybackCaptureService : Service() {
     private var chosenEncoding = "PCM_16BIT"
     private var chosenRate = 48000
     private var chosenChannels = 2
+    private val dspEnabled = java.util.concurrent.atomic.AtomicBoolean(false)
 
     private val projectionCallback = object : MediaProjection.Callback() {
         override fun onStop() {
@@ -202,6 +203,7 @@ class YinweiPlaybackCaptureService : Service() {
             "AudioRecord initialized source=PLAYBACK_CAPTURE rate=$chosenRate " +
                 "channels=$chosenChannels encoding=$chosenEncoding",
         )
+        startNativeIngress(record)
         try {
             record.startRecording()
         } catch (e: Exception) {
@@ -275,6 +277,7 @@ class YinweiPlaybackCaptureService : Service() {
                             sourceCaptureRestricted = false
                         }
                     }
+                    pushNativePcm(useFloat, floatBuf, shortBuf, n)
                     if (now - lastLogAt >= 1000L) {
                         val windowRms = if (windowSamples > 0) {
                             kotlin.math.sqrt(windowSumSq / windowSamples)
@@ -289,6 +292,7 @@ class YinweiPlaybackCaptureService : Service() {
                             silent = windowRms < YinweiPlaybackCaptureMetrics.SILENCE_LINEAR,
                         )
                         publishWindow(window, now)
+                        publishNativeSnapshot()
                         windowSamples = 0
                         windowSumSq = 0.0
                         windowPeak = 0.0
@@ -332,6 +336,128 @@ class YinweiPlaybackCaptureService : Service() {
         )
     }
 
+    private fun startNativeIngress(record: AudioRecord) {
+        dspEnabled.set(false)
+        val code = try {
+            YinweiSpatialCoreBridge.start(record.sampleRate, record.channelCount)
+        } catch (e: Exception) {
+            YinweiPlaybackCaptureStore.update {
+                dspState = "Error"
+                dspLibraryLoaded = YinweiSpatialCoreBridge.libraryLoaded
+                nativeLastError = e.message ?: "nativeStart threw"
+            }
+            YinweiPlaybackCaptureStore.log(
+                "DSP",
+                "native ingress start threw: ${e.message} (A1 capture continues)",
+            )
+            return
+        }
+        val snap = YinweiSpatialCoreBridge.snapshot()
+        val nativeErr = snap["nativeLastError"]?.toString()
+        if (code == YinweiSpatialCoreBridge.OK) {
+            dspEnabled.set(true)
+            YinweiPlaybackCaptureStore.update {
+                dspLibraryLoaded = true
+                dspState = snap["dspState"]?.toString() ?: "Starting"
+                nativeLastError = null
+            }
+            YinweiPlaybackCaptureStore.log(
+                "DSP",
+                "native ingress started rate=${record.sampleRate} channels=${record.channelCount}",
+            )
+        } else {
+            YinweiPlaybackCaptureStore.update {
+                dspLibraryLoaded = YinweiSpatialCoreBridge.libraryLoaded
+                dspState = "Error"
+                nativeLastError = nativeErr
+                    ?: YinweiSpatialCoreBridge.loadError
+                    ?: "nativeStart=$code"
+            }
+            YinweiPlaybackCaptureStore.log(
+                "DSP",
+                "native ingress start failed code=$code err=${nativeErr ?: YinweiSpatialCoreBridge.loadError} (A1 capture continues)",
+            )
+        }
+    }
+
+    private fun pushNativePcm(
+        useFloat: Boolean,
+        floatBuf: FloatArray,
+        shortBuf: ShortArray,
+        count: Int,
+    ) {
+        if (!dspEnabled.get() || count <= 0) return
+        val code = try {
+            if (useFloat) {
+                YinweiSpatialCoreBridge.pushFloat(floatBuf, count)
+            } else {
+                YinweiSpatialCoreBridge.pushPcm16(shortBuf, count)
+            }
+        } catch (e: Exception) {
+            dspEnabled.set(false)
+            YinweiPlaybackCaptureStore.update {
+                dspState = "Error"
+                nativeLastError = e.message ?: "nativePush threw"
+            }
+            YinweiPlaybackCaptureStore.log("DSP", "native push threw: ${e.message}")
+            return
+        }
+        if (code != YinweiSpatialCoreBridge.OK &&
+            code != YinweiSpatialCoreBridge.ERR_NOT_STARTED
+        ) {
+            YinweiPlaybackCaptureStore.update {
+                dspState = "Error"
+                nativeLastError = "nativePush=$code"
+            }
+        }
+    }
+
+    private fun publishNativeSnapshot() {
+        val snap = YinweiSpatialCoreBridge.snapshot()
+        YinweiPlaybackCaptureStore.update {
+            dspLibraryLoaded = snap["dspLibraryLoaded"] as? Boolean ?: dspLibraryLoaded
+            (snap["dspState"] as? String)?.let { dspState = it }
+            (snap["nativeInputFrames"] as? Number)?.let { nativeInputFrames = it.toLong() }
+            (snap["nativeConsumedFrames"] as? Number)?.let { nativeConsumedFrames = it.toLong() }
+            (snap["nativeDspChunks"] as? Number)?.let { nativeDspChunks = it.toLong() }
+            (snap["nativeWetFrames"] as? Number)?.let { nativeWetFrames = it.toLong() }
+            (snap["nativeDroppedFrames"] as? Number)?.let { nativeDroppedFrames = it.toLong() }
+            (snap["nativeOverruns"] as? Number)?.let { nativeOverruns = it.toLong() }
+            (snap["nativeQueueDepthFrames"] as? Number)?.let { nativeQueueDepthFrames = it.toLong() }
+            (snap["nativeQueueHighWaterFrames"] as? Number)?.let {
+                nativeQueueHighWaterFrames = it.toLong()
+            }
+            nativeLastError = snap["nativeLastError"] as? String
+            nativeWetRmsDb = snap["nativeWetRmsDb"] as? Double
+            nativeWetPeakDb = snap["nativeWetPeakDb"] as? Double
+            nativeEffectiveAzimuthDeg = snap["nativeEffectiveAzimuthDeg"] as? Double
+            nativeEffectiveElevationDeg = snap["nativeEffectiveElevationDeg"] as? Double
+        }
+        val s = YinweiPlaybackCaptureStore.copy()
+        YinweiPlaybackCaptureStore.log(
+            "DSP",
+            "[YINWEI_ANDROID_DSP] state=${s.dspState} in=${s.nativeInputFrames} " +
+                "consumed=${s.nativeConsumedFrames} chunks=${s.nativeDspChunks} " +
+                "wet=${s.nativeWetFrames} q=${s.nativeQueueDepthFrames} " +
+                "dropped=${s.nativeDroppedFrames} wetRms=${s.nativeWetRmsDb} " +
+                "wetPeak=${s.nativeWetPeakDb}",
+        )
+    }
+
+    private fun stopNativeIngress() {
+        dspEnabled.set(false)
+        try {
+            YinweiSpatialCoreBridge.stop()
+        } catch (_: Exception) {
+        }
+        publishNativeSnapshot()
+        YinweiPlaybackCaptureStore.update {
+            if (dspState == "Starting" || dspState == "Processing") {
+                dspState = "Disconnected"
+            }
+        }
+    }
+
     private fun failAndStop(message: String) {
         YinweiPlaybackCaptureStore.update {
             lastError = message
@@ -344,8 +470,6 @@ class YinweiPlaybackCaptureService : Service() {
 
     private fun stopCaptureInternal(fromRevoke: Boolean) {
         running.set(false)
-        captureThread?.interrupt()
-        captureThread = null
         val rec = recorder
         recorder = null
         if (rec != null) {
@@ -353,6 +477,15 @@ class YinweiPlaybackCaptureService : Service() {
                 rec.stop()
             } catch (_: Exception) {
             }
+        }
+        val thread = captureThread
+        captureThread = null
+        try {
+            thread?.join(1000)
+        } catch (_: Exception) {
+        }
+        stopNativeIngress()
+        if (rec != null) {
             try {
                 rec.release()
             } catch (_: Exception) {

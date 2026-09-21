@@ -22,7 +22,7 @@ class IosRuntimeStatusBanner extends StatelessWidget {
     EngineBackend backend, {
     bool androidCaptureOnly = false,
   }) {
-    if (androidCaptureOnly) return 'CAPTURE-ONLY';
+    if (androidCaptureOnly) return 'Preview / not connected';
     return backend == EngineBackend.native ? 'READY' : 'FAILED';
   }
 
@@ -30,7 +30,7 @@ class IosRuntimeStatusBanner extends StatelessWidget {
     EngineBackend backend, {
     bool androidCaptureOnly = false,
   }) {
-    if (androidCaptureOnly) return 'A1 (no spatial_core)';
+    if (androidCaptureOnly) return 'file engine preview';
     return backend == EngineBackend.native ? 'CONNECTED' : 'ERROR';
   }
 
@@ -54,7 +54,7 @@ class IosRuntimeStatusBanner extends StatelessWidget {
     bool androidCaptureOnly = false,
   }) {
     if (androidCaptureOnly) {
-      return 'Expected on Android A1. Use Start Capture — Play does not spatialize.';
+      return 'File engine stays preview. Start Capture feeds spatial_core over JNI.';
     }
     if (lastError != null &&
         lastError.contains('NoTrackLoaded') &&
@@ -106,11 +106,13 @@ class IosRuntimeStatusBanner extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Engine: $engine', style: style),
+            Text(
+              androidCaptureOnly ? 'File engine: $engine' : 'Engine: $engine',
+              style: style,
+            ),
             Text('Native: $native', style: style),
             Text('Audio: $audio', style: style),
-            if (detail != null && detail.isNotEmpty)
-              Text(detail, style: style),
+            if (detail != null && detail.isNotEmpty) Text(detail, style: style),
           ],
         ),
       ),

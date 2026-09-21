@@ -24,6 +24,9 @@ cpal = { version = "0.15", optional = true }
 [target.'cfg(windows)'.dependencies]
 wasapi = "0.17"
 
+[target.'cfg(target_os = "android")'.dependencies]
+jni = "0.21"
+
 [features]
 default = ["realtime"]
 realtime = ["dep:cpal"]

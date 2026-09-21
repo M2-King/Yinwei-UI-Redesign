@@ -20,13 +20,12 @@ use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::{
     BufferSize, FromSample, Sample, SampleFormat, Stream, StreamConfig, SupportedBufferSize,
 };
-use wasapi::{
-    AudioClient, Direction, SampleType, StreamMode, WaveFormat, initialize_mta,
-};
+use wasapi::{initialize_mta, AudioClient, Direction, SampleType, StreamMode, WaveFormat};
 
 use crate::decode::StereoFrame;
 use crate::error::SpatialError;
-use crate::hrtf_render::{HrtfStreamer, STREAM_CHUNK};
+use crate::hrtf_render::STREAM_CHUNK;
+use crate::live_dsp::LiveDspProcessor;
 use crate::params::{PlaybackMode, SpatialParams};
 use crate::resample::resample_cubic;
 
@@ -339,9 +338,7 @@ impl LiveTransferEngine {
             }
             let frames = self.shared.frames_captured.load(Ordering::Relaxed);
             let energy = self.shared.frames_with_energy.load(Ordering::Relaxed);
-            last = format!(
-                "pid={pid} include_tree={include_tree} frames={frames} energy={energy}"
-            );
+            last = format!("pid={pid} include_tree={include_tree} frames={frames} energy={energy}");
             self.abort_capture(handle);
         }
         let Some(capt) = capt_ok else {
@@ -360,7 +357,9 @@ impl LiveTransferEngine {
     fn prepare_session(&self) {
         self.shared.stop.store(false, Ordering::Relaxed);
         self.shared.running.store(true, Ordering::Relaxed);
-        self.shared.out_needs_restart.store(false, Ordering::Relaxed);
+        self.shared
+            .out_needs_restart
+            .store(false, Ordering::Relaxed);
         if let Ok(mut d) = self.shared.dry_q.lock() {
             d.clear();
         }
@@ -496,7 +495,9 @@ impl LiveTransferEngine {
     fn stop_inner(&self) {
         self.shared.stop.store(true, Ordering::Relaxed);
         self.shared.running.store(false, Ordering::Relaxed);
-        self.shared.out_needs_restart.store(false, Ordering::Relaxed);
+        self.shared
+            .out_needs_restart
+            .store(false, Ordering::Relaxed);
         self.shared.capture_gen.fetch_add(1, Ordering::Relaxed);
         if let Ok(mut w) = self.workers.lock() {
             for h in w.drain(..) {
@@ -515,11 +516,7 @@ impl LiveTransferEngine {
     }
 
     fn open_output(&self) -> Result<(), SpatialError> {
-        open_output_stream(
-            &self.shared,
-            &self.out_stream,
-            &self.output_device_name(),
-        )
+        open_output_stream(&self.shared, &self.out_stream, &self.output_device_name())
     }
 }
 
@@ -654,9 +651,7 @@ where
         device.build_output_stream(
             cfg,
             move |data: &mut [T], _| {
-                if shared.stop.load(Ordering::Relaxed)
-                    || shared.out_hold.load(Ordering::Relaxed)
-                {
+                if shared.stop.load(Ordering::Relaxed) || shared.out_hold.load(Ordering::Relaxed) {
                     for s in data.iter_mut() {
                         *s = T::EQUILIBRIUM;
                     }
@@ -765,7 +760,11 @@ fn descendant_pids(root: u32) -> Vec<u32> {
     out
 }
 
-fn capture_failover_targets(current_pid: u32, include_tree: bool, root_pid: u32) -> Vec<(u32, bool)> {
+fn capture_failover_targets(
+    current_pid: u32,
+    include_tree: bool,
+    root_pid: u32,
+) -> Vec<(u32, bool)> {
     let mut out = vec![(current_pid, include_tree)];
     let root = if root_pid != 0 { root_pid } else { current_pid };
     if root != current_pid || !include_tree {
@@ -799,7 +798,9 @@ fn capture_loop(
 ) -> Result<(), SpatialError> {
     let hr = initialize_mta();
     if hr.is_err() {
-        return Err(SpatialError::AudioDevice(format!("MTA init failed: {hr:?}")));
+        return Err(SpatialError::AudioDevice(format!(
+            "MTA init failed: {hr:?}"
+        )));
     }
 
     if process_id == 0 {
@@ -838,17 +839,14 @@ fn capture_loop(
         .start_stream()
         .map_err(|e| SpatialError::AudioDevice(format!("start capture: {e}")))?;
 
-    if shared.stop.load(Ordering::Relaxed)
-        || shared.capture_gen.load(Ordering::Relaxed) != gen
-    {
+    if shared.stop.load(Ordering::Relaxed) || shared.capture_gen.load(Ordering::Relaxed) != gen {
         let _ = audio_client.stop_stream();
         return Ok(());
     }
 
     let mut byte_q: VecDeque<u8> = VecDeque::with_capacity(blockalign * STREAM_CHUNK * 8);
 
-    while !shared.stop.load(Ordering::Relaxed)
-        && shared.capture_gen.load(Ordering::Relaxed) == gen
+    while !shared.stop.load(Ordering::Relaxed) && shared.capture_gen.load(Ordering::Relaxed) == gen
     {
         let nframes = capture
             .get_next_packet_size()
@@ -936,11 +934,14 @@ fn dsp_loop(shared: Arc<Shared>) -> Result<(), SpatialError> {
     }
     let capture_sr = capture_sr.max(1);
     let device_sr = device_sr.max(1);
-    let mut streamer = HrtfStreamer::new(capture_sr)?;
-    let mut eq = crate::eq::GraphicEq::new(capture_sr);
+    let mut processor = LiveDspProcessor::new(capture_sr)?;
     {
-        let p = shared.params.lock().map_err(|_| SpatialError::LockPoisoned)?;
-        streamer.snap_to_params(&p);
+        let p = shared
+            .params
+            .lock()
+            .map_err(|_| SpatialError::LockPoisoned)?;
+        processor.set_params(p.clone())?;
+        processor.snap_to_current_params();
     }
 
     let mut acc: Vec<StereoFrame> = Vec::with_capacity(STREAM_CHUNK);
@@ -974,34 +975,29 @@ fn dsp_loop(shared: Arc<Shared>) -> Result<(), SpatialError> {
             .lock()
             .map_err(|_| SpatialError::LockPoisoned)?
             .clone();
-        let mode = shared.mode.load();
-        let mut wet: Vec<StereoFrame> = if mode == 0 {
-            chunk
+        processor.set_params(params)?;
+        processor.set_mode(if shared.mode.load() == 0 {
+            PlaybackMode::Original
         } else {
-            let array = shared
-                .array
-                .lock()
-                .map(|g| g.clone())
-                .unwrap_or_default();
-            if array.enabled() {
-                streamer.process_chunk_array(&chunk, &params, &array)?.to_vec()
-            } else {
-                streamer.process_chunk(&chunk, &params)?.to_vec()
-            }
-        };
+            PlaybackMode::Spatial
+        });
+        let array = shared.array.lock().map(|g| g.clone()).unwrap_or_default();
+        processor.set_array(array);
         let eq_db = shared
             .eq_db
             .lock()
             .map(|g| *g)
             .unwrap_or([0.0; crate::eq::EQ_BANDS]);
-        eq.set_gains(capture_sr, eq_db);
-        eq.process_frames(&mut wet);
-        shared
-            .live_az_bits
-            .store(streamer.effective_mid_azimuth_deg(&params).to_bits(), Ordering::Relaxed);
-        shared
-            .live_el_bits
-            .store(streamer.smooth_elevation_deg().to_bits(), Ordering::Relaxed);
+        processor.set_eq(eq_db);
+        let wet = processor.process_chunk(&chunk)?.to_vec();
+        shared.live_az_bits.store(
+            processor.effective_azimuth_deg().to_bits(),
+            Ordering::Relaxed,
+        );
+        shared.live_el_bits.store(
+            processor.effective_elevation_deg().to_bits(),
+            Ordering::Relaxed,
+        );
         // Same contract as RealtimePlayer: HRTF at content/capture rate, cubic to device.
         let out = if capture_sr == device_sr {
             wet
@@ -1018,7 +1014,8 @@ fn dsp_loop(shared: Arc<Shared>) -> Result<(), SpatialError> {
 
 static LIVE: Mutex<Option<Arc<LiveTransferEngine>>> = Mutex::new(None);
 
-pub fn global_live() -> Result<std::sync::MutexGuard<'static, Option<Arc<LiveTransferEngine>>>, SpatialError> {
+pub fn global_live(
+) -> Result<std::sync::MutexGuard<'static, Option<Arc<LiveTransferEngine>>>, SpatialError> {
     LIVE.lock().map_err(|_| SpatialError::LockPoisoned)
 }
 
@@ -1069,9 +1066,7 @@ mod tests {
     #[test]
     fn wait_for_energy_returns_immediately_when_present() {
         let eng = LiveTransferEngine::new();
-        eng.shared
-            .frames_with_energy
-            .store(512, Ordering::Relaxed);
+        eng.shared.frames_with_energy.store(512, Ordering::Relaxed);
         let t = Instant::now();
         assert!(eng.wait_for_energy(Duration::from_millis(200)));
         assert!(t.elapsed() < Duration::from_millis(40));
@@ -1119,7 +1114,12 @@ mod tests {
         }
         eng.set_output_hold(true);
         assert!(eng.shared.out_hold.load(Ordering::Relaxed));
-        assert!(eng.shared.dry_q.lock().map(|d| d.is_empty()).unwrap_or(false));
+        assert!(eng
+            .shared
+            .dry_q
+            .lock()
+            .map(|d| d.is_empty())
+            .unwrap_or(false));
         // start() stop_inner must not drop Dart's pin-before-wet hold.
         let keep = eng.shared.out_hold.load(Ordering::Relaxed);
         eng.stop_inner();

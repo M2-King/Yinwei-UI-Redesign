@@ -63,7 +63,7 @@ class EngineBootstrap {
       case NativeLibraryLoadMode.macDylib:
         return 'Mock · spatial_core unavailable · ${loadError ?? 'native library missing'}';
       case NativeLibraryLoadMode.androidUnavailable:
-        return 'Android A1 capture-only · spatial_core not connected';
+        return 'Android A2 · file engine preview · not connected';
     }
   }
 }

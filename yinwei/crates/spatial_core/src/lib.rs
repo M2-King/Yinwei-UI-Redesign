@@ -9,17 +9,24 @@ mod layout;
 mod mid_side;
 mod params;
 mod presets;
-mod reverb;
 mod resample;
+mod reverb;
 
+#[cfg(feature = "realtime")]
+mod ffi;
+#[cfg(feature = "realtime")]
+mod frb_api;
+mod live_dsp;
+mod live_ingress;
+mod live_pcm;
+mod live_queue;
 #[cfg(feature = "realtime")]
 mod playback;
 #[cfg(feature = "realtime")]
 mod session;
-#[cfg(feature = "realtime")]
-mod frb_api;
-#[cfg(feature = "realtime")]
-mod ffi;
+
+#[cfg(target_os = "android")]
+mod android_live_ingress;
 #[cfg(all(feature = "realtime", windows))]
 mod live_transfer;
 
@@ -32,21 +39,28 @@ pub(crate) fn runtime_log(msg: &str) {
 
 pub use decode::{save_wav, write_test_sine_wav, DecodedAudio, StereoFrame};
 pub use error::SpatialError;
-pub use hrtf_render::{spherical_to_vec, HrtfRenderer};
-pub use params::{
-    MotionMode, PlaybackMode, SpatialParams, TrackInfo, DEFAULT_PARAMS,
-};
-#[cfg(feature = "realtime")]
-pub use playback::RealtimePlayer;
-pub use presets::{apply_preset, PositionPreset, PRESET_TABLE};
-#[cfg(feature = "realtime")]
-pub use session::{global_session, PlayerSession};
 #[cfg(feature = "realtime")]
 pub use frb_api::{
     api_apply_preset, api_current_azimuth_deg, api_current_elevation_deg, api_dispose,
     api_export_wav, api_is_playing, api_is_preview_dirty, api_open, api_pause, api_play,
     api_position_ms, api_rebuild_preview, api_seek_ms, api_set_mode, api_set_params, new_session,
 };
+pub use hrtf_render::{spherical_to_vec, HrtfRenderer, STREAM_CHUNK};
+pub use live_dsp::LiveDspProcessor;
+pub use live_ingress::{
+    session_push_f32, session_push_i16, session_set_mode, session_set_params, session_snapshot,
+    session_start, session_stop, DspBridgeState, IngressSnapshot, LiveIngress,
+};
+pub use live_pcm::{
+    frames_from_interleaved_f32, frames_from_interleaved_i16, pcm16_to_f32, sanitize_f32,
+};
+pub use live_queue::{BoundedFrameQueue, LIVE_INPUT_Q_CHUNKS, LIVE_INPUT_Q_FRAMES};
+pub use params::{MotionMode, PlaybackMode, SpatialParams, TrackInfo, DEFAULT_PARAMS};
+#[cfg(feature = "realtime")]
+pub use playback::RealtimePlayer;
+pub use presets::{apply_preset, PositionPreset, PRESET_TABLE};
+#[cfg(feature = "realtime")]
+pub use session::{global_session, PlayerSession};
 
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
@@ -98,8 +112,7 @@ impl Engine {
         }
 
         let decoded = load_audio(path)?;
-        let duration_ms =
-            (decoded.frames.len() as u64 * 1000) / decoded.sample_rate.max(1) as u64;
+        let duration_ms = (decoded.frames.len() as u64 * 1000) / decoded.sample_rate.max(1) as u64;
 
         let meta = TrackInfo {
             title: decoded.title.clone(),
@@ -180,7 +193,6 @@ impl Engine {
     }
 
     pub fn params(&self) -> Result<SpatialParams, SpatialError> {
-
         let g = self.inner.lock().map_err(|_| SpatialError::LockPoisoned)?;
         Ok(g.params.clone())
     }
@@ -196,7 +208,10 @@ impl Engine {
         Ok(g.mode)
     }
 
-    pub fn apply_position_preset(&self, preset: PositionPreset) -> Result<SpatialParams, SpatialError> {
+    pub fn apply_position_preset(
+        &self,
+        preset: PositionPreset,
+    ) -> Result<SpatialParams, SpatialError> {
         let mut g = self.inner.lock().map_err(|_| SpatialError::LockPoisoned)?;
         apply_preset(&mut g.params, preset);
         Ok(g.params.clone())
@@ -279,10 +294,7 @@ impl Engine {
                 source_frames
             }
             PlaybackMode::Spatial => {
-                let renderer = g
-                    .renderer
-                    .as_mut()
-                    .ok_or(SpatialError::NoTrackLoaded)?;
+                let renderer = g.renderer.as_mut().ok_or(SpatialError::NoTrackLoaded)?;
                 renderer.render(&source_frames, &params, on_progress)?
             }
         };

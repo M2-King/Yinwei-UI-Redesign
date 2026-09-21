@@ -23,9 +23,8 @@ class MobileNowPlayingHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     final native = backend == EngineBackend.native;
     final title = controller.hasOpenedFile ? controller.track.title : 'Ready';
-    final subtitle = controller.hasOpenedFile
-        ? controller.track.artist
-        : 'Open a file';
+    final subtitle =
+        controller.hasOpenedFile ? controller.track.artist : 'Open a file';
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -55,7 +54,8 @@ class MobileNowPlayingHeader extends StatelessWidget {
         Text(
           _backendLine(native),
           style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                color: native ? YinweiColors.success : YinweiColors.textTertiary,
+                color:
+                    native ? YinweiColors.success : YinweiColors.textTertiary,
               ),
         ),
       ],
@@ -65,8 +65,11 @@ class MobileNowPlayingHeader extends StatelessWidget {
   String _backendLine(bool native) {
     if (androidCaptureOnly) {
       final label = controller.backendLabel;
-      if (label.toLowerCase().contains('a1')) return label;
-      return 'Android A1 capture-only · spatial_core not connected';
+      if (label.toLowerCase().contains('a2') ||
+          label.toLowerCase().contains('preview')) {
+        return label;
+      }
+      return 'Android A2 · file engine preview · capture uses JNI spatial_core';
     }
     if (native) return controller.backendLabel;
     return 'Mock · ${loadError ?? 'spatial_core not linked'}';
