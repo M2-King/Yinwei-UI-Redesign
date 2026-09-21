@@ -50,3 +50,4 @@ class YinweiPlaybackCaptureStartTest {
         assertEquals(true, YinweiPlaybackCaptureStart.usesDefaultDisplayProjectionConfig(34))
         assertEquals(true, YinweiPlaybackCaptureStart.usesDefaultDisplayProjectionConfig(36))
     }
+}
