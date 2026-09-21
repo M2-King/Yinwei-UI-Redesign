@@ -11,7 +11,7 @@ dependencies:
     sdk: flutter
   cupertino_icons: ^1.0.8
   crypto: ^3.0.3
-  file_picker: ^8.0.0
+  file_picker: ^10.3.10
   desktop_drop: ^0.8.4
   path_provider: ^2.1.4
   provider: ^6.1.2
