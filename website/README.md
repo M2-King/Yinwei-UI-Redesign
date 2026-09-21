@@ -10,9 +10,9 @@ The live site is on **Tencent EdgeOne Makers (China)**:
 
 https://workspace-khz2prs8-qjvhzxns.edgeone.cool/
 
-The Android APK is served through a China-reachable GitHub proxy (**ghfast.top**). JSDMirror rejects this 49.6MB file (403). Direct GitHub is often unreachable on mainland networks.
+The Android APK is served through a China-reachable GitHub proxy (**ghfast.top**). JSDMirror rejects this ~51MB file (403). Direct GitHub is often unreachable on mainland networks.
 
-https://ghfast.top/https://github.com/M2-King/Yinwei-UI-Redesign/raw/refs/heads/cursor/android-a1-capture-consent-9d7c/website/downloads/Yinwei-Android-A1-Preview.apk
+https://ghfast.top/https://github.com/M2-King/Yinwei-UI-Redesign/raw/refs/heads/cursor/android-a2-dsp-bridge-9d7c/website/downloads/Yinwei-Android-A2-Preview.apk
 
 Anonymous EdgeOne projects must be **claimed** in the Tencent Cloud China console or they are removed. Claim from the CLI output of `scripts/deploy-edgeone-china.sh`. Do not commit API tokens or claim secrets.
 
@@ -36,7 +36,7 @@ website/
   css/site.css
   js/site.js
   img/
-  downloads/           # MANIFEST.json + Android A1 Preview APK
+  downloads/           # MANIFEST.json + Android A2 Preview APK
   scripts/fetch-android-apk.sh
   scripts/deploy-edgeone-china.sh
   scripts/deploy.sh    # optional SSH path if a host alias exists
@@ -44,14 +44,15 @@ website/
 
 ## Downloads
 
-### Android A1 Preview
+### Android A2 Preview
 
-File: `downloads/Yinwei-Android-A1-Preview.apk`
+File: `downloads/Yinwei-Android-A2-Preview.apk`
 
-- Commit `fbe47c9` · workflow `35605274210`
-- 49,607,281 bytes
-- SHA-256 `d636a88b2bef4141a4394487fda9ecace1ab18338ce1a4aea7467a519709eb67`
-- Preview / test build. Not production. Not HRTF Live Transfer.
+- Commit `dfb1cb6` · workflow `35612161963`
+- 51,360,447 bytes
+- SHA-256 `aaad5aae826e2001e0c62292bbd0d1abe27fc77c5b9800d75a07a6d8a52ab465`
+- Preview / test build. Capture → JNI → spatial_core HRTF DSP.
+- Wet frames are measured and discarded. No wet output yet. Not A3.
 - Android 10+ for playback capture.
 
 Refresh the local copy from GitHub Actions:

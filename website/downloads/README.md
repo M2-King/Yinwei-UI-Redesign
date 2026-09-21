@@ -1,9 +1,15 @@
 # Website downloads
 
-Release binaries are **not** stored in git.
+The public Android preview APK is stored here so mainland networks can fetch it through ghfast.top.
 
-Use `../scripts/fetch-android-apk.sh` (from `website/`) or `./scripts/fetch-android-apk.sh` from this folder's parent to place:
+Current file:
 
-`Yinwei-Android-A1-Preview.apk`
+`Yinwei-Android-A2-Preview.apk`
 
 See `MANIFEST.json` for SHA-256, commit, and workflow run.
+
+Refresh the local copy from GitHub Actions:
+
+```bash
+../scripts/fetch-android-apk.sh
+```

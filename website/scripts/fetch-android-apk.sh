@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
-# Fetch the successful Android A1 APK from GitHub Actions.
+# Fetch the successful Android A2 APK from GitHub Actions.
 # Requires authenticated gh for private artifacts.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-OUT="$ROOT/downloads/Yinwei-Android-A1-Preview.apk"
-EXPECTED_SHA="d636a88b2bef4141a4394487fda9ecace1ab18338ce1a4aea7467a519709eb67"
-RUN_ID="${YINWEI_ANDROID_RUN_ID:-35605274210}"
-ARTIFACT_NAME="${YINWEI_ANDROID_ARTIFACT:-yinwei-android-live-transfer-a1}"
+OUT="$ROOT/downloads/Yinwei-Android-A2-Preview.apk"
+EXPECTED_SHA="aaad5aae826e2001e0c62292bbd0d1abe27fc77c5b9800d75a07a6d8a52ab465"
+RUN_ID="${YINWEI_ANDROID_RUN_ID:-35612161963}"
+ARTIFACT_NAME="${YINWEI_ANDROID_ARTIFACT:-yinwei-android-live-transfer-a2}"
 REPO="${YINWEI_GITHUB_REPO:-M2-King/Yinwei-UI-Redesign}"
 
 mkdir -p "$ROOT/downloads"
@@ -24,8 +24,8 @@ tmp="$(mktemp -d)"
 cleanup() { rm -rf "$tmp"; }
 trap cleanup EXIT
 
-if [[ -f /tmp/a1-apk2/yinwei-android-live-transfer-a1-641267b.apk ]]; then
-  cp /tmp/a1-apk2/yinwei-android-live-transfer-a1-641267b.apk "$OUT"
+if [[ -f /tmp/a2-apk/yinwei-android-live-transfer-a2-36c7f96.apk ]]; then
+  cp /tmp/a2-apk/yinwei-android-live-transfer-a2-36c7f96.apk "$OUT"
 else
   gh run download "$RUN_ID" --repo "$REPO" -n "$ARTIFACT_NAME" -D "$tmp"
   found="$(find "$tmp" -name '*.apk' | head -n 1)"
