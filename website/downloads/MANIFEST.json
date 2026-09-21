@@ -13,7 +13,9 @@
     "bytes": 49607281,
     "sha256": "697325d506a6f7d4dd7f8d0b5c9437d400204c4da02af80ad54d6fab2a4b18fb",
     "minAndroid": "10",
-    "notes": "External playback capture validation. Not production. Not HRTF Live Transfer."
+    "publicPage": "https://workspace-jf3znr8o-wyagttnf.edgeone.cool/",
+    "publicApk": "https://cdn.jsdmirror.com/gh/M2-King/Yinwei-UI-Redesign@yinwei-ui-redesign/website/downloads/Yinwei-Android-A1-Preview.apk",
+    "notes": "External playback capture validation. Not production. Not HRTF Live Transfer. Site is Tencent EdgeOne China; APK is GitHub via JSDMirror (EdgeOne)."
   },
   "windows": {
     "available": false,

@@ -26,6 +26,15 @@
     }
   });
 
+  const apk = document.getElementById("apk-download");
+  if (
+    apk &&
+    apk.dataset.cdn &&
+    !/^(localhost|127\.0\.0\.1)$/.test(location.hostname)
+  ) {
+    apk.href = apk.dataset.cdn;
+  }
+
   const az = document.getElementById("az");
   const el = document.getElementById("el");
   const dist = document.getElementById("dist");

@@ -3,5 +3,6 @@ downloads/*.ipa
 downloads/*.zip
 downloads/*.exe
 downloads/*.msi
+!downloads/Yinwei-Android-A1-Preview.apk
 .DS_Store
 *.log
