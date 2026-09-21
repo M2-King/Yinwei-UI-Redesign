@@ -48,9 +48,9 @@ website/
 
 File: `downloads/Yinwei-Android-A1-Preview.apk`
 
-- Commit `0af2394` · workflow `35585966529`
+- Commit `fbe47c9` · workflow `35605274210`
 - 49,607,281 bytes
-- SHA-256 `3d0f76f1447939c105a925a76fbdaf60ab2100d0758c249b1a965a3c6f78d6d8`
+- SHA-256 `d636a88b2bef4141a4394487fda9ecace1ab18338ce1a4aea7467a519709eb67`
 - Preview / test build. Not production. Not HRTF Live Transfer.
 - Android 10+ for playback capture.
 
