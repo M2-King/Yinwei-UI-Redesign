@@ -52,7 +52,7 @@ class SystemLiveMonitorBar extends StatelessWidget {
         subtitle = 'HRTF ON · 连接中 · $app · pid ${s.pid}';
       } else {
         subtitle = s.playing
-            ? 'SMTC · $app · pid ${s.pid} · 音乐走扬声器，湿声选耳机（勿静音源 App）'
+            ? 'SMTC · $app · pid ${s.pid} · 湿声默认跟随系统输出（Nahimic 可共享；勿静音源 App）'
             : 'SMTC · $app paused · pid ${s.pid}';
       }
     } else {
@@ -178,13 +178,13 @@ class _WetOutputPicker extends StatelessWidget {
     final selected = liveTransfer.selectedOutput;
     final label = selected.isEmpty ? '湿声：默认输出' : '湿声：${_short(selected)}';
     return PopupMenuButton<String>(
-      tooltip: 'Yinwei 湿声输出（选耳机）。音乐 App 请在系统音量合成器走扬声器；可静音扬声器设备，勿静音源 App。',
+      tooltip: 'Yinwei 湿声输出。默认跟随 Windows 当前输出（含 Nahimic Sound Sharing）。显式选耳机才会把音乐 App 分到静音扬声器。勿静音源 App。',
       onSelected: onSelectOutput,
       itemBuilder: (context) {
         return [
           const PopupMenuItem(
             value: '',
-            child: Text('默认输出'),
+            child: Text('默认输出（跟随系统 / Nahimic）'),
           ),
           ...devices.map(
             (d) => PopupMenuItem(

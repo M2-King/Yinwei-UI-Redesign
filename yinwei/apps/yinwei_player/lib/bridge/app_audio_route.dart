@@ -4,8 +4,9 @@ import 'dart:io';
 import 'package:path_provider/path_provider.dart';
 
 /// Windows per-app output routing (EarTrumpet / AudioPolicyConfig).
-/// Does **not** mute the source app session — moves it to speakers so
-/// headphones can hold Yinwei wet only.
+/// Used only after an **explicit** wet-output pick (headphones).
+/// Default wet output follows Windows default / Nahimic Sound Sharing and
+/// must not mute speakers or pin apps away from that mix.
 class AppAudioSplit {
   const AppAudioSplit({
     required this.headphonesName,
@@ -322,6 +323,9 @@ function Get-RenderDevices {
 
 function Classify([string]$name) {
   $n = $name.ToLowerInvariant()
+  # Keep in sync with WetOutputPolicy.classify (wet_output_policy.dart).
+  # Nahimic / A-Volute Sound Sharing must not be ignored or muted as "virtual".
+  if ($n -match 'nahimic|a-volute|avolute|sound sharing') { return 'nahimic' }
   if ($n -match 'todesk|steam|virtual|cable|vb-audio|nvidia|oculus|meta|vac ') { return 'ignore' }
   if ($n -match '耳机|headphone|headset|wh-|airpods|buds|earbuds') { return 'headphones' }
   if ($n -match '扬声器|speakers?') { return 'speakers' }
@@ -330,10 +334,11 @@ function Classify([string]$name) {
 
 if ($Action -eq 'list') {
   $col = Get-RenderDevices
-  $phone = $null; $spk = $null
+  $phone = $null; $spk = $null; $nah = $null
   foreach ($d in $col) {
     $k = Classify $d.Name
     if ($k -eq 'headphones' -and -not $phone) { $phone = $d }
+    if ($k -eq 'nahimic' -and -not $nah) { $nah = $d }
     if ($k -eq 'speakers') {
       if (-not $spk) { $spk = $d }
       elseif ($d.Name -match 'Realtek|Realtek') { $spk = $d }
@@ -341,6 +346,7 @@ if ($Action -eq 'list') {
   }
   if ($phone) { Write-Output ("headphones|" + $phone.Name + "|" + $phone.Id) }
   if ($spk) { Write-Output ("speakers|" + $spk.Name + "|" + $spk.Id) }
+  if ($nah) { Write-Output ("nahimic|" + $nah.Name + "|" + $nah.Id) }
   exit 0
 }
 

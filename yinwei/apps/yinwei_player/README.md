@@ -6,10 +6,14 @@ Flutter desktop shell for 音围 / Yinwei Spatial.
 
 Code in-tree is **not** listen-accepted. Overlay on the same output device is preview-grade: WASAPI process loopback **copies** PCM; the music app still plays dry on its device.
 
-### Device split (required to hear wet Spatial)
+### Device split (optional)
 
-1. In **Windows Volume Mixer** (or per-app output), route 汽水 / 网易云 / Spotify / QQ 音乐 to **speakers**.
-2. In Yinwei Full, pick **headphones** as wet output (headphones icon on the SMTC strip). Empty = default device.
+Wet output **defaults to the Windows default render device** (empty picker = follow default, including Nahimic Sound Sharing). Transfer no longer auto-locks to a Sony `WH-` headset just because headphones are plugged in.
+
+To isolate wet Spatial from dry source audio:
+
+1. In Yinwei Full, pick **headphones** as wet output (headphones icon on the SMTC strip). Empty = default device.
+2. In **Windows Volume Mixer** (or per-app output), route 汽水 / 网易云 / Spotify / QQ 音乐 to **speakers**, or let Yinwei pin that split after an explicit headphone pick.
 3. Start Transfer. A/B Spatial vs Original on the visualizer / mode chip.
 4. If the room must be quiet, **mute the speaker device**. Never mute the music **app** session (`setSourceMuted` is a no-op — 汽水 / Spotify auto-pause).
 
