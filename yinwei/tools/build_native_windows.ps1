@@ -44,6 +44,7 @@ function Test-LiveSymbols([string]$DllPath, [string]$Dumpbin) {
     "yinwei_live_captured_frames",
     "yinwei_live_energy_frames",
     "yinwei_live_set_output_device",
+    "yinwei_live_default_output_device",
     "yinwei_live_set_output_hold",
     "yinwei_set_speaker_count",
     "yinwei_live_set_speaker_count"

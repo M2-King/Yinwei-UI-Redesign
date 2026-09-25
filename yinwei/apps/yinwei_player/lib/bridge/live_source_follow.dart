@@ -47,6 +47,7 @@ class LiveSourceFollow {
   }
 
   /// Wet HRTF stays silent until the source tree is pinned to muted speakers.
-  /// No headphones/speakers split keeps overlay-preview (dry+wet on one device).
+  /// No headphones/speakers split keeps overlay-preview on the Windows
+  /// default device (Nahimic Sound Sharing can duplicate that mix).
   static bool holdWetUntilPinned({required bool splitDetected}) => splitDetected;
 }
