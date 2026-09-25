@@ -4,9 +4,10 @@ import 'dart:io';
 import 'package:path_provider/path_provider.dart';
 
 /// Windows per-app output routing (EarTrumpet / AudioPolicyConfig).
-/// Used only after an **explicit** wet-output pick (headphones).
-/// Default wet output follows Windows default / Nahimic Sound Sharing and
-/// must not mute speakers or pin apps away from that mix.
+/// Pins the music app to **muted speakers** only when those speakers are
+/// not the wet destination. Wet stays on Windows default (or an explicit
+/// pick) so Sony `WH-` names do not lock the stream. Nahimic sharing of
+/// the default mix is preserved when speakers *are* the wet device.
 class AppAudioSplit {
   const AppAudioSplit({
     required this.headphonesName,

@@ -293,6 +293,24 @@ class YinweiBindings {
     return fn();
   }
 
+  String liveDefaultOutputDevice() {
+    try {
+      final fn = _lib.lookupFunction<_ErrNative, _ErrDart>(
+          'yinwei_live_default_output_device');
+      const cap = 1024;
+      final buf = calloc<Uint8>(cap);
+      try {
+        final code = fn(buf.cast<Char>(), cap);
+        if (code != 0) return '';
+        return buf.cast<Utf8>().toDartString().trim();
+      } finally {
+        calloc.free(buf);
+      }
+    } catch (_) {
+      return '';
+    }
+  }
+
   List<String> liveListOutputDevices() {
     final fn = _lib.lookupFunction<_ErrNative, _ErrDart>(
         'yinwei_live_list_output_devices');

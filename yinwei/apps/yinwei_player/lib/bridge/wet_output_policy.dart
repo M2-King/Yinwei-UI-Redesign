@@ -1,12 +1,11 @@
 /// Wet HRTF output routing.
 ///
-/// Default (empty [selectedOutput]) follows the Windows default render
-/// device so Bluetooth headsets, speaker swaps, and Nahimic Sound Sharing
-/// stay on the same mix the OS/APO already expose.
+/// Empty [selectedOutput] follows the Windows default render device so
+/// Bluetooth swaps and Nahimic Sound Sharing stay on the OS mix.
 ///
-/// Detected Sony `WH-` headphones must **not** overwrite that default.
-/// Auto-split (music → muted speakers) is only for an explicit named pick
-/// that is not a Nahimic sharing endpoint.
+/// Detected Sony `WH-` names must **not** overwrite that default.
+/// Dry source audio is pinned to **muted speakers only when those speakers
+/// are not the wet destination** — otherwise the room hears dry+wet overlay.
 enum AudioEndpointKind { headphones, speakers, nahimic, ignore, other }
 
 class WetOutputPlan {
@@ -16,12 +15,13 @@ class WetOutputPlan {
     required this.wetDeviceName,
     required this.pinWetToHeadphones,
     required this.nahimicSharing,
+    required this.speakersAreWet,
   });
 
   /// Empty wet name → cpal `default_output_device()`.
   final bool followSystemDefault;
 
-  /// Pin the music app to muted speakers (listen split).
+  /// Pin the music app to muted speakers so dry is not heard with wet.
   final bool splitRoute;
 
   /// Name passed to `yinwei_live_set_output_device`. Empty = default.
@@ -30,8 +30,11 @@ class WetOutputPlan {
   /// Legacy auto-lock. Always false — Transfer must not overwrite selection.
   final bool pinWetToHeadphones;
 
-  /// Nahimic / A-Volute device is in the mix; do not mute the default path.
+  /// Nahimic / A-Volute device is in the mix.
   final bool nahimicSharing;
+
+  /// Muting speakers would also mute wet (same endpoint as default/pick).
+  final bool speakersAreWet;
 }
 
 class WetOutputPolicy {
@@ -61,6 +64,18 @@ class WetOutputPolicy {
   static bool looksLikeNahimic(String name) =>
       classify(name) == AudioEndpointKind.nahimic;
 
+  static bool sameEndpoint(String a, String b) {
+    final x = a.trim().toLowerCase();
+    final y = b.trim().toLowerCase();
+    if (x.isEmpty || y.isEmpty) return false;
+    if (x == y) return true;
+    const min = 8;
+    if (x.length >= min && y.length >= min && (x.contains(y) || y.contains(x))) {
+      return true;
+    }
+    return false;
+  }
+
   /// Keep in sync with Classify() in [app_audio_route.dart] PowerShell.
   static AudioEndpointKind classify(String name) {
     final n = name.trim();
@@ -72,34 +87,69 @@ class WetOutputPolicy {
     return AudioEndpointKind.other;
   }
 
+  static String resolvedWetName({
+    required String selectedOutput,
+    required String defaultDeviceName,
+  }) {
+    final selected = selectedOutput.trim();
+    if (selected.isNotEmpty) return selected;
+    return defaultDeviceName.trim();
+  }
+
+  static bool speakersHoldWet({
+    required String wetResolved,
+    required String speakersName,
+  }) {
+    final speakers = speakersName.trim();
+    if (speakers.isEmpty) return false;
+    if (sameEndpoint(wetResolved, speakers)) return true;
+    final wetKind = classify(wetResolved);
+    final spkKind = classify(speakers);
+    if (wetKind == AudioEndpointKind.headphones) return false;
+    return (wetKind == AudioEndpointKind.speakers ||
+            wetKind == AudioEndpointKind.nahimic) &&
+        (spkKind == AudioEndpointKind.speakers ||
+            spkKind == AudioEndpointKind.nahimic);
+  }
+
   static WetOutputPlan plan({
     required String selectedOutput,
     String? detectedHeadphonesName,
+    String? detectedSpeakersName,
     required bool splitDetected,
     required Iterable<String> outputDevices,
+    String defaultDeviceName = '',
   }) {
     final selected = selectedOutput.trim();
-    final wouldHaveLocked = (detectedHeadphonesName ?? '').trim().isNotEmpty;
-    final nahimicSharing =
-        nahimicPresent(outputDevices) || looksLikeNahimic(selected);
-    if (selected.isEmpty) {
-      return WetOutputPlan(
-        followSystemDefault: true,
-        splitRoute: false,
-        wetDeviceName: '',
-        // Sony WH- in [detectedHeadphonesName] must not pin wet.
-        pinWetToHeadphones: wouldHaveLocked ? false : false,
-        nahimicSharing: nahimicSharing,
-      );
+    final speakers = (detectedSpeakersName ?? '').trim();
+    final phones = (detectedHeadphonesName ?? '').trim();
+    final nahimicSharing = nahimicPresent(outputDevices) ||
+        looksLikeNahimic(selected) ||
+        looksLikeNahimic(defaultDeviceName) ||
+        looksLikeNahimic(speakers);
+    final wetResolved = resolvedWetName(
+      selectedOutput: selected,
+      defaultDeviceName: defaultDeviceName,
+    );
+    var speakersAreWet =
+        speakersHoldWet(wetResolved: wetResolved, speakersName: speakers);
+    if (wetResolved.isEmpty && speakers.isNotEmpty && phones.isNotEmpty) {
+      // Unknown Windows default + a separate headset: assume wet is on the
+      // headset (typical BT default) so speakers can be muted without
+      // silencing wet.
+      speakersAreWet = false;
     }
     final splitRoute = splitDetected &&
-        classify(selected) == AudioEndpointKind.headphones;
+        speakers.isNotEmpty &&
+        !speakersAreWet &&
+        (phones.isNotEmpty || selected.isNotEmpty);
     return WetOutputPlan(
-      followSystemDefault: false,
+      followSystemDefault: selected.isEmpty,
       splitRoute: splitRoute,
       wetDeviceName: selected,
-      pinWetToHeadphones: wouldHaveLocked ? false : false,
+      pinWetToHeadphones: false,
       nahimicSharing: nahimicSharing,
+      speakersAreWet: speakersAreWet,
     );
   }
 
@@ -108,9 +158,26 @@ class WetOutputPolicy {
     required String selectedOutput,
     String? detectedHeadphonesName,
   }) {
-    if (detectedHeadphonesName != null && detectedHeadphonesName.trim().isNotEmpty) {
+    if (detectedHeadphonesName != null &&
+        detectedHeadphonesName.trim().isNotEmpty) {
       return selectedOutput.trim();
     }
     return selectedOutput.trim();
+  }
+
+  static String transferNote(WetOutputPlan plan) {
+    if (plan.splitRoute) {
+      if (plan.followSystemDefault) {
+        return '汽水→扬声器（已静音），湿声→系统默认输出';
+      }
+      return '汽水→扬声器（已静音），湿声→${plan.wetDeviceName}';
+    }
+    if (plan.speakersAreWet) {
+      return '湿声就在扬声器上，未静音（否则湿声一起没）；干+湿可能叠听';
+    }
+    if (plan.followSystemDefault) {
+      return '湿声走系统默认输出（可跟随设备切换 / Nahimic Sound Sharing）';
+    }
+    return '同一输出上仍可能干+湿叠听';
   }
 }

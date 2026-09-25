@@ -559,26 +559,23 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
 
     // Honor the picker: empty = Windows default (Nahimic-compatible).
     // Never copy detectSplit()'s Sony/WH- name onto wet output.
+    _live.refreshDevices();
     _live.setOutputDevice(
       WetOutputPolicy.wetNameAfterDetect(
         selectedOutput: _live.selectedOutput,
         detectedHeadphonesName: _split?.headphonesName,
       ),
     );
-    var splitNote = WetOutputPolicy.followSystemDefault(_live.selectedOutput)
-        ? '湿声走系统默认输出（可跟随设备切换 / Nahimic Sound Sharing）'
-        : '同一输出上仍可能干+湿叠听';
-    final wantNamedSplit =
-        !WetOutputPolicy.followSystemDefault(_live.selectedOutput);
-    final detected = wantNamedSplit
-        ? (_split ?? await _audioRoute.detectSplit())
-        : null;
+    final detected = _split ?? await _audioRoute.detectSplit();
     final plan = WetOutputPolicy.plan(
       selectedOutput: _live.selectedOutput,
       detectedHeadphonesName: detected?.headphonesName,
+      detectedSpeakersName: detected?.speakersName,
       splitDetected: detected != null,
       outputDevices: _live.outputDevices,
+      defaultDeviceName: _live.defaultOutputName,
     );
+    var splitNote = WetOutputPolicy.transferNote(plan);
     final split = plan.splitRoute ? detected : null;
     final holdWet =
         LiveSourceFollow.holdWetUntilPinned(splitDetected: split != null);
@@ -659,23 +656,46 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
     int gen, {
     required bool keepSpeakerMute,
   }) async {
-    var splitNote = WetOutputPolicy.followSystemDefault(_live.selectedOutput)
-        ? '湿声走系统默认输出（可跟随设备切换 / Nahimic Sound Sharing）'
-        : '同一输出上仍可能干+湿叠听';
-    if (gen != _routeGen) return splitNote;
-    if (WetOutputPolicy.followSystemDefault(_live.selectedOutput)) {
-      _split = null;
-      return splitNote;
+    if (gen != _routeGen) {
+      return WetOutputPolicy.transferNote(
+        WetOutputPolicy.plan(
+          selectedOutput: _live.selectedOutput,
+          splitDetected: false,
+          outputDevices: _live.outputDevices,
+          defaultDeviceName: _live.defaultOutputName,
+        ),
+      );
     }
     final split = _split ?? await _audioRoute.detectSplit();
-    if (gen != _routeGen) return splitNote;
-    if (split == null) return splitNote;
+    if (gen != _routeGen) {
+      return WetOutputPolicy.transferNote(
+        WetOutputPolicy.plan(
+          selectedOutput: _live.selectedOutput,
+          splitDetected: false,
+          outputDevices: _live.outputDevices,
+          defaultDeviceName: _live.defaultOutputName,
+        ),
+      );
+    }
+    if (split == null) {
+      return WetOutputPolicy.transferNote(
+        WetOutputPolicy.plan(
+          selectedOutput: _live.selectedOutput,
+          splitDetected: false,
+          outputDevices: _live.outputDevices,
+          defaultDeviceName: _live.defaultOutputName,
+        ),
+      );
+    }
     final plan = WetOutputPolicy.plan(
       selectedOutput: _live.selectedOutput,
       detectedHeadphonesName: split.headphonesName,
+      detectedSpeakersName: split.speakersName,
       splitDetected: true,
       outputDevices: _live.outputDevices,
+      defaultDeviceName: _live.defaultOutputName,
     );
+    var splitNote = WetOutputPolicy.transferNote(plan);
     if (!plan.splitRoute) {
       _split = null;
       return splitNote;
@@ -691,16 +711,13 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
     );
     if (gen != _routeGen) return splitNote;
     if (routed) {
-      splitNote = '汽水→扬声器（已静音），湿声→${plan.wetDeviceName}';
+      splitNote = WetOutputPolicy.transferNote(plan);
     }
     return splitNote;
   }
 
   Future<void> _selectWetOutput(String name) async {
     _live.setOutputDevice(name);
-    if (WetOutputPolicy.followSystemDefault(name)) {
-      _split = null;
-    }
     if (_live.running) {
       await _stopLiveHrtf();
       await _startLiveHrtf();

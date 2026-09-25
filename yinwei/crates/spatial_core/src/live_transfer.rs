@@ -5,13 +5,13 @@
 //!
 //! Do **not** mute the source app session (`ISimpleAudioVolume` / volume 0):
 //! 汽水 / Spotify auto-pause. Overlay on one device is preview-grade.
+//! Dart `setSourceMuted` is a no-op.
 //!
 //! Wet output: empty device name follows Windows **default** render endpoint
 //! (Bluetooth swaps, Nahimic Sound Sharing APOs). Named devices are explicit
 //! picks only — never auto-lock to a Sony `WH-` headset.
-//! Optional listen split (music → muted speakers) is Dart-side, only when
-//! the user picked headphones. Muting the speaker *device* is OK then.
-//! Dart `setSourceMuted` is a no-op.
+//! Dart mutes a **separate** speaker device so dry+wet do not overlay; it
+//! does not mute speakers when they *are* the wet/default endpoint.
 
 #![cfg(all(feature = "realtime", windows))]
 
@@ -559,11 +559,15 @@ pub fn should_follow_default_device_change(
     !last.is_empty() && !now.is_empty() && last != now
 }
 
-fn current_default_output_name() -> String {
+pub fn default_output_device_name() -> String {
     cpal::default_host()
         .default_output_device()
         .and_then(|d| d.name().ok())
         .unwrap_or_default()
+}
+
+fn current_default_output_name() -> String {
+    default_output_device_name()
 }
 
 fn resolve_output_device(preferred: &str) -> Result<cpal::Device, SpatialError> {

@@ -865,6 +865,20 @@ pub extern "C" fn yinwei_live_last_energy_ms() -> u64 {
     }
 }
 
+/// Current Windows default render device name (cpal). Empty if none.
+#[no_mangle]
+pub extern "C" fn yinwei_live_default_output_device(out: *mut c_char, cap: usize) -> i32 {
+    #[cfg(windows)]
+    {
+        use crate::live_transfer::default_output_device_name;
+        write_cstr(&default_output_device_name(), out, cap)
+    }
+    #[cfg(not(windows))]
+    {
+        write_cstr("", out, cap)
+    }
+}
+
 /// Newline-separated output device names (wet cpal path). Empty name = default.
 #[no_mangle]
 pub extern "C" fn yinwei_live_list_output_devices(out: *mut c_char, cap: usize) -> i32 {

@@ -24,6 +24,7 @@ class LiveTransferController extends ChangeNotifier {
   bool captureHealthy = false;
   List<String> outputDevices = const [];
   String selectedOutput = '';
+  String defaultOutputName = '';
 
   int _prevCaptured = 0;
   int _prevEnergy = 0;
@@ -63,10 +64,15 @@ class LiveTransferController extends ChangeNotifier {
     if (b == null) return;
     try {
       outputDevices = b.liveListOutputDevices();
-      notifyListeners();
     } catch (_) {
       // Optional symbol — older DLLs have no device list.
     }
+    try {
+      defaultOutputName = b.liveDefaultOutputDevice();
+    } catch (_) {
+      defaultOutputName = '';
+    }
+    notifyListeners();
   }
 
   void setOutputDevice(String name) {
