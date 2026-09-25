@@ -81,4 +81,39 @@ void main() {
     expect(find.textContaining('Wrong PID'), findsNothing);
     expect(find.textContaining('include_tree'), findsNothing);
   });
+
+  testWidgets('wet picker defaults to system output, not a named headset', (
+    tester,
+  ) async {
+    final smtc = SystemMediaService();
+    smtc.state = const SystemMediaState(
+      active: true,
+      title: 'Song',
+      playing: true,
+      pid: 4242,
+      processName: 'QQMusic.exe',
+    );
+    final live = LiveTransferController()
+      ..outputDevices = const [
+        'Headphones (WH-1000XM5)',
+        'Speakers (Nahimic Audio)',
+      ];
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: YinweiTheme.dark(),
+        home: Scaffold(
+          body: SystemLiveMonitorBar(
+            systemMedia: smtc,
+            liveTransfer: live,
+            onToggleLiveHrtf: () {},
+          ),
+        ),
+      ),
+    );
+
+    expect(find.textContaining('湿声：默认输出'), findsOneWidget);
+    expect(find.textContaining('湿声默认跟随系统输出'), findsOneWidget);
+    expect(live.selectedOutput, isEmpty);
+  });
 }

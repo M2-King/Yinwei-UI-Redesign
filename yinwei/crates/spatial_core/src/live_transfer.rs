@@ -4,9 +4,14 @@
 //! Device loopback (`pid == 0`) is rejected (feedback risk).
 //!
 //! Do **not** mute the source app session (`ISimpleAudioVolume` / volume 0):
-//! 汽水 / Spotify auto-pause. Overlay on one device is preview-grade; the
-//! workable listen split is music app → speakers, Yinwei wet → headphones.
-//! Muting the speaker *device* is OK. Dart `setSourceMuted` is a no-op.
+//! 汽水 / Spotify auto-pause. Overlay on one device is preview-grade.
+//!
+//! Wet output: empty device name follows Windows **default** render endpoint
+//! (Bluetooth swaps, Nahimic Sound Sharing APOs). Named devices are explicit
+//! picks only — never auto-lock to a Sony `WH-` headset.
+//! Optional listen split (music → muted speakers) is Dart-side, only when
+//! the user picked headphones. Muting the speaker *device* is OK then.
+//! Dart `setSourceMuted` is a no-op.
 
 #![cfg(all(feature = "realtime", windows))]
 
@@ -539,6 +544,28 @@ pub fn list_output_device_names() -> Vec<String> {
     names
 }
 
+/// Empty `preferred` follows the Windows default render device. A named
+/// device stays pinned (user pick). Sony/WH- must not be written here by Dart.
+pub fn should_follow_default_device_change(
+    preferred: &str,
+    last_default_name: &str,
+    now_default_name: &str,
+) -> bool {
+    if !preferred.trim().is_empty() {
+        return false;
+    }
+    let last = last_default_name.trim();
+    let now = now_default_name.trim();
+    !last.is_empty() && !now.is_empty() && last != now
+}
+
+fn current_default_output_name() -> String {
+    cpal::default_host()
+        .default_output_device()
+        .and_then(|d| d.name().ok())
+        .unwrap_or_default()
+}
+
 fn resolve_output_device(preferred: &str) -> Result<cpal::Device, SpatialError> {
     let host = cpal::default_host();
     let needle = preferred.trim();
@@ -609,6 +636,8 @@ fn output_watchdog(
     out_stream: Arc<Mutex<Option<SendStream>>>,
     output_device_name: Arc<Mutex<String>>,
 ) {
+    let mut last_default = current_default_output_name();
+    let mut ticks: u32 = 0;
     while !shared.stop.load(Ordering::Relaxed) {
         if shared.out_needs_restart.swap(false, Ordering::Relaxed) {
             eprintln!("yinwei live: restarting output after device error");
@@ -625,6 +654,29 @@ fn output_watchdog(
             if let Err(e) = open_output_stream(&shared, &out_stream, &preferred) {
                 eprintln!("yinwei live out restart failed: {e}");
                 shared.out_needs_restart.store(true, Ordering::Relaxed);
+            } else if preferred.trim().is_empty() {
+                last_default = current_default_output_name();
+            }
+        } else {
+            ticks = ticks.wrapping_add(1);
+            if ticks % 5 == 0 {
+                let preferred = output_device_name
+                    .lock()
+                    .map(|g| g.clone())
+                    .unwrap_or_default();
+                if preferred.trim().is_empty() {
+                    let now = current_default_output_name();
+                    if should_follow_default_device_change(&preferred, &last_default, &now)
+                    {
+                        eprintln!(
+                            "yinwei live: default output changed {last_default} -> {now}"
+                        );
+                        last_default = now;
+                        shared.out_needs_restart.store(true, Ordering::Relaxed);
+                    } else if last_default.is_empty() {
+                        last_default = now;
+                    }
+                }
             }
         }
         thread::sleep(Duration::from_millis(80));
@@ -1146,5 +1198,39 @@ mod tests {
             (out_secs - in_secs).abs() < 0.002,
             "clock gap: in {in_secs:.4}s out {out_secs:.4}s"
         );
+    }
+
+    #[test]
+    fn empty_preferred_follows_default_device_name_changes() {
+        assert!(should_follow_default_device_change(
+            "",
+            "Speakers (Realtek)",
+            "Headphones (WH-1000XM5)",
+        ));
+        assert!(should_follow_default_device_change(
+            "  ",
+            "Speakers (Nahimic Audio)",
+            "Speakers (Realtek)",
+        ));
+    }
+
+    #[test]
+    fn named_preferred_does_not_chase_windows_default() {
+        assert!(!should_follow_default_device_change(
+            "Headphones (WH-1000XM5)",
+            "Headphones (WH-1000XM5)",
+            "Speakers (Realtek)",
+        ));
+    }
+
+    #[test]
+    fn default_follow_ignores_empty_or_identical_names() {
+        assert!(!should_follow_default_device_change("", "", "Speakers"));
+        assert!(!should_follow_default_device_change("", "Speakers", ""));
+        assert!(!should_follow_default_device_change(
+            "",
+            "Speakers (Realtek)",
+            "Speakers (Realtek)",
+        ));
     }
 }
