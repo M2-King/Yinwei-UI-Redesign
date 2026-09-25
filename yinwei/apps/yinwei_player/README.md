@@ -6,16 +6,18 @@ Flutter desktop shell for 音围 / Yinwei Spatial.
 
 Code in-tree is **not** listen-accepted. Overlay on the same output device is preview-grade: WASAPI process loopback **copies** PCM; the music app still plays dry on its device.
 
-### Device split (optional)
+### Device split
 
-Wet output **defaults to the Windows default render device** (empty picker = follow default, including Nahimic Sound Sharing). Transfer no longer auto-locks to a Sony `WH-` headset just because headphones are plugged in.
+Wet output **defaults to the Windows default render device** (empty picker = follow default). Transfer does not auto-lock to a Sony `WH-` headset by name.
 
-To isolate wet Spatial from dry source audio:
+If a **separate speaker device** exists and it is **not** the wet destination, Yinwei pins the music app to those speakers and **mutes the speaker device**. That keeps dry out of the room / off the wet mix (process loopback still captures the muted render). Never mute the music **app** session (`setSourceMuted` is a no-op — 汽水 / Spotify auto-pause).
 
-1. In Yinwei Full, pick **headphones** as wet output (headphones icon on the SMTC strip). Empty = default device.
-2. In **Windows Volume Mixer** (or per-app output), route 汽水 / 网易云 / Spotify / QQ 音乐 to **speakers**, or let Yinwei pin that split after an explicit headphone pick.
-3. Start Transfer. A/B Spatial vs Original on the visualizer / mode chip.
-4. If the room must be quiet, **mute the speaker device**. Never mute the music **app** session (`setSourceMuted` is a no-op — 汽水 / Spotify auto-pause).
+If the Windows default **is** the speakers (or Nahimic speakers), they stay unmuted — muting them would kill wet and any Nahimic Sound Sharing of that mix. Overlay on that device is preview-grade.
+
+Manual isolation:
+
+1. In Yinwei Full, leave wet on **默认输出** or pick **headphones**.
+2. Start Transfer. A/B Spatial vs Original on the visualizer / mode chip.
 
 Do not treat SMTC title, LIVE labels, or captured-frame counters as proof of wet audio. Pass = wet sound can be heard, toggled, and compared in Full.
 
