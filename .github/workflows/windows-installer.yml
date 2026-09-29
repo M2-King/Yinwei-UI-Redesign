@@ -57,6 +57,29 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
+      # Windows PowerShell 5.x reads UTF-8 scripts without a BOM as ANSI.
+      # The em-dash byte 0x94 is then a curly quote and the .ps1 fails to parse
+      # (same error as a local `powershell -File` on the 2026-09-26 source zip).
+      - name: Make PowerShell scripts Windows-PS5 safe
+        shell: pwsh
+        run: |
+          $map = @{
+            ([char]0x2014) = '--'
+            ([char]0x2013) = '-'
+            ([char]0x00B7) = '-'
+            ([char]0x201C) = '"'
+            ([char]0x201D) = '"'
+            ([char]0x2018) = "'"
+            ([char]0x2019) = "'"
+          }
+          Get-ChildItem -Path yinwei -Filter *.ps1 -Recurse | ForEach-Object {
+            $text = [System.Text.Encoding]::UTF8.GetString([System.IO.File]::ReadAllBytes($_.FullName))
+            foreach ($k in $map.Keys) { $text = $text.Replace([string]$k, [string]$map[$k]) }
+            $enc = New-Object System.Text.UTF8Encoding $true
+            [System.IO.File]::WriteAllText($_.FullName, $text, $enc)
+            Write-Host "Normalized $($_.FullName)"
+          }
+
       - name: Setup MSVC
         uses: ilammy/msvc-dev-cmd@v1
         with:
@@ -87,7 +110,8 @@ jobs:
 
       - name: Build spatial_core.dll
         working-directory: ${{ github.workspace }}/yinwei
-        run: powershell -ExecutionPolicy Bypass -File tools/build_native_windows.ps1
+        shell: pwsh
+        run: pwsh -ExecutionPolicy Bypass -File tools/build_native_windows.ps1
 
       - name: Flutter pub get
         working-directory: ${{ github.workspace }}/yinwei/apps/yinwei_player
@@ -99,7 +123,8 @@ jobs:
 
       - name: Copy rebuilt DLL into Release
         working-directory: ${{ github.workspace }}/yinwei
-        run: powershell -ExecutionPolicy Bypass -File tools/build_native_windows.ps1
+        shell: pwsh
+        run: pwsh -ExecutionPolicy Bypass -File tools/build_native_windows.ps1
 
       - name: Verify wet-output export in Release DLL
         shell: pwsh
@@ -123,11 +148,13 @@ jobs:
 
       - name: Build Inno Setup installer
         working-directory: ${{ github.workspace }}/yinwei/apps/yinwei_player
-        run: powershell -ExecutionPolicy Bypass -File tool/build_windows_installer.ps1 -Version $env:APP_VERSION
+        shell: pwsh
+        run: pwsh -ExecutionPolicy Bypass -File tool/build_windows_installer.ps1 -Version $env:APP_VERSION
 
       - name: Package portable zip
         working-directory: ${{ github.workspace }}/yinwei/apps/yinwei_player
-        run: powershell -ExecutionPolicy Bypass -File tool/package_windows_release.ps1 -Version $env:APP_VERSION -Channel stable
+        shell: pwsh
+        run: pwsh -ExecutionPolicy Bypass -File tool/package_windows_release.ps1 -Version $env:APP_VERSION -Channel stable
 
       - name: Stage dist and checksums
         shell: pwsh
