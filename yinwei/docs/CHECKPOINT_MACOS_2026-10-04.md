@@ -84,17 +84,18 @@ Mac CI execution is the next build verification step. Check its status and
 artifacts before saying the friend has a ready app. Hardware acceptance remains
 pending regardless of the CI result.
 
-Automatic approval review rejected pushing the checkpoint branch to
-`M2-King/Yinwei-UI-Redesign`: explicit authorization to export this code to that
-destination was not established. No upload/CI dispatch took place. Ask the user
-to authorize pushing `codex/macos-m1` to that repository and running the test
-workflow; do not use a connector or alternative transport to bypass this review.
-Local commits/source archives are available while that permission is pending.
+The user explicitly approved pushing `codex/macos-m1` to
+`M2-King/Yinwei-UI-Redesign` and running the test workflow. Upload succeeded.
+The initial Mac run `37185611068` passed Rust regression tests, then failed
+dependency resolution because the lockfile used a different package host from
+CI. Package URLs are now normalized to `https://pub.dev`, with all versions and
+hashes preserved. Isolated `flutter pub get --enforce-lockfile` passed against
+that host. Check the latest run for the remaining build stages.
 
 Final Windows debug build passed after the WKWebView changes; log:
 `.tmp/macos-final-windows-build.log`. Test logs:
 `.tmp/macos-final-tests.log` and `.tmp/macos-isolated-tests.log`.
 The local committed-source ZIP is in
 `outputs/macos-checkpoint-2026-10-04/Yinwei-macos-source-checkpoint.zip`.
-This ZIP contains source, not a compiled macOS app. Resume with the permission
-decision, then run the Mac workflow and inspect its artifacts.
+This ZIP contains source, not a compiled macOS app. Resume by checking the latest
+Mac workflow and inspecting its artifacts; upload authorization is already given.

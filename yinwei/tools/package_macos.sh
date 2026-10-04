@@ -15,6 +15,8 @@ FLUTTER_VERSION="$(flutter --version | awk 'NR==1 {line=$0} END {print line}')"
 XCODE_VERSION="$(xcodebuild -version | tr '\n' ' ')"
 
 cd "$PLAYER"
+# Match the package URLs recorded in the checked-in lockfile.
+export PUB_HOSTED_URL=https://pub.dev
 flutter pub get --enforce-lockfile
 flutter build macos --release --build-number="$BUILD_NUMBER" \
   --dart-define="YINWEI_GIT_SHA=$SHA" \

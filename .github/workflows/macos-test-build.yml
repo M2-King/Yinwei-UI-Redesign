@@ -18,6 +18,7 @@ jobs:
     runs-on: macos-15
     timeout-minutes: 90
     env:
+      PUB_HOSTED_URL: https://pub.dev
       PLAYER: yinwei/apps/yinwei_player
       YINWEI_MACOS_OUTPUT: ${{ github.workspace }}/macos-distribution
       YINWEI_BUILD_NUMBER: ${{ github.run_number }}
