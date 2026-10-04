@@ -90,3 +90,11 @@ destination was not established. No upload/CI dispatch took place. Ask the user
 to authorize pushing `codex/macos-m1` to that repository and running the test
 workflow; do not use a connector or alternative transport to bypass this review.
 Local commits/source archives are available while that permission is pending.
+
+Final Windows debug build passed after the WKWebView changes; log:
+`.tmp/macos-final-windows-build.log`. Test logs:
+`.tmp/macos-final-tests.log` and `.tmp/macos-isolated-tests.log`.
+The local committed-source ZIP is in
+`outputs/macos-checkpoint-2026-10-04/Yinwei-macos-source-checkpoint.zip`.
+This ZIP contains source, not a compiled macOS app. Resume with the permission
+decision, then run the Mac workflow and inspect its artifacts.
