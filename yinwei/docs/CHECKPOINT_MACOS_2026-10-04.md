@@ -11,7 +11,9 @@ from this file after usage resets. Do not restart the architecture audit.
 
 - Workspace: `C:\Users\Tim-King.Kings-laptop\Documents\yinwei-repo`.
 - Branch: `codex/macos-m1`.
-- GitHub origin: `M2-King/-`; base branch `main`.
+- GitHub project: `M2-King/Yinwei-UI-Redesign`; remote `yinwei-ui-redesign`;
+  base branch `release/github-integration`. The older `origin` repository is
+  `M2-King/-`; do not send this release build there.
 - Engineering plan: `yinwei/docs/IMPLEMENTATION_MACOS.md`.
 - Friend instructions: `yinwei/docs/MACOS_FRIEND_TEST.md`.
 - Main app: `yinwei/apps/yinwei_player` (Flutter); audio in Rust `spatial_core`.
@@ -58,7 +60,7 @@ infrastructure until credentials/distribution requirements are provided.
 
 1. Read this checkpoint and `git status`; preserve dirty user work.
 2. Check the latest **Yinwei macOS Test Build** run on `codex/macos-m1`:
-   `gh run list --repo M2-King/- --branch codex/macos-m1 --limit 3`.
+   `gh run list --repo M2-King/Yinwei-UI-Redesign --branch codex/macos-m1 --limit 3`.
    GitHub credentials only work outside the restricted sandbox; use the normal
    escalation mechanism for network/credential access. Never print the token.
 3. If CI fails, inspect the failing job log, repair the macOS boundary/build
@@ -71,4 +73,20 @@ infrastructure until credentials/distribution requirements are provided.
 
 ## Final checkpoint results
 
-Pending final test/commit/CI result; this section is updated at handoff.
+Implementation checkpoint commit: `e3c586e` (follow-up checkpoint commits may
+exist; inspect branch HEAD). Working-tree regression suite: 455 passed, one
+Mac-only test skipped. The isolated committed-source platform/contract/runtime
+suite passed 221 tests, proving it does not depend on unrelated local changes.
+Shell syntax checks passed. Analysis had one new unnecessary import, removed
+before upload; existing warnings/information findings remain.
+
+Mac CI execution is the next build verification step. Check its status and
+artifacts before saying the friend has a ready app. Hardware acceptance remains
+pending regardless of the CI result.
+
+Automatic approval review rejected pushing the checkpoint branch to
+`M2-King/Yinwei-UI-Redesign`: explicit authorization to export this code to that
+destination was not established. No upload/CI dispatch took place. Ask the user
+to authorize pushing `codex/macos-m1` to that repository and running the test
+workflow; do not use a connector or alternative transport to bypass this review.
+Local commits/source archives are available while that permission is pending.
