@@ -80,9 +80,8 @@ suite passed 221 tests, proving it does not depend on unrelated local changes.
 Shell syntax checks passed. Analysis had one new unnecessary import, removed
 before upload; existing warnings/information findings remain.
 
-Mac CI execution is the next build verification step. Check its status and
-artifacts before saying the friend has a ready app. Hardware acceptance remains
-pending regardless of the CI result.
+Mac CI build verification passed in run `37186188824` (details below).
+The friend test app is ready. Hardware acceptance remains pending.
 
 The user explicitly approved pushing `codex/macos-m1` to
 `M2-King/Yinwei-UI-Redesign` and running the test workflow. Upload succeeded.
@@ -99,3 +98,32 @@ The local committed-source ZIP is in
 `outputs/macos-checkpoint-2026-10-04/Yinwei-macos-source-checkpoint.zip`.
 This ZIP contains source, not a compiled macOS app. Resume by checking the latest
 Mac workflow and inspecting its artifacts; upload authorization is already given.
+
+## Approved CI verification — successful build
+
+- Tested source: `606bbc433c2836a63f4dddd9377c3f26ab890d02`.
+- Run: https://github.com/M2-King/Yinwei-UI-Redesign/actions/runs/37186188824.
+- Artifact: https://github.com/M2-King/Yinwei-UI-Redesign/actions/runs/37186188824/artifacts/11296513565.
+- Artifact name: `Yinwei-macos-test-3`; expires 2026-10-18 07:41 UTC.
+- Mac Rust regression tests: 70 passed (platform-specific test counts differ
+  from the Windows suite).
+- Mac platform/contract/scene/UI suite: all 221 tests passed.
+- Native Mac Rust dylib FFI smoke test: passed (real PCM open, Original/Spatial
+  mode switching, WAV export).
+- Universal release packaging: passed. Both app and embedded dylib contain
+  arm64 + x86_64; bundle signature inspection passed. ZIP and DMG uploaded.
+- Signing: ad-hoc test build, not notarized; no public release is claimed.
+- Successful CI log: `.tmp/macos-ci-37186188824-success.log`.
+- Downloaded kit: `outputs/macos-test-37186188824/`. Both ZIP and DMG SHA256
+  values match `SHA256SUMS`. Independent ZIP inspection confirms the app and
+  dylib contain arm64 + x86_64, and the offline Three.js scene is bundled.
+- Earlier run `37185891366` passed 220 tests and exposed one Windows-only
+  host-selection test assumption. The test now explicitly selects Windows and
+  its seven focused host tests passed locally before upload.
+- Hardware audible playback/HRTF and WKWebView visual acceptance still pending.
+
+Next mission: share the test kit and `MACOS_FRIEND_TEST.md` with the friend.
+Collect native-backend, playback/HRTF, sandbox file access, real 3D interaction,
+Retina/minimize and 10-minute stability evidence. Repair reported issues before
+closing Mac acceptance. Public bundle identity/icon/signing remain product and
+distribution decisions.

@@ -202,6 +202,18 @@ Optional Developer ID/notary environment inputs are supported without storing
 credentials. Public release credentials and final deployment/branding choices
 remain outstanding. Current resume state is in `CHECKPOINT_MACOS_2026-10-04.md`.
 
+### Mac CI build verification — 2026-10-04
+
+Source `606bbc433c2836a63f4dddd9377c3f26ab890d02` passed
+[Mac CI run 37186188824](https://github.com/M2-King/Yinwei-UI-Redesign/actions/runs/37186188824):
+70 Rust tests, 221 Flutter platform/contract/scene/UI tests, and the native Mac
+FFI PCM open/mode/export smoke test. Xcode built the universal app; app/dylib
+architecture and bundle signature checks passed. The uploaded `Yinwei-macos-test-3`
+artifact includes ZIP, DMG, instructions, metadata and hashes. It is ad-hoc
+signed and not notarized. Audible playback/HRTF, WKWebView rendering, sandbox
+file access, Retina interaction and hardware performance remain acceptance
+gates for the friend. The checkpoint records the artifact and continuation steps.
+
 Keep runner/scaffolding, native packaging, capability profile, renderer host and release pipeline in separate reviewable commits. Revert macOS changes without disturbing current user work or existing platform runners. Avoid persistent engine/API changes; if any become necessary, stop for architecture review and isolate them from the port.
 
 ## Product decisions before final release
