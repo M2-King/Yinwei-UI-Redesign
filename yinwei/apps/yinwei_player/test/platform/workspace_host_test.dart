@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:yinwei_player/platform/platform_capabilities.dart';
 import 'package:yinwei_player/platform/spatial_workspace_host.dart';
+import 'package:yinwei_player/platform/three_js_host_bind.dart';
 import 'package:yinwei_player/platform/windows_webview2_host.dart';
 import 'package:yinwei_player/theme/yinwei_theme.dart';
 import 'package:yinwei_player/widgets/orbit_visualizer.dart';
@@ -18,9 +19,9 @@ void main() {
     expect(host.usesWebView, isFalse);
   });
 
-  test('Windows Three.js capability selects the WebView2 host', () {
-    final host = createSpatialWorkspaceHost(
-      capabilities: PlatformCapabilities.windows,
+  test('Windows selects the WebView2 host independent of test machine', () {
+    final host = createThreeJsWorkspaceHost(
+      operatingSystem: 'windows',
     );
     expect(host, isA<WindowsWebView2Host>());
     expect(host.usesWebView, isTrue);
