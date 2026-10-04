@@ -1,0 +1,4 @@
+# macOS build scripts must remain executable by bash after a Windows checkout.
+yinwei/tools/build_native_macos.sh text eol=lf
+yinwei/tools/verify_macos_bundle.sh text eol=lf
+yinwei/tools/package_macos.sh text eol=lf

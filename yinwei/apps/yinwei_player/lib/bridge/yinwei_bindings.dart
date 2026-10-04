@@ -189,8 +189,10 @@ class YinweiBindings {
       return (lib: DynamicLibrary.open(name), path: name);
     }
     if (mode == NativeLibraryLoadMode.macDylib) {
-      const name = 'libspatial_core.dylib';
-      return (lib: DynamicLibrary.open(name), path: name);
+      final path = NativeLibraryLocator.macOSLibraryPath(
+        Platform.resolvedExecutable,
+      );
+      return (lib: DynamicLibrary.open(path), path: path);
     }
     throw UnsupportedError('Unsupported platform ${Platform.operatingSystem}');
   }

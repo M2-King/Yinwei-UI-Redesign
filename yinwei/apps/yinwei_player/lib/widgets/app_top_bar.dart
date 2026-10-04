@@ -16,6 +16,7 @@ class AppTopBar extends StatelessWidget {
     required this.arrayEnabled,
     this.onTogglePlayPause,
     this.onSelectOutput,
+    this.showSystemMonitor = true,
   });
 
   final SystemMediaService systemMedia;
@@ -25,6 +26,7 @@ class AppTopBar extends StatelessWidget {
   final ValueChanged<String>? onSelectOutput;
   final PlaybackMode playbackMode;
   final bool arrayEnabled;
+  final bool showSystemMonitor;
 
   @override
   Widget build(BuildContext context) {
@@ -42,14 +44,16 @@ class AppTopBar extends StatelessWidget {
       child: Row(
         children: [
           Expanded(
-            child: SystemLiveMonitorBar(
-              compact: true,
-              systemMedia: systemMedia,
-              liveTransfer: liveTransfer,
-              onToggleLiveHrtf: onToggleLiveHrtf,
-              onTogglePlayPause: onTogglePlayPause,
-              onSelectOutput: onSelectOutput,
-            ),
+            child: showSystemMonitor
+                ? SystemLiveMonitorBar(
+                    compact: true,
+                    systemMedia: systemMedia,
+                    liveTransfer: liveTransfer,
+                    onToggleLiveHrtf: onToggleLiveHrtf,
+                    onTogglePlayPause: onTogglePlayPause,
+                    onSelectOutput: onSelectOutput,
+                  )
+                : const SizedBox.shrink(),
           ),
           const SizedBox(width: 12),
           Container(

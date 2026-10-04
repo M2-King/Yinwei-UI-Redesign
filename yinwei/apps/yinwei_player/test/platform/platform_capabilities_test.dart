@@ -4,6 +4,25 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:yinwei_player/platform/platform_capabilities.dart';
 
 void main() {
+  test('macOS enables its workspace and hides Windows-only adapters', () {
+    const caps = PlatformCapabilities.macos;
+    expect(caps.desktopWindow, isTrue);
+    expect(caps.filePlayback, isTrue);
+    expect(caps.pointSpatial, isTrue);
+    expect(caps.usesMobilePlayer, isFalse);
+    expect(caps.nativeWindowChrome, isFalse);
+    expect(caps.floatingIsland, isFalse);
+    expect(caps.systemMedia, isFalse);
+    expect(caps.liveTransfer, isFalse);
+    expect(caps.desktopDrop, isTrue);
+    expect(caps.threeJsWebView, isTrue);
+    expect(caps.array, isTrue);
+    expect(caps.audioSession, isFalse);
+    expect(caps.androidPlaybackCapture, isFalse);
+    expect(caps.liveActivity, isFalse);
+    expect(caps.appClip, isFalse);
+  });
+
   test('Windows product profile enables desktop and live adapters', () {
     const caps = PlatformCapabilities.windows;
     expect(caps.desktopWindow, isTrue);
@@ -61,7 +80,8 @@ void main() {
     expect(caps.androidPlaybackCapture, isFalse);
   });
 
-  test('Android product profile keeps Point audio and hides Windows chrome', () {
+  test('Android product profile keeps Point audio and hides Windows chrome',
+      () {
     const caps = PlatformCapabilities.android;
     expect(caps.desktopWindow, isFalse);
     expect(caps.nativeWindowChrome, isFalse);
@@ -85,10 +105,12 @@ void main() {
     final caps = PlatformCapabilities.detect();
     expect(caps.liveTransfer, Platform.isWindows);
     expect(caps.floatingIsland, Platform.isWindows);
-    expect(caps.threeJsWebView, Platform.isWindows);
+    expect(caps.threeJsWebView, Platform.isWindows || Platform.isMacOS);
     expect(caps.androidPlaybackCapture, Platform.isAndroid);
     if (Platform.isWindows) {
       expect(caps, PlatformCapabilities.windows);
+    } else if (Platform.isMacOS) {
+      expect(caps, PlatformCapabilities.macos);
     } else if (Platform.isIOS) {
       expect(caps, PlatformCapabilities.ios);
     } else if (Platform.isAndroid) {

@@ -1,0 +1,80 @@
+name: Yinwei macOS Test Build
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [codex/macos-m1]
+    paths: ['yinwei/**', '.github/workflows/macos-test-build.yml']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: macos-test-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  macos-test:
+    runs-on: macos-15
+    timeout-minutes: 90
+    env:
+      PLAYER: yinwei/apps/yinwei_player
+      YINWEI_MACOS_OUTPUT: ${{ github.workspace }}/macos-distribution
+      YINWEI_BUILD_NUMBER: ${{ github.run_number }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.2'
+          channel: stable
+          cache: true
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin,x86_64-apple-darwin
+      - name: Toolchain and Xcode
+        run: |
+          set -euo pipefail
+          if [[ -d /Applications/Xcode_16.4.app ]]; then
+            sudo xcode-select -s /Applications/Xcode_16.4.app/Contents/Developer
+          fi
+          sw_vers
+          xcodebuild -version
+          flutter --version
+          rustc --version
+          flutter config --enable-macos-desktop
+      - name: Rust audio and coordinate regression tests
+        working-directory: yinwei
+        run: cargo test --locked -p spatial_core -p spatial_scene_contract
+      - name: Flutter dependencies
+        working-directory: yinwei/apps/yinwei_player
+        run: flutter pub get --enforce-lockfile
+      - name: Platform, scene and UI integration tests
+        working-directory: yinwei/apps/yinwei_player
+        run: |
+          flutter test --no-pub test/contracts test/bridge/native_library_locator_test.dart \
+            test/platform test/runtime/spatial_scene_bridge_test.dart \
+            test/runtime/spatial_runtime_adapter_test.dart
+      - name: Mac native FFI smoke test
+        working-directory: yinwei
+        run: |
+          set -euo pipefail
+          bash tools/build_native_macos.sh arm64
+          export YINWEI_MACOS_DYLIB="$PWD/target/macos/arm64/libspatial_core.dylib"
+          cd apps/yinwei_player
+          flutter test --no-pub test/runtime/macos_native_smoke_test.dart
+      - name: Package universal test app
+        run: bash yinwei/tools/package_macos.sh
+      - name: Upload friend test kit
+        uses: actions/upload-artifact@v4
+        with:
+          name: Yinwei-macos-test-${{ github.run_number }}
+          path: |
+            macos-distribution/*.zip
+            macos-distribution/*.dmg
+            macos-distribution/START-HERE.md
+            macos-distribution/BUILD-INFO.txt
+            macos-distribution/SHA256SUMS
+          if-no-files-found: error
+          retention-days: 14

@@ -19,7 +19,7 @@ class AppRail extends StatelessWidget {
   final VoidCallback onOpen;
   final VoidCallback onOpenEq;
   final VoidCallback onExport;
-  final VoidCallback onEnterIsland;
+  final VoidCallback? onEnterIsland;
   final String buildId;
   final bool compact;
   final bool native;
@@ -94,12 +94,13 @@ class AppRail extends StatelessWidget {
             compact: compact,
             onTap: onExport,
           ),
-          _RailItem(
-            icon: Icons.crop_landscape_rounded,
-            label: 'Island',
-            compact: compact,
-            onTap: onEnterIsland,
-          ),
+          if (onEnterIsland != null)
+            _RailItem(
+              icon: Icons.crop_landscape_rounded,
+              label: 'Island',
+              compact: compact,
+              onTap: onEnterIsland,
+            ),
           const Spacer(),
           Padding(
             padding: EdgeInsets.fromLTRB(

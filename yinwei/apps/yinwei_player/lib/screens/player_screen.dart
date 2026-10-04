@@ -749,6 +749,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
   }
 
   void _onArrayMode(ArrayMode mode) {
+    if (!_caps.array) return;
     unawaited(() async {
       await _ctrl.applyArrayMode(mode);
       if (_live.running) {
@@ -871,7 +872,9 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
                               onOpen: _onOpen,
                               onOpenEq: () => setState(() => _eqOpen = true),
                               onExport: _onExport,
-                              onEnterIsland: () => _window.enterIsland(),
+                              onEnterIsland: _caps.floatingIsland
+                                  ? () => _window.enterIsland()
+                                  : null,
                               buildId: '$kYinweiUiBuild · $kYinweiBridgeBuild',
                               native: _backend == EngineBackend.native,
                               backend: c.backendLabel,
@@ -882,6 +885,8 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
                                   ListenableBuilder(
                                     listenable: _sessionTicks,
                                     builder: (context, _) => AppTopBar(
+                                      showSystemMonitor:
+                                          _caps.systemMedia || _caps.liveTransfer,
                                       systemMedia: _smtc,
                                       liveTransfer: _live,
                                       onToggleLiveHrtf: () =>
@@ -1060,7 +1065,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
                                         PositionSidebar(
                                           params: c.params,
                                           array: c.array,
-                                          arraySupported: c.arraySupported,
+                                          arraySupported: _caps.array && c.arraySupported,
                                           selectedObjectId:
                                               _sceneBridge.selectedObjectId,
                                           sceneSnapshot: _spatial.snapshot(),
@@ -1114,7 +1119,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
                                         isPlaying: transport.playing,
                                         playbackMode: c.mode,
                                         arrayMode: c.array.mode,
-                                        arraySupported: c.arraySupported,
+                                        arraySupported: _caps.array && c.arraySupported,
                                         onSeek: transport.usesSystemMedia
                                             ? null
                                             : (d) => c.seek(d),

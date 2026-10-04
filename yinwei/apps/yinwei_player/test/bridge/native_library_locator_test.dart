@@ -3,6 +3,36 @@ import 'package:yinwei_player/bridge/engine_bootstrap.dart';
 import 'package:yinwei_player/bridge/native_library_locator.dart';
 
 void main() {
+  test('macOS resolves its bundled dylib independently of cwd', () {
+    expect(
+      NativeLibraryLocator.macOSLibraryPath(
+        '/Applications/音围 Yinwei.app/Contents/MacOS/Yinwei',
+      ),
+      '/Applications/音围 Yinwei.app/Contents/Frameworks/libspatial_core.dylib',
+    );
+    expect(
+      NativeLibraryLocator.modeFor(
+        isWindows: false,
+        isLinux: false,
+        isMacOS: true,
+        isIOS: false,
+      ),
+      NativeLibraryLoadMode.macDylib,
+    );
+  });
+
+  test('macOS refuses non-bundle paths instead of searching stale libraries',
+      () {
+    for (final path in [
+      'Yinwei.app/Contents/MacOS/Yinwei',
+      '/usr/local/bin/dart',
+      '/Applications/Yinwei.app/Contents/Yinwei',
+    ]) {
+      expect(() => NativeLibraryLocator.macOSLibraryPath(path),
+          throwsArgumentError);
+    }
+  });
+
   test('iOS loads spatial_core from the current process, not a Windows DLL',
       () {
     expect(

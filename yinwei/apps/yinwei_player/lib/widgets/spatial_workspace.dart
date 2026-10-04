@@ -26,6 +26,10 @@ window.YinweiPose = {
       } catch (e) {
         window.chrome.webview.postMessage(msg);
       }
+    } else if (window.YinweiNative) {
+      window.YinweiNative.postMessage(
+        typeof msg === 'string' ? msg : JSON.stringify(msg)
+      );
     }
   }
 };
@@ -34,8 +38,9 @@ window.YinweiPose = {
 /// Left-pane Spatial Audio Workspace.
 ///
 /// Windows: one persistent Three.js studio in WebView2.
+/// macOS: the same scene in WKWebView.
 /// Presentation idle / point / stereo2 is derived from playback + Array state.
-/// Tests / non-Windows / missing WebView2: [OrbitVisualizer] fallback.
+/// Tests / unsupported hosts / WebView failures: [OrbitVisualizer] fallback.
 ///
 /// Three.js proposes world-XYZ intents. Flutter Scene Store is the Point
 /// authority. Array speakers are a visual overlay, not SceneContract objects.
@@ -182,39 +187,52 @@ class _SpatialWorkspaceState extends State<SpatialWorkspace> {
   }
 
   Future<void> _bootHost() async {
+    final host = _host;
     if (_host.view != null) return;
     try {
       final html = await SpatialWorkspaceHtml.load();
       if (!mounted) return;
-      await _host.boot(
+      await host.boot(
         html: html,
         poseBridgeScript: kYinweiPoseBridgeScript,
-        onMessage: _onWinMessage,
+        onMessage: (message) {
+          if (mounted && identical(_host, host)) _onWinMessage(message);
+        },
         onReady: () {
+          if (!mounted || !identical(_host, host)) return;
           _pageReady = true;
           _pushAll(force: true);
         },
         onLoadError: (error) {
           debugPrint('[SpatialWorkspace] load error $error');
+          _failHost(host, error);
         },
       );
-      if (!mounted) {
-        await _host.dispose();
+      if (!mounted || !identical(_host, host)) {
+        await host.dispose();
         return;
       }
-      debugPrint('[SpatialWorkspace] WebView2 controller ready');
+      debugPrint('[SpatialWorkspace] ${host.runtimeType} controller ready');
       setState(() {});
       _syncVisibility();
       _maybeStartPhase3Smoke();
     } catch (e) {
-      debugPrint('[SpatialWorkspace] WebView2 boot failed: $e');
-      if (mounted) {
-        setState(() {
-          _failed = true;
-          _host = FallbackWorkspaceHost();
-        });
-      }
+      _failHost(host, e);
     }
+  }
+
+  void _failHost(SpatialWorkspaceHost host, Object error) {
+    debugPrint('[SpatialWorkspace] ${host.runtimeType} failed: $error');
+    if (mounted && identical(_host, host)) {
+      setState(() {
+        _failed = true;
+        _pageReady = false;
+        _host = FallbackWorkspaceHost();
+      });
+    }
+    unawaited(host.dispose().catchError((Object e) {
+      debugPrint('[SpatialWorkspace] host disposal: $e');
+    }));
   }
 
   void _onWinMessage(dynamic message) {
@@ -357,7 +375,10 @@ class _SpatialWorkspaceState extends State<SpatialWorkspace> {
     unawaited(
       _host.executeScript(
         'window.YinweiWorkspace&&YinweiWorkspace.$fn($payload)',
-      ),
+      ).catchError((Object error) {
+        debugPrint('[SpatialWorkspace] script failed: $error');
+        return null;
+      }),
     );
   }
 

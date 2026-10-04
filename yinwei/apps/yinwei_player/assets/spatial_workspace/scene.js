@@ -1813,8 +1813,23 @@
   }
 
   var lastT = performance.now();
+  var frameId = null;
+  var hostSuspended = false;
+  function setHostSuspended(value) {
+    if (hostSuspended === !!value) return;
+    hostSuspended = !!value;
+    if (hostSuspended) {
+      if (frameId !== null) cancelAnimationFrame(frameId);
+      frameId = null;
+    } else {
+      lastT = performance.now();
+      needsRender = true;
+      frameId = requestAnimationFrame(tick);
+    }
+  }
   function tick(now) {
-    requestAnimationFrame(tick);
+    if (hostSuspended) return;
+    frameId = requestAnimationFrame(tick);
     if (typeof document !== 'undefined' && document.hidden) return;
     var dt = Math.min(0.05, (now - lastT) / 1000);
     lastT = now;
@@ -1867,7 +1882,7 @@
       needsRender = false;
     }
   }
-  requestAnimationFrame(tick);
+  frameId = requestAnimationFrame(tick);
 
   function clientXY(mesh) {
     var v = new THREE.Vector3();
@@ -1936,6 +1951,7 @@
   }
 
   window.YinweiWorkspace = {
+    setHostSuspended: setHostSuspended,
     applySceneSnapshot: applySceneSnapshot,
     applyPlaybackTelemetry: applyPlaybackTelemetry,
     applyUiState: applyUiState,

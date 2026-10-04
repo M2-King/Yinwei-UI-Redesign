@@ -58,6 +58,20 @@ class PlatformCapabilities {
     array: true,
   );
 
+  /// macOS testing profile. Hardware audio/visual acceptance remains pending.
+  static const macos = PlatformCapabilities(
+    desktopWindow: true,
+    nativeWindowChrome: false,
+    floatingIsland: false,
+    systemMedia: false,
+    liveTransfer: false,
+    desktopDrop: true,
+    threeJsWebView: true,
+    filePlayback: true,
+    pointSpatial: true,
+    array: true,
+  );
+
   static const ios = PlatformCapabilities(
     desktopWindow: false,
     nativeWindowChrome: false,
@@ -105,6 +119,7 @@ class PlatformCapabilities {
   static PlatformCapabilities detect() {
     if (kIsWeb) return none;
     if (Platform.isWindows) return windows;
+    if (Platform.isMacOS) return macos;
     if (Platform.isIOS) return ios;
     if (Platform.isAndroid) return android;
     return none;

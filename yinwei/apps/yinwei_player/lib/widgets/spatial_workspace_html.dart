@@ -1,6 +1,6 @@
 import 'package:flutter/services.dart';
 
-/// Bundles the local Three.js workspace into one HTML document for WebView2.
+/// Bundles the offline workspace into one document for WebView2 or WKWebView.
 class SpatialWorkspaceHtml {
   static const _shellAsset = 'assets/spatial_workspace/index.html';
   static const _threeAsset = 'assets/spatial_workspace/vendor/three.min.js';
