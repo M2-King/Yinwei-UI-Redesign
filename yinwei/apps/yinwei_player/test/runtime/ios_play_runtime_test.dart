@@ -4,7 +4,6 @@ import 'package:yinwei_player/bridge/engine_bootstrap.dart';
 import 'package:yinwei_player/bridge/mock_engine.dart';
 import 'package:yinwei_player/bridge/yinwei_bindings.dart';
 import 'package:yinwei_player/models/spatial_params.dart';
-import 'package:yinwei_player/contracts/coordinate_frame_v1.dart';
 import 'package:yinwei_player/mobile/mobile_player_screen.dart';
 import 'package:yinwei_player/platform/audio_session_coordinator.dart';
 import 'package:yinwei_player/platform/live_activity_bridge.dart';
@@ -99,7 +98,8 @@ void main() {
   }
 
   FilledButton playButton(WidgetTester tester) {
-    return tester.widget<FilledButton>(find.byKey(const Key('ios-play-button')));
+    return tester
+        .widget<FilledButton>(find.byKey(const Key('ios-play-button')));
   }
 
   Widget iosPlayer({

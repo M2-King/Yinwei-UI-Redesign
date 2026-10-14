@@ -3,7 +3,7 @@ import 'package:yinwei_player/bridge/engine_bootstrap.dart';
 import 'package:yinwei_player/contracts/coordinate_frame_v1.dart';
 import 'package:yinwei_player/mobile/android_playback_capture_panel.dart';
 import 'package:yinwei_player/mobile/ios_runtime_status.dart';
-import 'package:yinwei_player/mobile/ios_screen_audio_probe_panel.dart';
+import 'package:yinwei_player/mobile/ios_replaykit_audio_probe_panel.dart';
 import 'package:yinwei_player/mobile/mobile_now_playing_header.dart';
 import 'package:yinwei_player/mobile/mobile_point_inspector.dart';
 import 'package:yinwei_player/mobile/mobile_spatial_mode_control.dart';
@@ -13,6 +13,7 @@ import 'package:yinwei_player/mobile/mobile_visual_pose.dart';
 import 'package:yinwei_player/models/spatial_params.dart';
 import 'package:yinwei_player/platform/android_playback_capture.dart';
 import 'package:yinwei_player/platform/platform_capabilities.dart';
+import 'package:yinwei_player/platform/replaykit_audio_probe.dart';
 import 'package:yinwei_player/platform/screen_audio_probe.dart';
 import 'package:yinwei_player/presentation/yinwei_live_presentation.dart';
 import 'package:yinwei_player/runtime/island_spatial_controls.dart';
@@ -34,10 +35,13 @@ class MobilePlayerScreen extends StatefulWidget {
     this.capabilities = PlatformCapabilities.ios,
     this.loadError,
     this.onOpen,
+    this.onExport,
     this.onTogglePlay,
+    this.onSeek,
     this.onMotionChanged,
     this.onPlaybackMode,
     this.screenAudioProbe,
+    this.replayKitAudioProbe,
     this.androidPlaybackCapture,
   });
 
@@ -49,10 +53,13 @@ class MobilePlayerScreen extends StatefulWidget {
   final ValueNotifier<PlaybackTelemetryV1> telemetry;
   final SceneBridgeResult Function(String raw) onSceneIntent;
   final VoidCallback? onOpen;
+  final VoidCallback? onExport;
   final VoidCallback? onTogglePlay;
+  final ValueChanged<Duration>? onSeek;
   final ValueChanged<MotionMode>? onMotionChanged;
   final ValueChanged<PlaybackMode>? onPlaybackMode;
   final ScreenAudioProbe? screenAudioProbe;
+  final ReplayKitAudioProbe? replayKitAudioProbe;
   final AndroidPlaybackCapture? androidPlaybackCapture;
 
   @override
@@ -178,16 +185,19 @@ class _MobilePlayerScreenState extends State<MobilePlayerScreen> {
                       probe: widget.androidPlaybackCapture,
                     )
                   else
-                    IosScreenAudioProbePanel(
+                    IosReplayKitAudioProbePanel(
+                      probe: widget.replayKitAudioProbe,
+                      screenAudioProbe: widget.screenAudioProbe,
                       controller: c,
                       backend: widget.backend,
-                      probe: widget.screenAudioProbe,
                     ),
                   const SizedBox(height: 8),
                   MobileTransport(
                     controller: c,
                     onTogglePlay: widget.onTogglePlay,
                     onOpen: widget.onOpen,
+                    onExport: widget.onExport,
+                    onSeek: widget.onSeek,
                   ),
                 ],
               ),

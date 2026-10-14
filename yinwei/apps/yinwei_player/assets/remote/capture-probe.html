@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <meta name="theme-color" content="#0c0d10" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <title>Live capture probe · Yinwei</title>
+    <link rel="stylesheet" href="/remote/style.css" />
+    <script src="/remote/capture-probe.js" type="module"></script>
+  </head>
+  <body class="probe-page">
+    <main class="probe-shell">
+      <nav class="probe-nav">
+        <a href="/remote/app">Back to listening room</a>
+        <span id="save-state" role="status">Preparing secure probe…</span>
+      </nav>
+      <section class="probe-card">
+        <span class="eyebrow">YINWEI / R0 FEASIBILITY</span>
+        <h1>Can iPad send live app audio?</h1>
+        <p>
+          This test asks iPadOS for a screen-share stream and measures only its
+          audio track. It never records, displays, saves, or uploads your screen
+          or audio. Only bounded numeric results return to your laptop.
+        </p>
+        <div class="probe-actions">
+          <button id="start-probe">Start iPad audio test</button>
+          <button id="tone-test" disabled>Test return-audio feedback</button>
+          <button id="stop-probe" disabled>Stop test</button>
+        </div>
+        <p id="probe-status" class="probe-status" role="status" aria-live="polite">
+          Ready. Keep the audio source playing before you start.
+        </p>
+      </section>
+
+      <section class="probe-grid" aria-label="Live capture measurements">
+        <article><span>Screen-share API</span><strong id="api-value">Checking…</strong></article>
+        <article><span>Audio track</span><strong id="audio-value">Not tested</strong></article>
+        <article><span>Capture level</span><strong id="level-value">—</strong></article>
+        <article><span>Longest callback gap</span><strong id="gap-value">—</strong></article>
+        <article><span>Return-audio recapture</span><strong id="feedback-value">Not tested</strong></article>
+        <article><span>Page state</span><strong id="visibility-value">Visible</strong></article>
+      </section>
+
+      <section class="probe-card">
+        <h2>What do you hear during the tone test?</h2>
+        <p>
+          Choose after the short two-tone test. This checks whether iPad can
+          avoid playing the original dry source together with Yinwei’s delayed
+          processed return.
+        </p>
+        <div class="probe-choice" id="routing-choice">
+          <button data-routing="source_only">Source only</button>
+          <button data-routing="source_plus_return">Source + test tones</button>
+          <button data-routing="return_only">Test tones only</button>
+          <button data-routing="silent">Silent</button>
+          <button data-routing="unsure">Unsure</button>
+        </div>
+      </section>
+
+      <details class="probe-card">
+        <summary>Technical result</summary>
+        <pre id="technical-result">No measurements yet.</pre>
+      </details>
+    </main>
+  </body>
+</html>

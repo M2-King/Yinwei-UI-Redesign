@@ -25,6 +25,77 @@ const E_DEVICE: i32 = 5;
 const E_IO: i32 = 6;
 const E_OTHER: i32 = 7;
 
+#[no_mangle]
+pub extern "C" fn yinwei_output_tap_version() -> u32 { 1 }
+#[no_mangle]
+pub extern "C" fn yinwei_output_tap_enable(enabled: i32) -> i32 {
+    match global_session() {
+        Ok(session) => { session.set_output_tap(enabled != 0); OK },
+        Err(error) => map_err(error),
+    }
+}
+/// Returns stereo frame count, zero if empty, negative stable error code.
+#[no_mangle]
+pub unsafe extern "C" fn yinwei_output_tap_read(
+    out: *mut f32, capacity_frames: u32, meta: *mut crate::output_tap::OutputTapMeta,
+) -> i32 {
+    if out.is_null() || meta.is_null() || capacity_frames < crate::STREAM_CHUNK as u32 { return -E_PARAM; }
+    let session = match global_session() { Ok(s) => s, Err(e) => return -map_err(e) };
+    let Some(packet) = session.read_output_tap() else { return 0; };
+    for (index, &(left, right)) in packet.frames.iter().enumerate() {
+        out.add(index * 2).write(left); out.add(index * 2 + 1).write(right);
+    }
+    meta.write(packet.meta);
+    packet.frames.len() as i32
+}
+
+/// Separate optional live-tap ABI. Querying/enabling it never starts capture.
+#[no_mangle]
+pub extern "C" fn yinwei_live_output_tap_version() -> u32 {
+    if cfg!(all(windows, feature = "realtime")) { 1 } else { 0 }
+}
+#[no_mangle]
+pub extern "C" fn yinwei_live_output_tap_enable(enabled: i32) -> i32 {
+    #[cfg(all(windows, feature = "realtime"))]
+    {
+        match crate::live_transfer::global_live() {
+            Ok(live) => match live.as_ref() {
+                Some(engine) => { engine.set_output_tap(enabled != 0); OK },
+                None if enabled == 0 => OK,
+                None => E_DEVICE,
+            },
+            Err(error) => map_err(error),
+        }
+    }
+    #[cfg(not(all(windows, feature = "realtime")))]
+    { if enabled == 0 { OK } else { E_DEVICE } }
+}
+#[no_mangle]
+pub unsafe extern "C" fn yinwei_live_output_tap_read(
+    out: *mut f32, capacity_frames: u32, meta: *mut crate::output_tap::OutputTapMeta,
+) -> i32 {
+    if out.is_null() || meta.is_null() || capacity_frames < crate::STREAM_CHUNK as u32 {
+        return -E_PARAM;
+    }
+    #[cfg(all(windows, feature = "realtime"))]
+    {
+        let engine = match crate::live_transfer::global_live() {
+            Ok(live) => live.as_ref().cloned(),
+            Err(error) => return -map_err(error),
+        };
+        let Some(engine) = engine else { return 0; };
+        let Some(packet) = engine.read_output_tap() else { return 0; };
+        if packet.frames.len() > capacity_frames as usize { return -E_PARAM; }
+        for (index, &(left, right)) in packet.frames.iter().enumerate() {
+            out.add(index * 2).write(left); out.add(index * 2 + 1).write(right);
+        }
+        meta.write(packet.meta);
+        packet.frames.len() as i32
+    }
+    #[cfg(not(all(windows, feature = "realtime")))]
+    { 0 }
+}
+
 fn set_err(msg: impl Into<String>) {
     if let Ok(mut e) = LAST_ERROR.lock() {
         *e = msg.into();

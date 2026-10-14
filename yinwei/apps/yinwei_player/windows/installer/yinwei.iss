@@ -5,7 +5,7 @@
 #define MyAppName "Yinwei Spatial Player"
 #define MyAppNameZh "音围"
 #ifndef MyAppVersion
-  #define MyAppVersion "0.1.0"
+  #define MyAppVersion "0.1.3"
 #endif
 #define MyAppPublisher "Yinwei"
 #define MyAppExeName "yinwei_player.exe"

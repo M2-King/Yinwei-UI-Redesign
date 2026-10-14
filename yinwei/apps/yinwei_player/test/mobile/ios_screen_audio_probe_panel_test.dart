@@ -152,10 +152,13 @@ void main() {
       ),
     );
     await tester.pump();
-    expect(find.byKey(const Key('ios-screen-audio-probe')), findsOneWidget);
+    expect(find.byKey(const Key('ios-replaykit-audio-probe')), findsOneWidget);
     expect(find.text('Open'), findsOneWidget);
     expect(find.text('Play'), findsOneWidget);
-    expect(find.text('Unavailable'), findsOneWidget);
+    expect(
+      find.byKey(const Key('ios-replaykit-audio-probe-phase')),
+      findsOneWidget,
+    );
     addTearDown(controller.dispose);
   });
 }

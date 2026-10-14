@@ -49,11 +49,15 @@ void main() {
       expectedSha256: stable.sha256,
     );
     final offer = coordinator.check(
-      installed: InstalledApp.currentWindows(),
+      installed: InstalledApp(
+        version: AppVersion.parse('0.1.0'),
+        channel: UpdateChannel.stable,
+        platform: kWindowsX64Platform,
+      ),
       manifest: manifest,
     );
     expect(offer.updateAvailable, isTrue);
-    expect(offer.candidate!.version > AppVersion.parse(kYinweiAppVersion), isTrue);
+    expect(offer.candidate!.version > AppVersion.parse('0.1.0'), isTrue);
     expect(coordinator.autoInstallEnabled, isFalse);
     expect(
       () => coordinator.installSilently(zip),

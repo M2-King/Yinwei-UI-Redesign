@@ -18,6 +18,10 @@ pub struct PlayerSession {
 }
 
 impl PlayerSession {
+    pub fn set_output_tap(&self, enabled: bool) { self.player.set_output_tap(enabled); }
+    pub fn read_output_tap(&self) -> Option<crate::output_tap::OutputTapPacket> {
+        self.player.read_output_tap()
+    }
     pub fn new() -> Self {
         Self {
             engine: Engine::new(),

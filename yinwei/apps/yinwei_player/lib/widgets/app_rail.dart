@@ -10,6 +10,7 @@ class AppRail extends StatelessWidget {
     required this.onOpenEq,
     required this.onExport,
     required this.onEnterIsland,
+    this.onCheckForUpdates,
     required this.buildId,
     this.compact = false,
     this.native = false,
@@ -20,6 +21,7 @@ class AppRail extends StatelessWidget {
   final VoidCallback onOpenEq;
   final VoidCallback onExport;
   final VoidCallback? onEnterIsland;
+  final VoidCallback? onCheckForUpdates;
   final String buildId;
   final bool compact;
   final bool native;
@@ -100,6 +102,16 @@ class AppRail extends StatelessWidget {
               label: 'Island',
               compact: compact,
               onTap: onEnterIsland,
+            ),
+          if (onCheckForUpdates != null)
+            Tooltip(
+              message: 'Check for updates',
+              child: _RailItem(
+                icon: Icons.system_update_alt_rounded,
+                label: 'Check updates',
+                compact: compact,
+                onTap: onCheckForUpdates,
+              ),
             ),
           const Spacer(),
           Padding(

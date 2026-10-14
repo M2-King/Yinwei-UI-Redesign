@@ -106,6 +106,8 @@ struct Shared {
     capture_gen: AtomicU32,
     /// Dart holds wet silent until the source tree is pinned to muted speakers.
     out_hold: AtomicBool,
+    /// Optional copy of the existing post-HRTF/EQ result, not another renderer.
+    output_tap: crate::output_tap::OutputTap,
 }
 
 /// AtomicU8 wrapper for PlaybackMode.
@@ -155,6 +157,7 @@ impl LiveTransferEngine {
                 device_rate: AtomicU32::new(0),
                 capture_gen: AtomicU32::new(0),
                 out_hold: AtomicBool::new(false),
+                output_tap: crate::output_tap::OutputTap::default(),
             }),
             workers: Mutex::new(Vec::new()),
             out_stream: Arc::new(Mutex::new(None)),
@@ -165,6 +168,18 @@ impl LiveTransferEngine {
 
     pub fn is_running(&self) -> bool {
         self.shared.running.load(Ordering::Relaxed)
+    }
+
+    pub fn set_output_tap(&self, enabled: bool) {
+        self.shared.output_tap.set_enabled(enabled);
+    }
+
+    pub fn read_output_tap(&self) -> Option<crate::output_tap::OutputTapPacket> {
+        if self.shared.stop.load(Ordering::Acquire)
+            || self.shared.out_hold.load(Ordering::Acquire) {
+            return None;
+        }
+        self.shared.output_tap.read()
     }
 
     pub fn set_params(&self, params: SpatialParams) -> Result<(), SpatialError> {
@@ -219,10 +234,14 @@ impl LiveTransferEngine {
     }
 
     pub fn set_mode(&self, mode: PlaybackMode) {
-        self.shared.mode.store(match mode {
+        let next = match mode {
             PlaybackMode::Original => 0,
             PlaybackMode::Spatial => 1,
-        });
+        };
+        if self.shared.mode.load() != next {
+            self.shared.mode.store(next);
+            self.shared.output_tap.invalidate();
+        }
     }
 
     pub fn current_azimuth_deg(&self) -> f32 {
@@ -284,6 +303,7 @@ impl LiveTransferEngine {
     }
 
     fn clear_pcm_queues(&self) {
+        self.shared.output_tap.invalidate();
         if let Ok(mut d) = self.shared.dry_q.lock() {
             d.clear();
         }
@@ -375,6 +395,7 @@ impl LiveTransferEngine {
     }
 
     fn reset_capture_counters(&self) {
+        self.shared.output_tap.invalidate();
         self.shared.capture_ok.store(false, Ordering::Relaxed);
         self.shared.frames_captured.store(0, Ordering::Relaxed);
         self.shared.frames_with_energy.store(0, Ordering::Relaxed);
@@ -500,6 +521,7 @@ impl LiveTransferEngine {
     fn stop_inner(&self) {
         self.shared.stop.store(true, Ordering::Relaxed);
         self.shared.running.store(false, Ordering::Relaxed);
+        self.shared.output_tap.invalidate();
         self.shared
             .out_needs_restart
             .store(false, Ordering::Relaxed);
@@ -973,6 +995,16 @@ fn capture_loop(
     Ok(())
 }
 
+fn publish_processed_live_pcm(shared: &Shared, epoch: u64, first_frame: u64,
+    sample_rate: u32, mode: u32, azimuth_deg: f32, elevation_deg: f32,
+    frames: &[StereoFrame]) {
+    if shared.stop.load(Ordering::Acquire) || shared.out_hold.load(Ordering::Acquire) {
+        return;
+    }
+    shared.output_tap.publish(epoch, first_frame, sample_rate, mode,
+        azimuth_deg, elevation_deg, frames);
+}
+
 fn dsp_loop(shared: Arc<Shared>) -> Result<(), SpatialError> {
     // Capture rate = HRTF / content rate. Device rate is independent (cpal).
     let mut capture_sr = 0u32;
@@ -1001,6 +1033,8 @@ fn dsp_loop(shared: Arc<Shared>) -> Result<(), SpatialError> {
     }
 
     let mut acc: Vec<StereoFrame> = Vec::with_capacity(STREAM_CHUNK);
+    let mut tap_epoch_seen = shared.output_tap.epoch();
+    let mut tap_frame = 0u64;
 
     while !shared.stop.load(Ordering::Relaxed) {
         // Keep wet at a few chunks — sleeping on a ~200 ms pad was A/V desync.
@@ -1026,13 +1060,16 @@ fn dsp_loop(shared: Arc<Shared>) -> Result<(), SpatialError> {
         }
 
         let chunk: Vec<StereoFrame> = acc.drain(..STREAM_CHUNK).collect();
+        let tap_epoch = shared.output_tap.epoch();
+        if tap_epoch != tap_epoch_seen { tap_frame = 0; tap_epoch_seen = tap_epoch; }
         let params = shared
             .params
             .lock()
             .map_err(|_| SpatialError::LockPoisoned)?
             .clone();
         processor.set_params(params)?;
-        processor.set_mode(if shared.mode.load() == 0 {
+        let rendered_mode = shared.mode.load();
+        processor.set_mode(if rendered_mode == 0 {
             PlaybackMode::Original
         } else {
             PlaybackMode::Spatial
@@ -1054,6 +1091,12 @@ fn dsp_loop(shared: Arc<Shared>) -> Result<(), SpatialError> {
             processor.effective_elevation_deg().to_bits(),
             Ordering::Relaxed,
         );
+        // Copy the already-rendered content-rate stereo result. Local device
+        // resampling and queues below are unchanged, and publish never waits.
+        publish_processed_live_pcm(&shared, tap_epoch, tap_frame, capture_sr,
+            rendered_mode as u32, processor.effective_azimuth_deg(),
+            processor.effective_elevation_deg(), &wet);
+        tap_frame = tap_frame.saturating_add(wet.len() as u64);
         // Same contract as RealtimePlayer: HRTF at content/capture rate, cubic to device.
         let out = if capture_sr == device_sr {
             wet
@@ -1096,6 +1139,72 @@ mod tests {
     use super::*;
     use std::sync::atomic::Ordering;
     use std::time::{Duration, Instant};
+
+    #[test]
+    fn live_tap_copies_original_and_spatial_wet_without_draining_local_queues() {
+        for mode in [PlaybackMode::Original, PlaybackMode::Spatial] {
+            let eng = LiveTransferEngine::new();
+            eng.shared.stop.store(false, Ordering::Relaxed);
+            eng.shared.running.store(true, Ordering::Relaxed);
+            eng.shared.device_rate.store(44_100, Ordering::Relaxed);
+            eng.shared.dry_q.lock().unwrap().push_back((0.2, -0.3));
+            eng.shared.wet_q.lock().unwrap().push_back((0.4, -0.5));
+            eng.set_output_tap(true);
+            let mut processor = LiveDspProcessor::new(48_000).unwrap();
+            processor.set_mode(mode);
+            processor.set_params(SpatialParams::default()).unwrap();
+            processor.snap_to_current_params();
+            for index in 0..16 {
+                let input: Vec<StereoFrame> = (0..STREAM_CHUNK).map(|frame| {
+                    let phase = (index * STREAM_CHUNK + frame) as f32 * 0.047;
+                    (phase.sin() * 0.1, phase.cos() * 0.05)
+                }).collect();
+                let wet = processor.process_chunk(&input).unwrap().to_vec();
+                let mode_id = if matches!(mode, PlaybackMode::Original) { 0 } else { 1 };
+                publish_processed_live_pcm(&eng.shared, eng.shared.output_tap.epoch(),
+                    (index * STREAM_CHUNK) as u64, 48_000, mode_id,
+                    processor.effective_azimuth_deg(), processor.effective_elevation_deg(), &wet);
+                let packet = eng.read_output_tap().unwrap();
+                assert_eq!(packet.frames, wet);
+                assert_eq!(packet.meta.sample_rate, 48_000);
+                assert_eq!(packet.meta.mode, mode_id);
+                assert!(packet.frames.iter().all(|f| f.0.is_finite() && f.1.is_finite()));
+                if index == 15 { assert!(packet.frames.iter().any(|f| f.0.abs() + f.1.abs() > 0.000001)); }
+            }
+            assert_eq!(eng.shared.dry_q.lock().unwrap().front(), Some(&(0.2, -0.3)));
+            assert_eq!(eng.shared.wet_q.lock().unwrap().front(), Some(&(0.4, -0.5)));
+        }
+    }
+
+    #[test]
+    fn live_tap_disabled_hold_source_mode_stop_and_restart_reject_stale_pcm() {
+        let eng = LiveTransferEngine::new();
+        eng.prepare_session();
+        let pcm = [(0.12, -0.25)];
+        let publish = |epoch| publish_processed_live_pcm(&eng.shared, epoch, 0, 48_000, 1, 90.0, -10.0, &pcm);
+        publish(eng.shared.output_tap.epoch());assert!(eng.read_output_tap().is_none());
+        eng.set_output_tap(true);let before_hold=eng.shared.output_tap.epoch();publish(before_hold);
+        eng.set_output_hold(true);publish(eng.shared.output_tap.epoch());assert!(eng.read_output_tap().is_none());
+        eng.set_output_hold(false);publish(before_hold);assert!(eng.read_output_tap().is_none());
+        let before_source=eng.shared.output_tap.epoch();publish(before_source);
+        eng.reset_capture_counters();publish(before_source);assert!(eng.read_output_tap().is_none());
+        let before_mode=eng.shared.output_tap.epoch();publish(before_mode);
+        eng.set_mode(PlaybackMode::Original);publish(before_mode);assert!(eng.read_output_tap().is_none());
+        let before_stop=eng.shared.output_tap.epoch();publish(before_stop);
+        eng.stop_inner();publish(before_stop);assert!(eng.read_output_tap().is_none());
+        eng.prepare_session();publish(before_stop);assert!(eng.read_output_tap().is_none());
+        publish(eng.shared.output_tap.epoch());assert_eq!(eng.read_output_tap().unwrap().frames, pcm);
+        eng.set_output_tap(false);publish(eng.shared.output_tap.epoch());assert!(eng.read_output_tap().is_none());
+    }
+
+    #[test]
+    fn live_tap_slow_browser_keeps_only_eight_chunks() {
+        let eng = LiveTransferEngine::new();eng.prepare_session();eng.set_output_tap(true);
+        for index in 0..100 { publish_processed_live_pcm(&eng.shared,
+            eng.shared.output_tap.epoch(), index, 48_000, 1, 0.0, 0.0, &[(0.2, 0.3)]); }
+        let mut count=0;while eng.read_output_tap().is_some(){count+=1;}
+        assert_eq!(count, crate::output_tap::OUTPUT_TAP_CHUNKS);
+    }
 
     #[test]
     fn start_attempts_are_main_then_exclude_self_without_children() {

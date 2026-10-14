@@ -23,7 +23,6 @@ class AppAudioSplit {
 }
 
 class AppAudioRouter {
-  String? _restoreId;
   String? _speakersId;
   bool _unmuteSpeakersOnRestore = false;
   final List<int> _routedPids = [];
@@ -69,6 +68,15 @@ class AppAudioRouter {
     );
   }
 
+  Future<String?> _detectSpeakersId() async {
+    final rows = await _run(['list']);
+    for (final line in rows) {
+      final parts = line.split('|');
+      if (parts.length >= 3 && parts[0] == 'speakers') return parts[2];
+    }
+    return null;
+  }
+
   /// Route [rootPid] and same-exe children to [speakersId]. Remember for restore.
   ///
   /// [keepSpeakerMute] is the source-follow hop: unpin the previous app tree
@@ -76,7 +84,6 @@ class AppAudioRouter {
   Future<bool> routeToSpeakers({
     required int rootPid,
     required String speakersId,
-    required String restoreId,
     bool keepSpeakerMute = false,
   }) async {
     if (!Platform.isWindows || rootPid <= 0) return false;
@@ -88,14 +95,42 @@ class AppAudioRouter {
       return true;
     }
     final preserveUnmute = _unmuteSpeakersOnRestore;
-    if (keepSpeakerMute) {
-      await _run(['clear']);
+    if (keepSpeakerMute && _speakersId == speakersId) {
+      await _run(['clear', _routedPids.join(',')]);
       _routedPids.clear();
       _routedRootPid = 0;
     } else {
       await restore();
+      keepSpeakerMute = false;
     }
-    final rows = await _run(['apply', '$rootPid', speakersId]);
+    if (!keepSpeakerMute) {
+      final rows = await _run(['mute-state', speakersId]);
+      int? wasMuted;
+      for (final line in rows) {
+        if (line.startsWith('MUTED_WAS ')) {
+          wasMuted = int.tryParse(line.substring('MUTED_WAS '.length));
+          break;
+        }
+      }
+      if (wasMuted != 0 && wasMuted != 1) return false;
+      _unmuteSpeakersOnRestore = wasMuted == 0;
+      _speakersId = speakersId;
+      // The recovery record must exist before any persistent route or mute.
+      await _setDirty(true,
+          state: AudioRouteRecoveryState(
+            speakersId,
+            wasMuted == 0,
+            rootPid: rootPid,
+            routedPids: [rootPid],
+          ));
+    }
+    late final List<String> rows;
+    try {
+      rows = await _run(['apply', '$rootPid', speakersId]);
+    } catch (_) {
+      await restore();
+      rethrow;
+    }
     final pids = <int>[];
     for (final line in rows) {
       if (line.startsWith('PID ')) {
@@ -105,39 +140,89 @@ class AppAudioRouter {
     _routedPids
       ..clear()
       ..addAll(pids.where((p) => p > 0));
-    _restoreId = restoreId;
     _speakersId = speakersId;
     _routedRootPid = _routedPids.isEmpty ? 0 : rootPid;
     if (keepSpeakerMute) {
       _unmuteSpeakersOnRestore = preserveUnmute;
-    } else {
-      _unmuteSpeakersOnRestore = !rows.any((l) => l.startsWith('MUTED_WAS 1'));
     }
-    await _setDirty(true);
+    if (_routedPids.isEmpty) {
+      await restore();
+      return false;
+    }
+    await _setDirty(true,
+        state: AudioRouteRecoveryState(
+          speakersId,
+          _unmuteSpeakersOnRestore,
+          rootPid: rootPid,
+          routedPids: _routedPids,
+        ));
     return _routedPids.isNotEmpty;
   }
 
   Future<void> restore() async {
     if (!Platform.isWindows) return;
-    final speakers = _speakersId;
-    final unmute = _unmuteSpeakersOnRestore;
-    _restoreId = null;
+    final dirty = await _readDirty();
+    if (!isRouted && dirty == null) return;
+    final state = AudioRouteRecoveryState.parse(dirty);
+    if (state == null && dirty?.trim() == '1' && _speakersId == null) {
+      await recoverIfDirty();
+      return;
+    }
+    final speakers = _speakersId ?? state?.speakersId;
+    final unmute = _unmuteSpeakersOnRestore || (state?.unmute ?? false);
+    final pids = _routedPids.isNotEmpty
+        ? _routedPids
+        : (state?.routedPids ?? const <int>[]);
+    Object? clearError;
+    try {
+      if (pids.isNotEmpty) {
+        await _run(['clear', pids.join(',')]);
+      } else if (dirty?.trim() == '1') {
+        await _run(['clear-all']);
+      }
+    } catch (error) {
+      clearError = error;
+    }
+    if (speakers != null && unmute) await _run(['unmute', speakers]);
+    if (clearError != null) throw clearError;
+    await _setDirty(false);
     _speakersId = null;
     _unmuteSpeakersOnRestore = false;
     _routedRootPid = 0;
     _routedPids.clear();
-    await _run(['clear']);
-    if (speakers != null && unmute) {
-      await _run(['unmute', speakers]);
-    }
-    await _setDirty(false);
   }
 
-  /// Crash-safe: if Transfer died mid-route, unpin apps on next launch.
+  /// Undo a route left by a previous process, including its endpoint mute.
   Future<void> recoverIfDirty() async {
     if (!Platform.isWindows) return;
-    if (!await _isDirty()) return;
-    await _run(['clear']);
+    final dirty = await _readDirty();
+    if (dirty == null) return;
+    final state = AudioRouteRecoveryState.parse(dirty);
+    if (state == null && dirty.trim() != '1') {
+      throw const FormatException('Invalid audio route recovery state');
+    }
+    Object? clearError;
+    try {
+      if (state != null) {
+        await _run(['clear', state.routedPids.join(',')]);
+      } else {
+        await _run(['clear-all']);
+      }
+    } catch (error) {
+      clearError = error;
+    }
+    if (state != null) {
+      if (state.unmute) await _run(['unmute', state.speakersId]);
+    } else if (dirty.trim() == '1') {
+      // Older builds stored only '1'. They always muted the detected speaker
+      // but did not record its previous state; repair the stuck-silent case.
+      final speakersId = await _detectSpeakersId();
+      if (speakersId == null) {
+        throw StateError('Cannot find the speaker muted by an older Yinwei');
+      }
+      await _run(['unmute', speakersId]);
+    }
+    if (clearError != null) throw clearError;
     await _setDirty(false);
   }
 
@@ -155,6 +240,10 @@ class AppAudioRouter {
         ...args,
       ],
     );
+    if (proc.exitCode != 0) {
+      throw ProcessException('powershell.exe', args,
+          (proc.stderr as String? ?? '').trim(), proc.exitCode);
+    }
     final out = (proc.stdout as String? ?? '').trim();
     if (out.isEmpty) return const [];
     return const LineSplitter().convert(out);
@@ -172,23 +261,65 @@ class AppAudioRouter {
     return File('${dir.path}\\yinwei_audio_route.dirty');
   }
 
-  Future<bool> _isDirty() async {
+  Future<String?> _readDirty() async {
     try {
-      return await (await _dirtyFile()).exists();
+      final file = await _dirtyFile();
+      return await file.exists() ? await file.readAsString() : null;
     } catch (_) {
-      return false;
+      return null;
     }
   }
 
-  Future<void> _setDirty(bool dirty) async {
+  Future<void> _setDirty(bool dirty, {AudioRouteRecoveryState? state}) async {
+    final file = await _dirtyFile();
+    if (dirty) {
+      if (state == null) throw StateError('Missing audio route recovery state');
+      await file.writeAsString(state.encode(), flush: true);
+    } else if (await file.exists()) {
+      await file.delete();
+    }
+  }
+}
+
+class AudioRouteRecoveryState {
+  const AudioRouteRecoveryState(this.speakersId, this.unmute,
+      {required this.rootPid, required this.routedPids});
+
+  final String speakersId;
+  final bool unmute;
+  final int rootPid;
+  final List<int> routedPids;
+
+  String encode() => jsonEncode({
+        'speakersId': speakersId,
+        'unmute': unmute,
+        'rootPid': rootPid,
+        'routedPids': routedPids,
+      });
+
+  static AudioRouteRecoveryState? parse(String? raw) {
+    if (raw == null) return null;
     try {
-      final f = await _dirtyFile();
-      if (dirty) {
-        await f.writeAsString('1', flush: true);
-      } else if (await f.exists()) {
-        await f.delete();
+      final value = jsonDecode(raw);
+      if (value is! Map ||
+          value['speakersId'] is! String ||
+          (value['speakersId'] as String).isEmpty ||
+          value['unmute'] is! bool ||
+          value['rootPid'] is! int ||
+          value['routedPids'] is! List) {
+        return null;
       }
-    } catch (_) {}
+      final pids = (value['routedPids'] as List).whereType<int>().toList();
+      if (pids.isEmpty || pids.any((pid) => pid <= 0)) return null;
+      return AudioRouteRecoveryState(
+        value['speakersId'] as String,
+        value['unmute'] as bool,
+        rootPid: value['rootPid'] as int,
+        routedPids: pids,
+      );
+    } catch (_) {
+      return null;
+    }
   }
 }
 
@@ -244,6 +375,15 @@ public static class YinweiPolicy {
     hr |= fac.SetPersistedDefaultAudioEndpoint(pid, 0, 1, hdev);
     hr |= fac.SetPersistedDefaultAudioEndpoint(pid, 0, 2, hdev);
     WindowsDeleteString(hdev);
+    return hr;
+  }
+
+  public static int Clear(uint pid) {
+    var fac = Fac();
+    int hr = 0;
+    hr |= fac.SetPersistedDefaultAudioEndpoint(pid, 0, 0, IntPtr.Zero);
+    hr |= fac.SetPersistedDefaultAudioEndpoint(pid, 0, 1, IntPtr.Zero);
+    hr |= fac.SetPersistedDefaultAudioEndpoint(pid, 0, 2, IntPtr.Zero);
     return hr;
   }
 
@@ -361,24 +501,50 @@ function Pids-ForRoot([int]$root) {
 if ($Action -eq 'apply') {
   $root = [int]$Arg1
   $dev = [string]$Arg2
+  $routed = 0
+  $applied = @()
   foreach ($p in (Pids-ForRoot $root)) {
     $hr = [YinweiPolicy]::Set([uint32]$p, $dev)
-    if ($hr -eq 0) { Write-Output "PID $p" }
+    if ($hr -eq 0) { Write-Output "PID $p"; $routed++; $applied += $p }
   }
-  $was = [YinweiPolicy]::GetMuted($dev)
+  if ($routed -eq 0) { exit 2 }
+  $hr = [YinweiPolicy]::SetMuted($dev, $true)
+  if ($hr -ne 0) {
+    foreach ($p in $applied) { [void][YinweiPolicy]::Clear([uint32]$p) }
+    exit 3
+  }
+  exit 0
+}
+
+if ($Action -eq 'mute-state') {
+  $was = [YinweiPolicy]::GetMuted([string]$Arg1)
   Write-Output "MUTED_WAS $was"
-  [void][YinweiPolicy]::SetMuted($dev, $true)
+  if ($was -lt 0) { exit 4 }
   exit 0
 }
 
 if ($Action -eq 'clear') {
+  $bad = 0
+  foreach ($textPid in $Arg1.Split(',')) {
+    $parsedPid = 0
+    if (-not [int]::TryParse($textPid, [ref]$parsedPid) -or $parsedPid -le 0) { continue }
+    $hr = [YinweiPolicy]::Clear([uint32]$parsedPid)
+    if ($hr -ne 0) { $bad++ }
+  }
+  if ($bad -gt 0) { exit 5 }
+  exit 0
+}
+
+if ($Action -eq 'clear-all') {
   $hr = [YinweiPolicy]::ClearAll()
   Write-Output ("CLEAR_HR $hr")
+  if ($hr -ne 0) { exit 5 }
   exit 0
 }
 
 if ($Action -eq 'unmute') {
-  [void][YinweiPolicy]::SetMuted([string]$Arg1, $false)
+  $hr = [YinweiPolicy]::SetMuted([string]$Arg1, $false)
+  if ($hr -ne 0) { exit 6 }
   exit 0
 }
 

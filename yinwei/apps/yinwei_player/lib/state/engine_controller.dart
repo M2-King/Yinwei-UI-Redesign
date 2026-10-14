@@ -46,6 +46,7 @@ class EngineController extends ChangeNotifier {
   var _tickInFlight = false;
   int spatialSetParamsCalls = 0;
   int nativeSpatialWrites = 0;
+  Future<void> _nativeParamsChain = Future<void>.value();
 
   bool get arraySupported => _engine.supportsArray;
 
@@ -107,6 +108,20 @@ class EngineController extends ChangeNotifier {
         if (gen != _arrayGen) return;
       }());
     });
+  }
+
+  /// Explicit completion for serialized commands. Unlike slider throttling,
+  /// this future completes only after the native parameter call succeeds.
+  Future<void> setParamsAcknowledged(SpatialParams next) async {
+    _paramsThrottle?.cancel();
+    _paramsThrottle = null;
+    _pendingParams = null;
+    ++_paramsGen;
+    spatialSetParamsCalls++;
+    params = next.copy();
+    _syncAzimuth();
+    notifyListeners();
+    await _pushNativeParams(params.copy());
   }
 
   Future<void> applyArrayMode(ArrayMode mode) async {
@@ -295,9 +310,15 @@ class EngineController extends ChangeNotifier {
     });
   }
 
-  Future<void> _pushNativeParams(SpatialParams next) async {
+  Future<void> _pushNativeParams(SpatialParams next) {
+    // Count issued writes synchronously, preserving existing telemetry tests.
+    // Completion is represented by the returned native-call future.
     nativeSpatialWrites++;
-    await _engine.setParams(next);
+    final write = _nativeParamsChain.catchError((Object _) {}).then((_) async {
+      await _engine.setParams(next);
+    });
+    _nativeParamsChain = write;
+    return write;
   }
 
   Map<String, Object?> runtimeAudioDiag() {

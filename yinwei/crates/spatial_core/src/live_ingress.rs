@@ -113,6 +113,8 @@ struct Shared {
     eq_db: Mutex<[f32; EQ_BANDS]>,
     array: Mutex<ArrayLayout>,
     last_error: Mutex<Option<String>>,
+    #[cfg(test)]
+    test_ready: (Mutex<bool>, std::sync::Condvar),
 }
 
 impl Shared {
@@ -140,6 +142,8 @@ impl Shared {
             eq_db: Mutex::new([0.0; EQ_BANDS]),
             array: Mutex::new(ArrayLayout::default()),
             last_error: Mutex::new(None),
+            #[cfg(test)]
+            test_ready: (Mutex::new(false), std::sync::Condvar::new()),
         }
     }
 
@@ -409,6 +413,12 @@ fn dsp_worker(shared: Arc<Shared>) {
 
     let mut acc: Vec<StereoFrame> = Vec::with_capacity(STREAM_CHUNK);
 
+    #[cfg(test)]
+    {
+        *shared.test_ready.0.lock().unwrap() = true;
+        shared.test_ready.1.notify_all();
+    }
+
     while !shared.stop.load(Ordering::Relaxed) {
         if let Ok(mut q) = shared.queue.lock() {
             q.pop_n(STREAM_CHUNK - acc.len(), &mut acc);
@@ -502,6 +512,28 @@ mod tests {
         }
     }
 
+    fn wait_ready(ing: &LiveIngress) {
+        // HRIR construction competes with other DSP tests in a parallel run.
+        // Keep its initialization deadline separate from the PCM processing deadline.
+        let (ready, _) = ing.shared.test_ready.1.wait_timeout_while(
+            ing.shared.test_ready.0.lock().unwrap(),
+            Duration::from_secs(20),
+            |ready| !*ready,
+        ).unwrap();
+        assert!(*ready, "DSP worker did not initialize: {:?}", ing.snapshot());
+    }
+
+    fn push_accepted(ing: &LiveIngress, samples: &[f32]) {
+        let before = ing.snapshot().input_frames;
+        let deadline = Instant::now() + Duration::from_secs(2);
+        loop {
+            ing.push_f32(samples).unwrap();
+            if ing.snapshot().input_frames > before { break; }
+            assert!(Instant::now() < deadline, "capture queue stayed contended");
+            thread::yield_now();
+        }
+    }
+
     #[test]
     fn worker_processes_non_silent_float_stereo() {
         let ing = LiveIngress::start(48_000, 2).unwrap();
@@ -545,9 +577,11 @@ mod tests {
     #[test]
     fn stop_clears_queue() {
         let ing = LiveIngress::start(48_000, 2).unwrap();
+        wait_ready(&ing);
         let pcm = sine_interleaved(STREAM_CHUNK * 6, 48_000, 0.3);
-        ing.push_f32(&pcm).unwrap();
-        let _ = wait_chunks(&ing, 1, Duration::from_secs(3));
+        push_accepted(&ing, &pcm);
+        let processed = wait_chunks(&ing, 1, Duration::from_secs(3));
+        assert!(processed.dsp_chunks >= 1, "{:?}", processed);
         ing.stop();
         let snap = ing.snapshot();
         assert_eq!(snap.queue_depth_frames, 0);
@@ -604,15 +638,19 @@ mod tests {
     #[test]
     fn stream_chunk_accumulation_counts_whole_chunks() {
         let ing = LiveIngress::start(48_000, 2).unwrap();
+        // Separate asynchronous HRIR initialization from the chunk deadline.
+        // Production capture intentionally drops pushes on lock contention;
+        // this test must verify accumulation of ACCEPTED frames, not assume
+        // its final one-frame batch can never be dropped.
+        wait_ready(&ing);
         // One incomplete chunk must not produce wet output yet.
-        ing.push_f32(&sine_interleaved(STREAM_CHUNK - 1, 48_000, 0.4))
-            .unwrap();
+        push_accepted(&ing, &sine_interleaved(STREAM_CHUNK - 1, 48_000, 0.4));
         thread::sleep(Duration::from_millis(40));
         let before = ing.snapshot();
         assert_eq!(before.dsp_chunks, 0);
         assert_eq!(before.wet_frames, 0);
         // Completing the chunk should release exactly one DSP block.
-        ing.push_f32(&sine_interleaved(1, 48_000, 0.4)).unwrap();
+        push_accepted(&ing, &sine_interleaved(1, 48_000, 0.4));
         let snap = wait_chunks(&ing, 1, Duration::from_secs(2));
         assert!(snap.dsp_chunks >= 1);
         assert_eq!(snap.consumed_frames % STREAM_CHUNK as u64, 0);
@@ -636,7 +674,9 @@ mod tests {
     #[test]
     fn session_start_stop_replaces_previous_worker() {
         session_start(48_000, 2).unwrap();
-        session_push_f32(&sine_interleaved(STREAM_CHUNK * 3, 48_000, 0.3)).unwrap();
+        let first_worker = session_arc().unwrap().unwrap();
+        wait_ready(&first_worker);
+        push_accepted(&first_worker, &sine_interleaved(STREAM_CHUNK * 3, 48_000, 0.3));
         let first = wait_session_chunks(1, Duration::from_secs(3));
         assert!(first.dsp_chunks >= 1);
         session_stop().unwrap();
@@ -645,7 +685,10 @@ mod tests {
         let second = session_snapshot();
         assert_eq!(second.input_frames, 0);
         assert_eq!(second.dsp_chunks, 0);
-        session_push_f32(&sine_interleaved(STREAM_CHUNK * 3, 48_000, 0.3)).unwrap();
+        let second_worker = session_arc().unwrap().unwrap();
+        assert!(!Arc::ptr_eq(&first_worker, &second_worker));
+        wait_ready(&second_worker);
+        push_accepted(&second_worker, &sine_interleaved(STREAM_CHUNK * 3, 48_000, 0.3));
         let third = wait_session_chunks(1, Duration::from_secs(3));
         assert!(third.dsp_chunks >= 1);
         session_stop().unwrap();

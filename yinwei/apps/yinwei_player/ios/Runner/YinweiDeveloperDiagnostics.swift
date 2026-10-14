@@ -67,6 +67,9 @@ final class YinweiDeveloperDiagnostics {
       let text = args?["text"] as? String ?? ""
       let filename = args?["filename"] as? String ?? "yinwei-diagnostics.json"
       export(text: text, filename: filename, result: result)
+    case "shareFile":
+      let args = call.arguments as? [String: Any]
+      shareFile(path: args?["path"] as? String ?? "", result: result)
     default:
       result(FlutterMethodNotImplemented)
     }
@@ -188,6 +191,45 @@ final class YinweiDeveloperDiagnostics {
         )
       }
       root.present(av, animated: true)
+      result(["ok": true, "path": url.path, "shared": true])
+    }
+  }
+
+  private func shareFile(path: String, result: @escaping FlutterResult) {
+    let url = URL(fileURLWithPath: path).standardizedFileURL
+    let home = URL(fileURLWithPath: NSHomeDirectory(), isDirectory: true)
+      .standardizedFileURL.path
+    guard !path.isEmpty,
+          url.path.hasPrefix(home + "/"),
+          FileManager.default.fileExists(atPath: url.path) else {
+      result(
+        FlutterError(
+          code: "share_file",
+          message: "Export must be an existing file inside the Yinwei app container.",
+          details: nil
+        )
+      )
+      return
+    }
+    DispatchQueue.main.async {
+      guard let root = Self.presenter() else {
+        result(["ok": true, "path": url.path, "shared": false])
+        return
+      }
+      let activity = UIActivityViewController(
+        activityItems: [url],
+        applicationActivities: nil
+      )
+      if let popover = activity.popoverPresentationController {
+        popover.sourceView = root.view
+        popover.sourceRect = CGRect(
+          x: root.view.bounds.midX,
+          y: root.view.bounds.maxY - 24,
+          width: 1,
+          height: 1
+        )
+      }
+      root.present(activity, animated: true)
       result(["ok": true, "path": url.path, "shared": true])
     }
   }

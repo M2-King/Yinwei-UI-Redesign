@@ -15,7 +15,7 @@ void main() {
     expect(AppVersion.parse('0.1.0') > AppVersion.parse('0.1.0-beta.1'), isTrue);
     expect(AppVersion.parse('0.1.2-beta.1') > AppVersion.parse('0.1.1'), isTrue);
     expect(AppVersion.parse('0.1.2-beta.2') > AppVersion.parse('0.1.2-beta.1'), isTrue);
-    expect(AppVersion.parse('0.1.0') == AppVersion.parse(kYinweiAppVersion), isTrue);
+    expect(AppVersion.parse('0.1.3') == AppVersion.parse(kYinweiAppVersion), isTrue);
   });
 
   test('Stable does not see Beta; Beta prefers the newest visible build', () {
@@ -173,7 +173,11 @@ void main() {
     final manifest = ReleaseManifest.fromJson(json);
     expect(manifest.schemaVersion, kReleaseManifestSchema);
     final decision = UpdateCoordinator().check(
-      installed: InstalledApp.currentWindows(),
+      installed: const InstalledApp(
+        version: AppVersion(0, 1, 0),
+        channel: UpdateChannel.stable,
+        platform: kWindowsX64Platform,
+      ),
       manifest: manifest,
     );
     expect(decision.updateAvailable, isTrue);

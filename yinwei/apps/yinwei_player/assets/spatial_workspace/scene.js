@@ -1348,6 +1348,10 @@
   }
 
   function postToHost(payload) {
+    if (window.YinweiRemoteTransport) {
+      window.YinweiRemoteTransport(payload);
+      return;
+    }
     if (window.chrome && window.chrome.webview && typeof window.chrome.webview.postMessage === 'function') {
       window.chrome.webview.postMessage(payload);
       return;
@@ -2064,7 +2068,7 @@
     height: window.innerHeight,
   });
 
-  if (!(window.chrome && window.chrome.webview)) {
+  if (!window.YinweiRemoteHost && !(window.chrome && window.chrome.webview)) {
     setTimeout(function () {
       if (authoritativeRevision !== 0) return;
       applySceneSnapshot({

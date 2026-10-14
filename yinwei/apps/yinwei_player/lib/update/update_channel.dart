@@ -1,3 +1,6 @@
+/// Public update channel. Manual install only; this URL is not an audio path.
+const String kYinweiUpdateChannelBase = 'https://49.235.107.48/yinwei/updates';
+
 /// Release channels. Isolated from audio / spatial authority.
 enum UpdateChannel {
   stable,

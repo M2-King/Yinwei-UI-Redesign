@@ -21,6 +21,8 @@ mod live_ingress;
 mod live_pcm;
 mod live_queue;
 #[cfg(feature = "realtime")]
+mod output_tap;
+#[cfg(feature = "realtime")]
 mod playback;
 #[cfg(feature = "realtime")]
 mod session;

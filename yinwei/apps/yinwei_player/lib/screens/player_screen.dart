@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:io';
-import 'dart:convert';
 
 import 'package:desktop_drop/desktop_drop.dart';
 import 'package:file_picker/file_picker.dart';
@@ -13,6 +12,7 @@ import 'package:yinwei_player/bridge/engine_bootstrap.dart';
 import 'package:yinwei_player/bridge/live_capture_health.dart';
 import 'package:yinwei_player/bridge/live_source_follow.dart';
 import 'package:yinwei_player/bridge/live_transfer.dart';
+import 'package:yinwei_player/bridge/live_route_cleanup.dart';
 import 'package:yinwei_player/bridge/wet_output_policy.dart';
 import 'package:yinwei_player/bridge/system_media.dart';
 import 'package:yinwei_player/bridge/yinwei_bindings.dart';
@@ -27,6 +27,11 @@ import 'package:yinwei_player/contracts/coordinate_frame_v1.dart';
 import 'package:yinwei_player/widgets/island_spatial_controller.dart';
 import 'package:yinwei_player/runtime/workspace_presentation.dart';
 import 'package:yinwei_player/state/engine_controller.dart';
+import 'package:yinwei_player/state/app_session_coordinator.dart';
+import 'package:yinwei_player/remote/remote_gateway.dart';
+import 'package:yinwei_player/remote/remote_deployment.dart';
+import 'package:yinwei_player/remote/remote_auth.dart';
+import 'package:yinwei_player/remote/native_output_tap.dart';
 import 'package:yinwei_player/state/island_now_playing.dart';
 import 'package:yinwei_player/state/window_chrome.dart';
 import 'package:yinwei_player/state/window_mode.dart';
@@ -44,10 +49,14 @@ import 'package:yinwei_player/platform/android_playback_capture.dart';
 import 'package:yinwei_player/platform/audio_session_coordinator.dart';
 import 'package:yinwei_player/platform/live_activity_bridge.dart';
 import 'package:yinwei_player/platform/live_activity_coordinator.dart';
+import 'package:yinwei_player/platform/media_export_delivery.dart';
 import 'package:yinwei_player/platform/media_file_acquisition.dart';
 import 'package:yinwei_player/platform/screen_audio_probe.dart';
 import 'package:yinwei_player/mobile/mobile_visual_pose.dart';
 import 'package:yinwei_player/presentation/yinwei_live_presentation.dart';
+import 'package:yinwei_player/update/release_manifest.dart';
+import 'package:yinwei_player/update/update_check_service.dart';
+import 'package:yinwei_player/widgets/update_check_dialog.dart';
 
 /// Main window — Dual-Mode Full / Floating Island (Yinwei + Windows SMTC).
 class PlayerScreen extends StatefulWidget {
@@ -60,6 +69,7 @@ class PlayerScreen extends StatefulWidget {
     this.capabilities,
     this.liveActivity,
     this.mediaFiles,
+    this.mediaExport,
     this.audioSession,
     this.pickPlaybackFile,
     this.screenAudioProbe,
@@ -73,6 +83,7 @@ class PlayerScreen extends StatefulWidget {
   final PlatformCapabilities? capabilities;
   final LiveActivityBridge? liveActivity;
   final MediaFileAcquisition? mediaFiles;
+  final MediaExportDelivery? mediaExport;
   final AudioSessionCoordinator? audioSession;
 
   /// Test seam for iOS Open. Production uses FilePicker.
@@ -86,6 +97,7 @@ class PlayerScreen extends StatefulWidget {
 
 class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
   bool _closing = false;
+  bool _disposing = false;
   late final PlatformCapabilities _caps;
   bool get _nativeWindow =>
       _caps.desktopWindow &&
@@ -94,8 +106,13 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
   late final EngineController _ctrl;
   late final SpatialRuntimeAdapter _spatial;
   late final SpatialSceneBridge _sceneBridge;
+  late final AppSessionCoordinator _appSession;
+  RemoteGateway? _remote;
+  RemoteHostRegistration? _remoteRegistration;
+  Future<void>? _remoteStartup;
   late final LiveActivityCoordinator _liveActivity;
   late final MediaFileAcquisition _mediaFiles;
+  late final MediaExportDelivery _mediaExport;
   late final AudioSessionCoordinator _audioSession;
   SphericalV1? _liveActivityFrozenPose;
   var _audioSessionArmed = false;
@@ -109,6 +126,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
   final ValueNotifier<PlaybackTelemetryV1> _telemetry =
       ValueNotifier(const PlaybackTelemetryV1());
   final AppAudioRouter _audioRoute = AppAudioRouter();
+  Future<bool> _routeRecovery = Future<bool>.value(true);
   bool _dragging = false;
   bool _eqOpen = false;
   Offset _eqPos = const Offset(140, 72);
@@ -149,8 +167,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
           mode: startIsland ? WindowMode.islandCollapsed : WindowMode.full,
         );
     _smtc = widget.systemMedia ?? SystemMediaService();
-    _live = widget.liveTransfer ??
-        LiveTransferController(capabilities: _caps);
+    _live = widget.liveTransfer ?? LiveTransferController(capabilities: _caps);
     if (widget.controller != null) {
       _ctrl = widget.controller!;
       _backend = EngineBackend.mock;
@@ -162,13 +179,35 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
     _spatial = SpatialRuntimeAdapter();
     _spatial.bootstrap(_ctrl.params);
     _sceneBridge = SpatialSceneBridge(adapter: _spatial);
+    _appSession = AppSessionCoordinator(
+      controller: _ctrl,
+      spatial: _spatial,
+      sceneBridge: _sceneBridge,
+      nativeBackend: _backend == EngineBackend.native,
+      liveRunning: () => _live.running || _live.starting,
+      liveAudioReady: () => _live.running && !_live.starting,
+      liveSnapshot: () => {
+        'source': _smtc.state.sourceApp,
+        'title': _smtc.state.title,
+        'captureHealthy': _live.captureHealthy,
+      },
+    );
+    if (_backend == EngineBackend.native &&
+        Platform.isWindows &&
+        _caps.desktopWindow &&
+        Platform.environment['YINWEI_REMOTE_ENABLED'] == '1' &&
+        !Platform.environment.containsKey('FLUTTER_TEST')) {
+      _remoteStartup = _startRemoteGateway();
+    }
     _mediaFiles =
         widget.mediaFiles ?? MediaFileAcquisition.create(capabilities: _caps);
+    _mediaExport =
+        widget.mediaExport ?? MediaExportDelivery.create(capabilities: _caps);
     _audioSession = widget.audioSession ??
         AudioSessionCoordinator.create(capabilities: _caps);
     _liveActivity = LiveActivityCoordinator(
-      bridge: widget.liveActivity ??
-          LiveActivityBridge.create(capabilities: _caps),
+      bridge:
+          widget.liveActivity ?? LiveActivityBridge.create(capabilities: _caps),
     );
     if (_nativeWindow) registerIslandRuntimeProbe(_islandProbe);
     if (_nativeWindow) {
@@ -186,7 +225,13 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
     _live.addListener(_onChange);
     if (_caps.systemMedia) unawaited(_smtc.start());
     if (_caps.liveTransfer) {
-      unawaited(_audioRoute.recoverIfDirty());
+      _routeRecovery =
+          _audioRoute.recoverIfDirty().then((_) => true).catchError(
+        (Object error) {
+          debugPrint('[AudioRoute] recovery failed: $error');
+          return false;
+        },
+      );
       _live.refreshDevices();
     }
     final smoke = Platform.environment.containsKey('FLUTTER_TEST')
@@ -225,7 +270,11 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
         _liveUiTick = 0;
       }
       if (wasRunning && !_live.running) {
-        unawaited(_audioRoute.restore());
+        _routeGen++;
+        unawaited(_routeChain.then((_) => _audioRoute.restore()).catchError(
+              (Object error) =>
+                  debugPrint('[AudioRoute] restore failed: $error'),
+            ));
       }
     });
   }
@@ -335,7 +384,8 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
     }
     await _ctrl.togglePlay();
     if (!_ctrl.playing && _ctrl.lastError != null && _audioSession.available) {
-      print('[YINWEI_IOS] PLAY_FAIL release session lastError=${_ctrl.lastError}');
+      print(
+          '[YINWEI_IOS] PLAY_FAIL release session lastError=${_ctrl.lastError}');
       try {
         await _audioSession.deactivate();
       } catch (e) {
@@ -382,7 +432,22 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
     );
   }
 
+  void _onCheckForUpdates() {
+    final installed = InstalledApp.currentWindows();
+    final service = UpdateCheckService();
+    final check = service.check(installed);
+    showDialog<void>(
+      context: context,
+      builder: (context) => UpdateCheckDialog(
+        installed: installed,
+        check: check,
+        service: service,
+      ),
+    );
+  }
+
   void _commitEnginePose(SpatialParams projected) {
+    _appSession.takeLocalControl();
     final next = _ctrl.params.copy()
       ..azimuthDeg = projected.azimuthDeg
       ..elevationDeg = projected.elevationDeg
@@ -516,6 +581,10 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
   }
 
   Future<void> _startLiveHrtf() async {
+    if (!await _routeRecovery) {
+      _live.fail('无法恢复上次的 Windows 音频输出设置；请检查系统声音设置。');
+      return;
+    }
     var pid = _smtc.state.pid;
     var proc = _smtc.state.processName;
     final refuse = LiveSourceFollow.refuseStartReason(_smtc.state);
@@ -706,7 +775,6 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
     final routed = await _audioRoute.routeToSpeakers(
       rootPid: pid,
       speakersId: split.speakersId,
-      restoreId: split.headphonesId,
       keepSpeakerMute: keepSpeakerMute,
     );
     if (gen != _routeGen) return splitNote;
@@ -725,6 +793,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
   }
 
   void _applySpatialFromUi(SpatialParams next) {
+    _appSession.takeLocalControl();
     final adopted = _spatial.adoptPointParams(next);
     if (!adopted.shouldWriteEngine) return;
     final engineParams = adopted.engineParams!;
@@ -735,6 +804,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
   }
 
   void _applyArrayFromUi(ArrayLayout next) {
+    _appSession.takeLocalControl();
     if (_live.running) {
       _live.applyLiveArray(next);
     }
@@ -742,6 +812,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
   }
 
   void _onPlaybackMode(PlaybackMode mode) {
+    _appSession.takeLocalControl();
     if (_live.running) {
       _live.applyLiveMode(mode);
     }
@@ -749,6 +820,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
   }
 
   void _onArrayMode(ArrayMode mode) {
+    _appSession.takeLocalControl();
     if (!_caps.array) return;
     unawaited(() async {
       await _ctrl.applyArrayMode(mode);
@@ -762,8 +834,11 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
   Future<void> _stopLiveHrtf() async {
     _followDebounce?.cancel();
     _routeGen++;
-    await _live.stop();
-    await _audioRoute.restore();
+    await cleanupLiveRoute(
+      pendingRoute: _routeChain,
+      stop: _live.stop,
+      restore: _audioRoute.restore,
+    );
   }
 
   @override
@@ -776,6 +851,8 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
     unawaited(() async {
       try {
         await _stopLiveHrtf();
+      } catch (error) {
+        debugPrint('[AudioRoute] close recovery failed: $error');
       } finally {
         await windowManager.destroy();
       }
@@ -784,6 +861,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
 
   @override
   void dispose() {
+    _disposing = true;
     if (_nativeWindow) windowManager.removeListener(this);
     _followDebounce?.cancel();
     _islandAnim?.cancel();
@@ -795,19 +873,35 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
     unawaited(_liveActivity.end());
     unawaited(_audioSession.deactivate());
     _telemetry.dispose();
-    unawaited(_live.stop());
-    unawaited(_audioRoute.restore());
-    if (widget.controller == null) {
-      _ctrl.dispose();
-    }
+    unawaited(() async {
+      try {
+        try {
+          await _remoteStartup;
+          if (_remote != null) {
+            try {
+              await _remoteRegistration?.close();
+            } finally {
+              await _remote!.close();
+            }
+          } else {
+            await _appSession.close();
+          }
+        } finally {
+          await _stopLiveHrtf();
+        }
+      } finally {
+        if (widget.liveTransfer == null) _live.dispose();
+        if (widget.controller == null) _ctrl.dispose();
+      }
+    }()
+        .catchError(
+      (Object error) => debugPrint('[AudioRoute] dispose failed: $error'),
+    ));
     if (widget.windowMode == null) {
       _window.dispose();
     }
     if (widget.systemMedia == null) {
       _smtc.dispose();
-    }
-    if (widget.liveTransfer == null) {
-      _live.dispose();
     }
     super.dispose();
   }
@@ -824,7 +918,9 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
         telemetry: _telemetry,
         onSceneIntent: _onSceneIntent,
         onOpen: () => unawaited(_onOpen()),
+        onExport: _ctrl.hasOpenedFile ? () => unawaited(_onExport()) : null,
         onTogglePlay: () => unawaited(_onIosTogglePlay()),
+        onSeek: (position) => unawaited(_ctrl.seek(position)),
         onPlaybackMode: _onPlaybackMode,
         screenAudioProbe: widget.screenAudioProbe,
         androidPlaybackCapture: widget.androidPlaybackCapture,
@@ -875,6 +971,11 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
                               onEnterIsland: _caps.floatingIsland
                                   ? () => _window.enterIsland()
                                   : null,
+                              onCheckForUpdates:
+                                  _caps == PlatformCapabilities.windows &&
+                                          Platform.isWindows
+                                      ? _onCheckForUpdates
+                                      : null,
                               buildId: '$kYinweiUiBuild · $kYinweiBridgeBuild',
                               native: _backend == EngineBackend.native,
                               backend: c.backendLabel,
@@ -885,8 +986,8 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
                                   ListenableBuilder(
                                     listenable: _sessionTicks,
                                     builder: (context, _) => AppTopBar(
-                                      showSystemMonitor:
-                                          _caps.systemMedia || _caps.liveTransfer,
+                                      showSystemMonitor: _caps.systemMedia ||
+                                          _caps.liveTransfer,
                                       systemMedia: _smtc,
                                       liveTransfer: _live,
                                       onToggleLiveHrtf: () =>
@@ -955,7 +1056,8 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
                                                               ? _ctrl.params
                                                                   .originAzimuthFromVisual(
                                                                   az,
-                                                                  _ctrl.position,
+                                                                  _ctrl
+                                                                      .position,
                                                                 )
                                                               : az;
                                                       final next = c.params
@@ -1065,7 +1167,8 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
                                         PositionSidebar(
                                           params: c.params,
                                           array: c.array,
-                                          arraySupported: _caps.array && c.arraySupported,
+                                          arraySupported:
+                                              _caps.array && c.arraySupported,
                                           selectedObjectId:
                                               _sceneBridge.selectedObjectId,
                                           sceneSnapshot: _spatial.snapshot(),
@@ -1119,14 +1222,19 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
                                         isPlaying: transport.playing,
                                         playbackMode: c.mode,
                                         arrayMode: c.array.mode,
-                                        arraySupported: _caps.array && c.arraySupported,
+                                        arraySupported:
+                                            _caps.array && c.arraySupported,
                                         onSeek: transport.usesSystemMedia
                                             ? null
-                                            : (d) => c.seek(d),
+                                            : (d) {
+                                                _appSession.takeLocalControl();
+                                                unawaited(c.seek(d));
+                                              },
                                         onPlayPause: () {
                                           if (transport.usesSystemMedia) {
                                             unawaited(_smtc.togglePlayPause());
                                           } else {
+                                            _appSession.takeLocalControl();
                                             unawaited(c.togglePlay());
                                           }
                                         },
@@ -1150,6 +1258,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
                           params: c.params,
                           onChanged: (p) => _applySpatialFromUi(p),
                           onEqSelected: (t) {
+                            _appSession.takeLocalControl();
                             if (_live.running) {
                               final next = c.params.copy()..applyEq(t);
                               _live.applyLiveParams(next);
@@ -1253,8 +1362,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
           if (!mounted) return;
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
-              content: Text(
-                  '请拖入音频或视频文件（wav/mp3/flac/ogg/m4a/aac/mp4/m4v/mov）'),
+              content: Text('请拖入音频或视频文件（wav/mp3/flac/ogg/m4a/aac/mp4/m4v/mov）'),
               behavior: SnackBarBehavior.floating,
             ),
           );
@@ -1399,9 +1507,11 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
   }
 
   Future<void> _openMediaPath(String path) async {
+    _appSession.takeLocalControl();
     try {
       final readable = await _mediaFiles.prepareReadablePath(path);
       await _ctrl.openPath(readable);
+      _appSession.registerLocalMedia(readable, _ctrl.track.title);
       debugPrint('[Player] opened path=$readable backend=$_backend');
       if (Platform.isIOS) {
         print(
@@ -1436,6 +1546,57 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('$e'), behavior: SnackBarBehavior.floating),
       );
+    }
+  }
+
+  Future<void> _startRemoteGateway() async {
+    RemoteGateway? pendingGateway;
+    try {
+      final deployment = RemoteDeployment.fromEnvironment(Platform.environment);
+      final path = Platform.environment['YINWEI_REMOTE_ACCOUNT_FILE'];
+      if (path == null || path.isEmpty) {
+        debugPrint('[Remote] disabled: provision an owner account file first');
+        return;
+      }
+      final auth = await RemoteAuth.load(File(path));
+      if (_disposing) {
+        auth.close();
+        return;
+      }
+      final gateway = RemoteGateway(
+        auth: auth,
+        coordinator: _appSession,
+        entryOrigin: deployment.entryOrigin,
+        allowOriginRotation:
+            Platform.environment['YINWEI_REMOTE_ALLOW_ORIGIN_ROTATION'] == '1',
+        audioTap: NativeOutputTap.tryCreate(),
+        liveAudioTap: NativeOutputTap.tryCreate(live: true),
+        loadAsset: (path) async {
+          final bytes = await rootBundle.load(path);
+          return bytes.buffer
+              .asUint8List(bytes.offsetInBytes, bytes.lengthInBytes);
+        },
+      );
+      pendingGateway = gateway;
+      await gateway.start(
+          port: deployment.port, publicOrigin: deployment.origin);
+      if (deployment.stateFile != null) {
+        _remoteRegistration =
+            RemoteHostRegistration(gateway, deployment.stateFile!);
+        await _remoteRegistration!.start();
+      }
+      _remote = gateway;
+      debugPrint('[Remote] access: ${gateway.origin}/remote/signin');
+    } catch (_) {
+      try {
+        await _remoteRegistration?.close();
+      } catch (_) {}
+      if (pendingGateway != null) {
+        // Startup failed before the gateway was attached to screen disposal.
+        await pendingGateway.close();
+      }
+      debugPrint(
+          '[Remote] disabled: owner configuration or loopback startup failed');
     }
   }
 
@@ -1794,15 +1955,32 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
 
   Future<void> _onExport() async {
     try {
-      final dir =
-          await getDownloadsDirectory() ?? await getTemporaryDirectory();
+      final root = _mediaExport.available
+          ? await getTemporaryDirectory()
+          : await getDownloadsDirectory() ?? await getTemporaryDirectory();
+      final dir = _mediaExport.available
+          ? Directory('${root.path}${Platform.pathSeparator}yinwei-exports')
+          : root;
+      if (!dir.existsSync()) await dir.create(recursive: true);
       final name =
           _ctrl.track.title.isEmpty ? 'yinwei-export' : _ctrl.track.title;
       final safe = name.replaceAll(RegExp(r'[\\/:*?"<>|]'), '_');
-      final out = '${dir.path}${Platform.pathSeparator}${safe}_spatial.wav';
+      final stamp = DateTime.now().toUtc().millisecondsSinceEpoch;
+      final suffix = _mediaExport.available ? '-$stamp' : '';
+      final out = '${dir.path}${Platform.pathSeparator}'
+          '${safe}_spatial$suffix.wav';
       await _ctrl.exportWav(out);
+      if (_ctrl.lastError == null && _mediaExport.available) {
+        final shared = await _mediaExport.shareFile(out);
+        if (!shared) {
+          throw StateError('The iPad share sheet could not be opened.');
+        }
+      }
       if (!mounted) return;
-      final msg = _ctrl.lastError ?? '已导出：$out';
+      final msg = _ctrl.lastError ??
+          (_mediaExport.available
+              ? 'Processed WAV ready to share'
+              : '已导出：$out');
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(msg), behavior: SnackBarBehavior.floating),
       );

@@ -15,6 +15,9 @@
 		C7C200010000000000000202 /* YinweiAudioSessionChannel.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7C200010000000000000011 /* YinweiAudioSessionChannel.swift */; };
 		C7C200010000000000000205 /* YinweiScreenAudioProbe.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7C200010000000000000012 /* YinweiScreenAudioProbe.swift */; };
 		C7C200010000000000000207 /* YinweiDeveloperDiagnostics.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7C200010000000000000013 /* YinweiDeveloperDiagnostics.swift */; };
+		D8A000010000000000000201 /* YinweiReplayKitProbe.swift in Sources */ = {isa = PBXBuildFile; fileRef = D8A000010000000000000010 /* YinweiReplayKitProbe.swift */; };
+		D8A000010000000000000202 /* SampleHandler.swift in Sources */ = {isa = PBXBuildFile; fileRef = D8A000010000000000000020 /* SampleHandler.swift */; };
+		D8A000010000000000000203 /* YinweiBroadcastUpload.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = D8A000010000000000000001 /* YinweiBroadcastUpload.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		C7C200010000000000000203 /* YinweiActivityAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7C100010000000000000030 /* YinweiActivityAttributes.swift */; };
 		C7C200010000000000000204 /* YinweiActivityPresentation.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7C100010000000000000031 /* YinweiActivityPresentation.swift */; };
 		7884E8682EC3CC0700C636F2 /* SceneDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7884E8672EC3CC0400C636F2 /* SceneDelegate.swift */; };
@@ -69,6 +72,13 @@
 			remoteGlobalIDString = C7C100010000000000000301;
 			remoteInfo = YinweiClip;
 		};
+		D8A000010000000000000501 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 97C146E61CF9000F007C117D /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = D8A000010000000000000301;
+			remoteInfo = YinweiBroadcastUpload;
+		};
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXCopyFilesBuildPhase section */
@@ -105,6 +115,17 @@
 			name = "Embed App Clips";
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		D8A000010000000000000404 /* Embed App Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				D8A000010000000000000203 /* YinweiBroadcastUpload.appex in Embed App Extensions */,
+			);
+			name = "Embed App Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
@@ -119,6 +140,12 @@
 		C7C200010000000000000011 /* YinweiAudioSessionChannel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YinweiAudioSessionChannel.swift; sourceTree = "<group>"; };
 		C7C200010000000000000012 /* YinweiScreenAudioProbe.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YinweiScreenAudioProbe.swift; sourceTree = "<group>"; };
 		C7C200010000000000000013 /* YinweiDeveloperDiagnostics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YinweiDeveloperDiagnostics.swift; sourceTree = "<group>"; };
+		D8A000010000000000000010 /* YinweiReplayKitProbe.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YinweiReplayKitProbe.swift; sourceTree = "<group>"; };
+		D8A000010000000000000011 /* Runner.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Runner.entitlements; sourceTree = "<group>"; };
+		D8A000010000000000000001 /* YinweiBroadcastUpload.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = YinweiBroadcastUpload.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		D8A000010000000000000020 /* SampleHandler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SampleHandler.swift; sourceTree = "<group>"; };
+		D8A000010000000000000021 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		D8A000010000000000000022 /* YinweiBroadcastUpload.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = YinweiBroadcastUpload.entitlements; sourceTree = "<group>"; };
 		7884E8672EC3CC0400C636F2 /* SceneDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SceneDelegate.swift; sourceTree = "<group>"; };
 		78E0A7A72DC9AD7400C4905E /* FlutterGeneratedPluginSwiftPackage */ = {isa = PBXFileReference; lastKnownFileType = wrapper; name = FlutterGeneratedPluginSwiftPackage; path = Flutter/ephemeral/Packages/FlutterGeneratedPluginSwiftPackage; sourceTree = "<group>"; };
 		7AFA3C8E1D35360C0083082E /* Release.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; name = Release.xcconfig; path = Flutter/Release.xcconfig; sourceTree = "<group>"; };
@@ -161,6 +188,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		D8A000010000000000000402 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -194,6 +228,7 @@
 				C7C100010000000000000201 /* YinweiClip */,
 				C7C100010000000000000202 /* YinweiClipLiveActivity */,
 				C7C100010000000000000204 /* YinweiActivityTests */,
+				D8A000010000000000000701 /* YinweiBroadcastUpload */,
 				97C146EF1CF9000F007C117D /* Products */,
 				331C8082294A63A400263BE5 /* RunnerTests */,
 				C7C300010000000000000200 /* Native */,
@@ -208,6 +243,7 @@
 				C7C100010000000000000001 /* YinweiClip.app */,
 				C7C100010000000000000002 /* YinweiClipLiveActivity.appex */,
 				C7C100010000000000000003 /* YinweiActivityTests.xctest */,
+				D8A000010000000000000001 /* YinweiBroadcastUpload.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -226,6 +262,8 @@
 				C7C200010000000000000011 /* YinweiAudioSessionChannel.swift */,
 				C7C200010000000000000012 /* YinweiScreenAudioProbe.swift */,
 				C7C200010000000000000013 /* YinweiDeveloperDiagnostics.swift */,
+				D8A000010000000000000010 /* YinweiReplayKitProbe.swift */,
+				D8A000010000000000000011 /* Runner.entitlements */,
 				7884E8672EC3CC0400C636F2 /* SceneDelegate.swift */,
 				74858FAD1ED2DC5600515810 /* Runner-Bridging-Header.h */,
 				C7C300010000000000000010 /* spatial_core_ffi_keep.c */,
@@ -286,6 +324,16 @@
 			path = Native;
 			sourceTree = "<group>";
 		};
+		D8A000010000000000000701 /* YinweiBroadcastUpload */ = {
+			isa = PBXGroup;
+			children = (
+				D8A000010000000000000020 /* SampleHandler.swift */,
+				D8A000010000000000000021 /* Info.plist */,
+				D8A000010000000000000022 /* YinweiBroadcastUpload.entitlements */,
+			);
+			path = YinweiBroadcastUpload;
+			sourceTree = "<group>";
+		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
@@ -317,11 +365,13 @@
 				9705A1C41CF9048500538489 /* Embed Frameworks */,
 				3B06AD1E1E4923F5004D2608 /* Thin Binary */,
 				C7C100010000000000000430 /* Embed App Clips */,
+				D8A000010000000000000404 /* Embed App Extensions */,
 			);
 			buildRules = (
 			);
 			dependencies = (
 				C7C100010000000000000504 /* PBXTargetDependency */,
+				D8A000010000000000000502 /* PBXTargetDependency */,
 			);
 			name = Runner;
 			packageProductDependencies = (
@@ -330,6 +380,23 @@
 			productName = Runner;
 			productReference = 97C146EE1CF9000F007C117D /* Runner.app */;
 			productType = "com.apple.product-type.application";
+		};
+		D8A000010000000000000301 /* YinweiBroadcastUpload */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = D8A000010000000000000604 /* Build configuration list for PBXNativeTarget "YinweiBroadcastUpload" */;
+			buildPhases = (
+				D8A000010000000000000401 /* Sources */,
+				D8A000010000000000000402 /* Frameworks */,
+				D8A000010000000000000403 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = YinweiBroadcastUpload;
+			productName = YinweiBroadcastUpload;
+			productReference = D8A000010000000000000001 /* YinweiBroadcastUpload.appex */;
+			productType = "com.apple.product-type.app-extension";
 		};
 /* End PBXNativeTarget section */
 
@@ -358,6 +425,9 @@
 					C7C100010000000000000303 = {
 						CreatedOnToolsVersion = 15.0;
 					};
+					D8A000010000000000000301 = {
+						CreatedOnToolsVersion = 15.0;
+					};
 				};
 			};
 			buildConfigurationList = 97C146E91CF9000F007C117D /* Build configuration list for PBXProject "Runner" */;
@@ -381,6 +451,7 @@
 				C7C100010000000000000301 /* YinweiClip */,
 				C7C100010000000000000302 /* YinweiClipLiveActivity */,
 				C7C100010000000000000303 /* YinweiActivityTests */,
+				D8A000010000000000000301 /* YinweiBroadcastUpload */,
 			);
 		};
 /* End PBXProject section */
@@ -423,6 +494,13 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		C7C100010000000000000422 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		D8A000010000000000000403 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -483,6 +561,7 @@
 				C7C200010000000000000202 /* YinweiAudioSessionChannel.swift in Sources */,
 				C7C200010000000000000205 /* YinweiScreenAudioProbe.swift in Sources */,
 				C7C200010000000000000207 /* YinweiDeveloperDiagnostics.swift in Sources */,
+				D8A000010000000000000201 /* YinweiReplayKitProbe.swift in Sources */,
 				C7C200010000000000000203 /* YinweiActivityAttributes.swift in Sources */,
 				C7C200010000000000000204 /* YinweiActivityPresentation.swift in Sources */,
 				1498D2341E8E89220040F4C2 /* GeneratedPluginRegistrant.m in Sources */,
@@ -527,6 +606,14 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		D8A000010000000000000401 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				D8A000010000000000000202 /* SampleHandler.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
@@ -545,6 +632,11 @@
 			isa = PBXTargetDependency;
 			target = C7C100010000000000000301 /* YinweiClip */;
 			targetProxy = C7C100010000000000000503 /* PBXContainerItemProxy */;
+		};
+		D8A000010000000000000502 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = D8A000010000000000000301 /* YinweiBroadcastUpload */;
+			targetProxy = D8A000010000000000000501 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -627,6 +719,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_ENABLE_MODULES = YES;
+				CODE_SIGN_ENTITLEMENTS = Runner/Runner.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = "$(FLUTTER_BUILD_NUMBER)";
 				ENABLE_BITCODE = NO;
@@ -829,6 +922,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_ENABLE_MODULES = YES;
+				CODE_SIGN_ENTITLEMENTS = Runner/Runner.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = "$(FLUTTER_BUILD_NUMBER)";
 				ENABLE_BITCODE = NO;
@@ -872,6 +966,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_ENABLE_MODULES = YES;
+				CODE_SIGN_ENTITLEMENTS = Runner/Runner.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = "$(FLUTTER_BUILD_NUMBER)";
 				ENABLE_BITCODE = NO;
@@ -1096,6 +1191,80 @@
 			};
 			name = Profile;
 		};
+		D8A000010000000000000601 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CODE_SIGN_ENTITLEMENTS = YinweiBroadcastUpload/YinweiBroadcastUpload.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = YinweiBroadcastUpload/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.2;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 0.1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = dev.yinwei.yinweiPlayer.BroadcastUpload;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		D8A000010000000000000602 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CODE_SIGN_ENTITLEMENTS = YinweiBroadcastUpload/YinweiBroadcastUpload.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = YinweiBroadcastUpload/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.2;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 0.1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = dev.yinwei.yinweiPlayer.BroadcastUpload;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		D8A000010000000000000603 /* Profile */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CODE_SIGN_ENTITLEMENTS = YinweiBroadcastUpload/YinweiBroadcastUpload.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = YinweiBroadcastUpload/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.2;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 0.1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = dev.yinwei.yinweiPlayer.BroadcastUpload;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Profile;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -1156,6 +1325,16 @@
 				C7C100010000000000000621 /* Debug */,
 				C7C100010000000000000622 /* Release */,
 				C7C100010000000000000623 /* Profile */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		D8A000010000000000000604 /* Build configuration list for PBXNativeTarget "YinweiBroadcastUpload" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				D8A000010000000000000601 /* Debug */,
+				D8A000010000000000000602 /* Release */,
+				D8A000010000000000000603 /* Profile */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

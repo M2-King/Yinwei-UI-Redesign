@@ -31,6 +31,7 @@ const RING_TARGET_FRAMES: usize = STREAM_CHUNK * 10; // ~100–200 ms cushion so
 const RING_MAX_FRAMES: usize = STREAM_CHUNK * 20;
 
 struct DspShared {
+    output_tap: crate::output_tap::OutputTap,
     source: Mutex<Vec<StereoFrame>>,
     content_rate: AtomicU64,
     output_rate: AtomicU64,
@@ -64,9 +65,13 @@ pub struct RealtimePlayer {
 }
 
 impl RealtimePlayer {
+    pub fn set_output_tap(&self, enabled: bool) { self.shared.output_tap.set_enabled(enabled); }
+    pub fn read_output_tap(&self) -> Option<crate::output_tap::OutputTapPacket> { self.shared.output_tap.read() }
+
     pub fn new() -> Self {
         Self {
             shared: Arc::new(DspShared {
+                output_tap: crate::output_tap::OutputTap::default(),
                 source: Mutex::new(Vec::new()),
                 content_rate: AtomicU64::new(44_100),
                 output_rate: AtomicU64::new(44_100),
@@ -99,6 +104,7 @@ impl RealtimePlayer {
 
     /// Load dry decoded PCM once. Does **not** HRTF the whole song.
     pub fn load_source(&self, frames: Vec<StereoFrame>, sample_rate: u32) -> Result<(), SpatialError> {
+        self.shared.output_tap.invalidate();
         self.stop_dsp();
         {
             let mut g = self.shared.source.lock().map_err(|_| SpatialError::LockPoisoned)?;
@@ -268,6 +274,7 @@ impl RealtimePlayer {
         };
         let prev = self.shared.mode.swap(v, Ordering::Relaxed);
         if prev != v {
+            self.shared.output_tap.invalidate();
             // Soft switch: do NOT clear the ring (that underruns and "卡一下").
             // DSP picks up the new mode on the next chunk; at most one block of
             // dry/wet blend is far less audible than a stall.
@@ -281,6 +288,7 @@ impl RealtimePlayer {
     }
 
     pub fn seek_ms(&self, ms: u64) -> Result<(), SpatialError> {
+        self.shared.output_tap.invalidate();
         let sr = self.shared.content_rate.load(Ordering::Relaxed).max(1);
         let frame = ms.saturating_mul(sr) / 1000;
         let len = self.frame_count()? as u64;
@@ -293,6 +301,7 @@ impl RealtimePlayer {
         if let Ok(mut ring) = self.shared.ring.lock() {
             ring.clear();
         }
+        self.shared.output_tap.invalidate();
         Ok(())
     }
 
@@ -307,6 +316,7 @@ impl RealtimePlayer {
 
     pub fn pause(&self) {
         self.shared.playing.store(false, Ordering::Relaxed);
+        self.shared.output_tap.invalidate();
     }
 
     pub fn play(&self) -> Result<(), SpatialError> {
@@ -488,6 +498,7 @@ fn dsp_loop(shared: Arc<DspShared>, streamer: &mut HrtfStreamer) {
             continue;
         }
 
+        let tap_epoch = shared.output_tap.epoch();
         let content_sr = shared.content_rate.load(Ordering::Relaxed).max(1) as u32;
         let device_sr = shared.output_rate.load(Ordering::Relaxed).max(1) as u32;
         let mode = shared.mode.load(Ordering::Relaxed);
@@ -530,6 +541,7 @@ fn dsp_loop(shared: Arc<DspShared>, streamer: &mut HrtfStreamer) {
             continue;
         }
 
+        let mut tap_mode = mode as u32;
         let wet: Vec<StereoFrame> = if mode == 0 {
             chunk[..got].to_vec()
         } else {
@@ -559,6 +571,7 @@ fn dsp_loop(shared: Arc<DspShared>, streamer: &mut HrtfStreamer) {
                     block[..got].to_vec()
                 }
                 Err(e) => {
+                    tap_mode = 2;
                     eprintln!("yinwei dsp: {e}");
                     chunk[..got].to_vec()
                 }
@@ -573,6 +586,14 @@ fn dsp_loop(shared: Arc<DspShared>, streamer: &mut HrtfStreamer) {
         eq.set_gains(content_sr, eq_db);
         let mut wet = wet;
         eq.process_frames(&mut wet);
+
+        // Bounded copy after existing processing/EQ, before device resampling.
+        // A slow optional reader cannot consume or block local ring frames.
+        shared.output_tap.publish(tap_epoch,
+            shared.read_cursor.load(Ordering::Relaxed).saturating_sub(got as u64),
+            content_sr, tap_mode,
+            f32::from_bits(shared.live_az_bits.load(Ordering::Relaxed)),
+            f32::from_bits(shared.live_el_bits.load(Ordering::Relaxed)), &wet);
 
         let out = if content_sr == device_sr {
             wet
@@ -669,6 +690,40 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn tap_copies_the_actual_original_and_spatial_worker_output() {
+        for mode in [PlaybackMode::Original, PlaybackMode::Spatial] {
+            let player = RealtimePlayer::new();
+            let frames: Vec<_> = (0..STREAM_CHUNK * 2).map(|i| {
+                let value = ((i as f32) * 440.0 * std::f32::consts::TAU / 48000.0).sin() * 0.1;
+                (value, value * 0.7)
+            }).collect();
+            player.load_source(frames.clone(), 48000).unwrap();
+            player.shared.output_rate.store(48000, Ordering::Relaxed);
+            player.set_live_mode(mode);
+            player.set_output_tap(true);
+            player.shared.playing.store(true, Ordering::Relaxed);
+            player.ensure_dsp().unwrap();
+            let deadline = std::time::Instant::now() + Duration::from_secs(5);
+            while player.shared.ring.lock().unwrap().len() < frames.len() {
+                assert!(std::time::Instant::now() < deadline, "worker did not render");
+                thread::sleep(Duration::from_millis(1));
+            }
+            player.stop_dsp();
+            let local: Vec<_> = player.shared.ring.lock().unwrap().iter().copied().collect();
+            let mut copied = Vec::new();
+            while let Some(packet) = player.read_output_tap() {
+                assert_eq!(packet.meta.sample_rate, 48000);
+                assert_eq!(packet.meta.mode, if mode == PlaybackMode::Original {0} else {1});
+                copied.extend(packet.frames);
+            }
+            assert_eq!(copied, local, "browser tap must copy rather than re-render");
+            assert!(copied.iter().all(|(l,r)| l.is_finite() && r.is_finite()));
+            assert!(copied.iter().any(|(l,r)| l.abs() + r.abs() > 0.00001));
+        }
+        assert_eq!(std::mem::size_of::<crate::output_tap::OutputTapMeta>(), 48);
+    }
 
     #[test]
     fn load_and_seek_without_device() {

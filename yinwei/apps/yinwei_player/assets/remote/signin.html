@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <meta name="csrf" content="LOGIN_CSRF_TOKEN" />
+    <title>Sign in · Yinwei</title>
+    <link rel="stylesheet" href="/remote/style.css" />
+    <script src="/remote/signin.js" defer></script>
+  </head>
+  <body class="login">
+    <main class="login-card">
+      <span class="eyebrow">YINWEI / PRIVATE ACCESS</span>
+      <h1>Your listening room.</h1>
+      <p>Sign in to the Yinwei session running on your laptop.</p>
+      <form id="signin">
+        <label
+          >Owner account<input
+            name="username"
+            autocomplete="username"
+            required
+            maxlength="48" /></label
+        ><label
+          >Password<input
+            name="password"
+            type="password"
+            autocomplete="current-password"
+            required
+            maxlength="256" /></label
+        ><button type="submit">Sign in</button>
+        <p id="message" role="status" aria-live="polite"></p>
+      </form>
+      <small>Private access · Keep your laptop awake and connected.</small>
+    </main>
+  </body>
+</html>

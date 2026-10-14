@@ -1,7 +1,7 @@
 # Builds a native Windows installer for the Flutter desktop player.
 # Output is YinweiSetup-<version>-windows-x64.exe, not a web/JS package.
 param(
-  [string]$Version = "0.1.0"
+  [string]$Version = "0.1.3"
 )
 
 $ErrorActionPreference = "Stop"

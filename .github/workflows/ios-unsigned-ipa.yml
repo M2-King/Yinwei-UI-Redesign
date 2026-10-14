@@ -340,6 +340,17 @@ jobs:
           echo "Runner.app/AppClips/: $([[ -d "$APP/AppClips" ]] && echo present || echo absent)"
           echo "Runner.app/Frameworks/: $([[ -d "$APP/Frameworks" ]] && echo present || echo absent)"
 
+          REPLAYKIT_EXTENSION="$APP/PlugIns/YinweiBroadcastUpload.appex"
+          if [[ ! -d "$REPLAYKIT_EXTENSION" ]]; then
+            echo "ERROR: ReplayKit broadcast upload extension is not embedded at $REPLAYKIT_EXTENSION" >&2
+            exit 1
+          fi
+          if [[ ! -f "$REPLAYKIT_EXTENSION/YinweiBroadcastUpload" ]]; then
+            echo "ERROR: ReplayKit extension executable is missing" >&2
+            exit 1
+          fi
+          echo "ReplayKit broadcast extension embedded: yes"
+
           if echo "$APP" | grep -Eqi 'iphonesimulator|simulator'; then
             echo "ERROR: refusing simulator product $APP" >&2
             exit 1
@@ -396,6 +407,7 @@ jobs:
           echo "Signing/entitlement validation is outside this unsigned workflow."
 
           echo "YINWEI_FFI_OK=yes" >> "$GITHUB_ENV"
+          echo "REPLAYKIT_EXTENSION_EMBEDDED=yes" >> "$GITHUB_ENV"
           echo "APP_CLIP_COMPILED=$clip_compiled" >> "$GITHUB_ENV"
           echo "APP_CLIP_EMBEDDED=$clip_embedded" >> "$GITHUB_ENV"
           echo "LIVE_ACTIVITY_COMPILED=$live_compiled" >> "$GITHUB_ENV"
@@ -436,6 +448,10 @@ jobs:
             echo "ERROR: IPA is missing Payload/Runner.app/" >&2
             exit 1
           fi
+          if ! grep -q 'Payload/Runner.app/PlugIns/YinweiBroadcastUpload.appex/' "$LOG_DIR/ipa-listing.txt"; then
+            echo "ERROR: IPA is missing the ReplayKit broadcast upload extension" >&2
+            exit 1
+          fi
           echo
           echo "IPA Frameworks: $(grep -q 'Payload/Runner.app/Frameworks/' "$LOG_DIR/ipa-listing.txt" && echo yes || echo no)"
           echo "IPA PlugIns:    $(grep -q 'Payload/Runner.app/PlugIns/' "$LOG_DIR/ipa-listing.txt" && echo yes || echo no)"
@@ -469,6 +485,7 @@ jobs:
             echo "spatial_core tests:   ${CARGO_TEST_PASSED} passed"
             echo "flutter tests:        ${FLUTTER_TEST_PASSED} passed"
             echo "Runner contains spatial_core/yinwei symbols: ${YINWEI_FFI_OK}"
+            echo "ReplayKit broadcast extension embedded: ${REPLAYKIT_EXTENSION_EMBEDDED}"
             echo "App Clip compiled:    ${APP_CLIP_COMPILED}"
             echo "App Clip embedded:    ${APP_CLIP_EMBEDDED}"
             echo "Live Activity compiled: ${LIVE_ACTIVITY_COMPILED}"

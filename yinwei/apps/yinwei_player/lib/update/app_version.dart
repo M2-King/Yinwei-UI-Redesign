@@ -81,4 +81,4 @@ class AppVersion implements Comparable<AppVersion> {
 }
 
 /// Shipping identity of this Windows build. Keep in sync with pubspec version.
-const String kYinweiAppVersion = '0.1.0';
+const String kYinweiAppVersion = '0.1.3';
