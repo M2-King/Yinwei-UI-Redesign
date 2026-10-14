@@ -7,6 +7,12 @@ import 'package:yinwei_player/remote/remote_protocol.dart';
 
 const remotePasswordIterations = 600000;
 
+// Keep the isolate closure out of RemoteAuth's instance scope. An injected
+// clock can capture a gateway/timer; only password derivation primitives may
+// cross into the worker, never sessions or runtime state.
+Future<String> _deriveOffThread(String password, String salt, int iterations) =>
+    Isolate.run(() => _derivePassword(password, salt, iterations));
+
 Future<String> _derivePassword(
     String password, String salt, int iterations) async {
   final key = await Pbkdf2.hmacSha256(iterations: iterations, bits: 256)
@@ -163,8 +169,7 @@ class RemoteAuth {
     _hashing = true;
     try {
       final salt = account.salt, iterations = account.iterations;
-      final hash =
-          await Isolate.run(() => _derivePassword(password, salt, iterations));
+      final hash = await _deriveOffThread(password, salt, iterations);
       if (_closed) throw const RemoteFailure('host_closed', httpStatus: 503);
       if (!_equalSecret(hash, account.hash) ||
           username != account.username ||
@@ -197,7 +202,8 @@ class RemoteAuth {
     if (!valid(session)) {
       throw const RemoteFailure('unauthorized', httpStatus: 401);
     }
-    if (!['events', 'audio'].contains(purpose) || _tickets.length >= 16) {
+    if (!['events', 'audio', 'transform'].contains(purpose) ||
+        _tickets.length >= 16) {
       throw const RemoteFailure('ticket_limited', httpStatus: 429);
     }
     final value = remoteSecret();

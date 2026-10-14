@@ -2,7 +2,7 @@
 
 Date: 2026-10-14
 
-Status: **Gate R0 failed on the owner's actual iPad on 2026-10-14. Gate N0 source implementation is ready for a signed macOS build and actual-iPad acceptance.** Safari exposes the screen-share API and returns a screen/video stream, but it supplies no audio track. The pure-PWA iPad-system-audio route is closed on this setup. R1-R4 must not start until the signed native capture-companion gate proves Music-app audio and clean return routing.
+Status: **The pure-PWA Gate R0 failed, while the signed native N0.1 capture companion has now passed live Music-app capture and generated-return playback on the owner's actual iPad (2026-10-14).** ReplayKit delivered non-silent stereo app audio and Yinwei played its native return test while capture remained active. The remaining N0 routing/lifecycle checks below must close before R1 networking starts: exclude return-audio recapture, classify the dry Music path, and verify stop/start recovery.
 
 ## Product outcome
 
@@ -132,7 +132,11 @@ N0 implementation record, 2026-10-14:
 - added resettable numeric status plus an advanced route to retain the iOS 27 ScreenCaptureKit experiment without reducing the spatial workspace;
 - 513 Flutter tests passed with one intentional skip, targeted analysis reported no issues, the existing mobile spatial drag/orbit tests passed, the N0 panel golden passed, and the Windows Debug build passed;
 - no laptop player restart, startup change, Cloudflare change, Class Interpreter/BAI change, audio upload or media persistence occurred;
-- this source implementation does not yet pass Gate N0: the Windows host has no Xcode toolchain or valid Apple signing route, so the ReplayKit extension has not been compiled/signed and the actual-iPad Music-app/routing test remains outstanding.
+- CI compiled and packaged the ARM64 Runner plus ReplayKit extension, and the owner re-signed and installed N0.1 using an Apple provisioning route;
+- signer-compatible App Group discovery restored host/extension numeric telemetry after re-signing;
+- actual-iPad evidence showed **Receiving App Audio**, 532 received app-audio buffers, 44.1 kHz stereo input and a non-silent -4.7 dB RMS reading from the intended Music-app route;
+- with Music paused and the broadcast active, the owner reported the generated return test was audible and played normally;
+- this proves capture and return playback separately on the real device. It does not yet prove that the return is excluded from capture, that the original dry Music path is suppressed, or that stop/start recovery is clean.
 
 Apple now deprecates `RPSystemBroadcastPickerView` in favor of ScreenCaptureKit’s picker. Yinwei retains the native iOS 27 ScreenCaptureKit probe behind the panel menu, but the owner’s web ScreenCaptureKit-style experiment supplied no audio. ReplayKit remains an explicit feasibility adapter for this gate and must not be treated as a proven long-term capture path until the signed device test passes.
 
@@ -161,7 +165,7 @@ Signer-compatibility finding from the first installed N0 build on 2026-10-14:
 
 Automated tests and the Windows build do not count as this actual-iPad acceptance.
 
-Only after N0 passes should the existing R1 transport plan be adapted so the signed capture companion sends bounded raw PCM to the laptop and receives the laptop's once-processed YNW1 audio. The existing Windows file playback and Live Transfer routes remain protected.
+Only after the three remaining N0 routing/lifecycle checks pass should R1 start. R1 adapts the transport boundary to the signed capture companion: it sends bounded raw PCM to the laptop and receives the laptop's once-processed YNW1 audio. The existing Windows file playback and Live Transfer routes remain protected.
 
 Test in normal Safari and the Home Screen PWA with:
 
@@ -193,20 +197,51 @@ References:
 - <https://developer.mozilla.org/en-US/docs/Web/API/MediaDevices/getDisplayMedia>
 - <https://developer.apple.com/documentation/screencapturekit/capturing-screen-content-on-ios>
 
-## Phase R1 — protected browser uplink
+## Phase R1 — protected native capture uplink
 
-Starts only after Gate R0 passes.
+Owner approved starting R1 on 2026-10-14. Build and verify the transport with synthetic PCM now. Activating real capture remains gated by N0's return-recapture, dry-routing and lifecycle checks; normal player builds advertise the transform route unavailable until R2 installs its native adapter.
 
-1. Add a capture `AudioWorklet` that copies PCM into fixed 10 ms chunks. It performs no DSP and never blocks the browser audio callback.
-2. Normalize to stereo 48 kHz PCM16 at the browser boundary when required. A 10 ms stereo chunk is 1,920 bytes, leaving room for a small header under the current 2 KiB browser-message limit.
+R1 implementation boundary:
+
+- Add an optional `RemoteTransformAdapter` to the gateway. It has synchronous, nonblocking `tryPush`/`read` methods and explicit epoch-owned `start`/`stop`. No adapter means no transform ticket or socket.
+- Define a 48-byte little-endian YNI1 header: magic/version (u32), epoch/sequence/firstFrame (u64), sampleRate/frameCount/channels/flags (u32), followed by exactly 480 stereo PCM16 frames. 1,968 bytes per message fits the existing 2 KiB inbound limit. Only 48 kHz, stereo, 10 ms input is accepted.
+- Bind the transform ticket to the authenticated owner session/device and reserve one transform socket before upgrade. A fresh server epoch is mandatory after stop, reconnect or origin rotation. One-use tickets expire after 20 seconds.
+- Limit upstream credit to eight chunks and downstream credit to 24 packets. Drop complete newest input on overload, acknowledge the drop, mark the next delivered input discontinuous, and expose numeric counters. An adapter never queues unbounded media.
+- Reject replay, malformed frames, unexpected epochs, overlapping frame positions, excessive rate, expired/revoked sessions and unacknowledged/idle streams. Flush the adapter before releasing its lease on all exit paths.
+- Provide a native Dart transport client with a synchronous nonblocking send boundary, memory-only owner session/cookie handling, WSS-only public addresses, and deliberate fresh start after disconnect. It performs no DSP or iPad playback in R1.
+- Verify wire fidelity, authentication, overload, stop/start, reconnect, revocation, origin rotation and old-epoch rejection over real loopback sockets. A separate opt-in harness may test the same protocol through a Yinwei-only temporary public relay using generated PCM and ephemeral test credentials; this is transport evidence, never actual iPad or HRTF acceptance.
+- The ReplayKit callback-to-host memory handoff and native returned-audio output are still required before real live use. Never place media, owner credentials or session grants in signer-managed App Group defaults/files. Choose and validate an in-memory handoff after the remaining N0 routing checks. R2 connects this handoff and the existing Rust engine; R1 does not silently enable personal audio upload.
+
+1. Establish a bounded, nonblocking transport interface for the ReplayKit input edge. The actual cross-process capture handoff is activated with R2 after N0 routing acceptance; it performs no DSP, never blocks ReplayKit's sample callback and retains no recording.
+2. Require stereo 48 kHz PCM16 at the native transport boundary. R2 must use a bounded native capture-edge converter for the observed 44.1 kHz source before invoking this interface. A 10 ms stereo chunk is 1,920 bytes, leaving room for a small header under the current 2 KiB message limit.
 3. Define a versioned `YNI1` binary input frame containing epoch, sequence, source-frame index, sample rate, channels, frame count and flags. Reject malformed sizes, non-finite metadata and stale epochs.
 4. Add one-use, purpose-bound transform tickets and `/remote/ws/transform`. The ticket binds owner session, device/session ID and the single current remote-transform lease.
-5. Use a full-duplex socket: browser sends YNI1 input and receives existing YNW1 processed output. Control/events remain on the existing event channel.
-6. Browser send logic checks `WebSocket.bufferedAmount`; on excess backlog it drops complete newest input chunks and reports overload. It never accumulates unbounded media in JavaScript.
-7. The gateway enforces Origin, cookie, ticket, frame schema, rate, bandwidth, idle deadline and one active transform source. Audio remains in memory and is never written to disk.
+5. Use a full-duplex socket: the native companion sends YNI1 input and receives existing YNW1 processed output. Control/events remain on the existing event channel.
+6. Native send logic uses a fixed-capacity queue and checks transport backlog; on excess backlog it drops complete newest input chunks and reports overload. It never accumulates unbounded media in Swift or the extension process.
+7. The gateway enforces Origin, cookie, ticket, frame schema, rate, bandwidth, idle deadline and one active transform source. The native client supplies the same exact Origin and owner cookie as the browser. Audio remains in memory and is never written to disk.
 8. Stop/disconnect/revocation closes input, flushes output and increments the epoch. Reconnection requires a new ticket and a deliberate Start; it never resumes capture automatically.
 
 Gate R1: synthetic PCM crosses the exact public relay, reaches a bounded fake/native input adapter, returns ordered processed packets and handles overload, revocation, rotation and reconnect without replay or unbounded memory.
+
+### R1 transport verification record — 2026-10-14
+
+The transport gate passed with generated PCM and a test-only format-conversion adapter. This is not evidence of laptop HRTF processing or actual iPad round-trip playback.
+
+- `remote_transform.dart`: strict YNI1 PCM16 input and YNW1 finite-float output validation, monotonic source positions, fresh epochs and a 100-chunk/sec input token bucket.
+- `remote_transform_socket.dart`: owner/session-bound one-use authentication, one active source lease, five-second authentication/idle/backlog deadlines, bounded downstream credit, bounded ACK rate, synchronous adapter flushing on all exit paths.
+- `remote_transform_client.dart`: native memory-only sign-in/CSRF/cookies, WSS public transport, eight-chunk upstream credit, complete newest-chunk drops, explicit discontinuities, late-handshake cleanup and deliberate reconnect. It performs no capture, DSP or playback itself.
+- Normal gateway constructors install no adapter. The session capability is false and both transform tickets and the transform endpoint fail closed. Existing file/Windows Live Transfer taps remain separate.
+- The password-hashing isolate now receives only primitive hashing inputs. Tests with an injected expiry clock exposed that an instance-scoped closure could otherwise capture a gateway/timer and fail authentication.
+- 49 targeted protocol/socket/gateway regression tests passed, including output-credit exhaustion, wrong-purpose/expired/reused tickets, malformed frames, replay, old epochs, input/ACK flooding, overload, partial-start failure, nonfinite output, idle close, owner revocation, stop/start and origin rotation.
+- The complete Flutter suite passed: **544 passed, 2 skipped** (the existing intentional skip and the opt-in public relay test).
+- Static analysis of the changed transport/auth files and new tests reported no issues.
+- Windows Debug player build passed. The protected `windows/runner/spatial_core.dll` SHA-256 remained unchanged. The built player was not launched and active playback was not restarted.
+- A separate temporary Cloudflare quick tunnel exercised the same existing Yinwei `QuickBridge` message relay with generated PCM and ephemeral test credentials. **21 output packets, exact sample values, zero drops, fresh reconnect epoch; transport round-trip median 35.174 ms and p95 41.606 ms.** These numbers exclude capture, resampling, HRTF/DSP, device output and iPad buffering, and the probe sent slowly for fidelity verification rather than production throughput measurement.
+- The test tunnel and bridge were closed afterward. No fixed entry publication, Cloudflare account/resource change, production account access, Class Interpreter/BAI change, media recording or Windows startup change occurred.
+
+Manual public verification on this configured workstation uses `node yinwei/apps/yinwei_player/tool/remote/test-transform-relay.mjs` from the repository root. It requires the existing local `yinwei/tools/remote/quick-transport.mjs` deployment helper, its Node dependencies and the pinned cloudflared executable. It binds an isolated test gateway on port 18477, generates a new temporary quick tunnel and logs numeric results only; normal CI skips it unless the launcher supplies its explicit test environment.
+
+Remaining before real Music-app audio use: close N0 return-recapture/dry-route/lifecycle acceptance; select and verify a secure memory-only host/extension handoff under the owner's signing profile; add native 44.1-to-48 kHz conversion; connect Rust ingress/wet output and native iPad playback in R2; then run actual-iPad audio/source-change/stop-start/reconnection acceptance. No new installation is required to keep using the existing N0 probe.
 
 ## Phase R2 — existing laptop engine integration
 

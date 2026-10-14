@@ -326,7 +326,8 @@ void main() {
       '/remote/capture-meter-worklet.js',
       '/remote/scene.js',
       '/remote/ws/events',
-      '/remote/ws/audio'
+      '/remote/ws/audio',
+      '/remote/ws/transform'
     ]) {
       expect((await request(path)).status, 401, reason: path);
     }
@@ -382,6 +383,22 @@ void main() {
     final ticket = auth.ticket(session, 'events');
     expect(auth.consumeTicket(session, ticket, 'events'), isTrue);
     expect(auth.consumeTicket(session, ticket, 'events'), isFalse);
+  });
+
+  test('normal gateway has no remote transform adapter or media uplink',
+      () async {
+    await signin();
+    final session =
+        jsonDecode((await request('/remote/api/session')).text) as Map;
+    expect(session['remoteTransformAvailable'], false);
+    expect(
+        (await request('/remote/api/ws-ticket',
+                body: {'purpose': 'transform'}, csrfToken: csrf))
+            .status,
+        400);
+    expect((await request('/remote/ws/transform')).status, 409);
+    expect(audioTap.enabled, false);
+    expect(liveTap.enabled, false);
   });
 
   test(

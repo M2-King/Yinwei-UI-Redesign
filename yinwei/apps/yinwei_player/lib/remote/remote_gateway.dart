@@ -1,10 +1,13 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math';
 import 'dart:typed_data';
 import 'package:yinwei_player/remote/remote_auth.dart';
 import 'package:yinwei_player/remote/native_output_tap.dart';
 import 'package:yinwei_player/remote/remote_protocol.dart';
+import 'package:yinwei_player/remote/remote_transform.dart';
+import 'package:yinwei_player/remote/remote_transform_socket.dart';
 import 'package:yinwei_player/state/app_session_coordinator.dart';
 
 typedef RemoteAssetLoader = Future<Uint8List> Function(String asset);
@@ -17,7 +20,14 @@ class RemoteGateway {
       this.entryOrigin,
       this.allowOriginRotation = false,
       this.audioTap,
-      this.liveAudioTap});
+      this.liveAudioTap,
+      this.transformAdapter});
+  final RemoteTransformAdapter? transformAdapter;
+  WebSocket? _transformSocket;
+  RemoteTransformSocket? _transformStream;
+  RemoteSession? _transformSession;
+  bool _transformUpgradePending = false;
+  int _transformEpoch = Random.secure().nextInt(0x7fffffff) + 1;
   final bool allowOriginRotation;
   final RemoteOutputSource? audioTap;
   final RemoteOutputSource? liveAudioTap;
@@ -113,6 +123,11 @@ class RemoteGateway {
     // A new tunnel is a new browser origin. Invalidate remote access only;
     // never stop/restart the engine or change its current playback/spatial state.
     ++_originEpoch;
+    _transformStream?.close('origin_changed');
+    if (_transformSocket != null) {
+      unawaited(_transformSocket!.close(1001, 'origin_changed'));
+      _forgetSocket(_transformSocket!);
+    }
     _origin = next;
     _prelogin.clear();
     _captureProbeReports.clear();
@@ -407,7 +422,8 @@ class RemoteGateway {
               'snapshot': coordinator.snapshot(device: session.deviceId),
               'csrf': session.csrf,
               'owner': session.account.username,
-              'entryLink': entryOrigin?.toString()
+              'entryLink': entryOrigin?.toString(),
+              'remoteTransformAvailable': transformAdapter?.available == true
             });
             return;
           case '/remote/api/media':
@@ -438,6 +454,17 @@ class RemoteGateway {
                 selectedTap: selected,
                 liveSource: coordinator.liveRunning());
             return;
+          case '/remote/ws/transform':
+            if (transformAdapter?.available != true ||
+                _transformSocket != null ||
+                _transformUpgradePending ||
+                !WebSocketTransformer.isUpgradeRequest(request) ||
+                _connections.length + _upgrades >= 5) {
+              throw const RemoteFailure('transform_unavailable',
+                  httpStatus: 409);
+            }
+            await _upgradeTransform(request, session);
+            return;
         }
       } else {
         final data = await _body(request);
@@ -462,8 +489,11 @@ class RemoteGateway {
             }
             return;
           case '/remote/api/ws-ticket':
-            if (!['events', 'audio'].contains(data['purpose']) ||
-                (data['purpose'] == 'audio' && _selectedAudioTap == null)) {
+            if (!['events', 'audio', 'transform'].contains(data['purpose']) ||
+                (data['purpose'] == 'audio' && _selectedAudioTap == null) ||
+                (data['purpose'] == 'transform' &&
+                    (transformAdapter?.available != true ||
+                        _transformSocket != null))) {
               throw const RemoteFailure('unsupported_stream', httpStatus: 400);
             }
             await _json(response,
@@ -507,6 +537,9 @@ class RemoteGateway {
     coordinator.releaseDevice(session.deviceId);
     _requests.remove(session.deviceId);
     _captureProbeReports.remove(session.deviceId);
+    if (identical(_transformSession, session)) {
+      _transformStream?.close('session_revoked');
+    }
     if (identical(_audioSession, session) && _audioSocket != null) {
       unawaited(_audioSocket!.close(1008, 'session_revoked'));
       _forgetSocket(_audioSocket!);
@@ -749,6 +782,13 @@ class RemoteGateway {
   }
 
   void _forgetSocket(WebSocket socket) {
+    if (identical(socket, _transformSocket)) {
+      _transformSocket = null;
+      _transformSession = null;
+      final stream = _transformStream;
+      _transformStream = null;
+      stream?.dispose();
+    }
     if (identical(socket, _audioSocket)) {
       try {
         _activeAudioTap?.setEnabled(false);
@@ -768,6 +808,7 @@ class RemoteGateway {
   Future<void> close() async {
     _events?.cancel();
     _audioTimer?.cancel();
+    _transformStream?.close('host_closed');
     for (final socket in _connections.toList()) {
       await socket
           .close(1001, 'host_closed')
@@ -781,6 +822,37 @@ class RemoteGateway {
     await _server?.close(force: true);
     _server = null;
     await coordinator.close();
+  }
+
+  Future<void> _upgradeTransform(
+      HttpRequest request, RemoteSession session) async {
+    // Reserve the lease synchronously, before the HTTP upgrade can yield.
+    ++_upgrades;
+    _transformUpgradePending = true;
+    final epoch = ++_transformEpoch;
+    final WebSocket socket;
+    try {
+      socket = await WebSocketTransformer.upgrade(request,
+          compression: CompressionOptions.compressionOff);
+    } finally {
+      --_upgrades;
+      _transformUpgradePending = false;
+    }
+    if (_transformSocket != null || !auth.valid(session)) {
+      await socket.close(1008, 'transform_lease_unavailable');
+      return;
+    }
+    _transformSocket = socket;
+    _transformSession = session;
+    _connections.add(socket);
+    _transformStream = RemoteTransformSocket(
+        socket: socket,
+        adapter: transformAdapter!,
+        epoch: epoch,
+        sessionValid: () => auth.valid(session),
+        consumeTicket: (ticket) =>
+            auth.consumeTicket(session, ticket, 'transform'),
+        onClosed: () => _forgetSocket(socket));
   }
 
   void _pumpAudio() {
