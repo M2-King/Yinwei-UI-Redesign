@@ -64,6 +64,15 @@ void main() {
     expect(source, isNot(contains('sendActions(for:')));
     expect(source, isNot(contains('subviews.first')));
   });
+
+  test('unsigned CI ad-hoc signs both bundles for Xcode validation', () {
+    final script = _read('../../tools/xcodebuild_ios_unsigned.sh');
+
+    expect(script, contains('CODE_SIGNING_ALLOWED=YES'));
+    expect(script, contains('CODE_SIGNING_REQUIRED=NO'));
+    expect(script, contains('CODE_SIGN_IDENTITY=-'));
+    expect(script, contains('AD_HOC_CODE_SIGNING_ALLOWED=YES'));
+  });
 }
 
 String _read(String path) {

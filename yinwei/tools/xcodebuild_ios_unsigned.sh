@@ -69,9 +69,10 @@ dump_runner_resolved_settings() {
     -configuration Release \
     -destination 'generic/platform=iOS' \
     -derivedDataPath "$DERIVED" \
-    CODE_SIGNING_ALLOWED=NO \
+    CODE_SIGNING_ALLOWED=YES \
     CODE_SIGNING_REQUIRED=NO \
     CODE_SIGN_IDENTITY=- \
+    AD_HOC_CODE_SIGNING_ALLOWED=YES \
     STRIP_INSTALLED_PRODUCT=NO \
     STRIP_STYLE=non-global \
     ENABLE_DEBUG_DYLIB=NO \
@@ -290,10 +291,11 @@ run_unsigned_xcodebuild() {
     -configuration Release \
     -destination 'generic/platform=iOS' \
     -derivedDataPath "$DERIVED" \
-    CODE_SIGNING_ALLOWED=NO \
+    CODE_SIGNING_ALLOWED=YES \
     CODE_SIGNING_REQUIRED=NO \
     CODE_SIGN_IDENTITY=- \
     EXPANDED_CODE_SIGN_IDENTITY=- \
+    AD_HOC_CODE_SIGNING_ALLOWED=YES \
     SWIFT_OPTIMIZATION_LEVEL=-Onone \
     SWIFT_COMPILATION_MODE=incremental \
     SWIFT_ENABLE_EXPLICIT_MODULES=NO \

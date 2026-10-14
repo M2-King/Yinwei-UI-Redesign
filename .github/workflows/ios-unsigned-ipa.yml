@@ -195,7 +195,7 @@ jobs:
           set -euo pipefail
 
           mkdir -p "$LOG_DIR"
-          BUILD_CMD="flutter build ios --release --no-codesign + unsigned Swift flags"
+          BUILD_CMD="flutter build ios --release --no-codesign + ad-hoc bundle validation"
           flutter_ok=0
           # Disable pipefail so a Flutter signing/extension failure can fall
           # back to unsigned xcodebuild instead of aborting the job.
@@ -203,8 +203,11 @@ jobs:
           (
             cd "$PLAYER"
             flutter build ios --release --no-codesign -- \
-              CODE_SIGNING_ALLOWED=NO \
+              CODE_SIGNING_ALLOWED=YES \
               CODE_SIGNING_REQUIRED=NO \
+              CODE_SIGN_IDENTITY=- \
+              EXPANDED_CODE_SIGN_IDENTITY=- \
+              AD_HOC_CODE_SIGNING_ALLOWED=YES \
               SWIFT_OPTIMIZATION_LEVEL=-Onone \
               SWIFT_COMPILATION_MODE=incremental \
               SWIFT_ENABLE_EXPLICIT_MODULES=NO \
@@ -281,7 +284,7 @@ jobs:
           fi
 
           if [[ "$need_xcodebuild" -eq 1 ]]; then
-            BUILD_CMD="xcodebuild_ios_unsigned.sh (Release iphoneos, no sign, Swift -Onone for DKCamera)"
+            BUILD_CMD="xcodebuild_ios_unsigned.sh (Release iphoneos, ad-hoc bundle validation, Swift -Onone for DKCamera)"
             (
               export XCODEBUILD_LOG_DIR="$LOG_DIR"
               bash "$YINWEI_ROOT/tools/xcodebuild_ios_unsigned.sh" \
@@ -479,6 +482,7 @@ jobs:
             echo "Rust version:         ${RUST_VER}"
             echo "iOS SDK:              ${IOS_SDK}"
             echo "configuration:        Release / iphoneos / unsigned"
+            echo "bundle validation:     temporary ad-hoc signature; re-sign before installation"
             echo "build command:        ${IOS_BUILD_COMMAND}"
             echo "Runner.app:           ${RUNNER_APP}"
             echo "IPA SHA-256:          ${IPA_SHA256}"
