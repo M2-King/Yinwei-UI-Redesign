@@ -21,6 +21,18 @@ void main() {
     expect(info, contains('\$(PRODUCT_MODULE_NAME).SampleHandler'));
     expect(appEntitlements, contains('group.dev.yinwei.remote.capture'));
     expect(extensionEntitlements, contains('group.dev.yinwei.remote.capture'));
+
+    final runnerTarget = project.substring(
+      project.indexOf('97C146ED1CF9000F007C117D /* Runner */ = {'),
+      project.indexOf(
+          'D8A000010000000000000301 /* YinweiBroadcastUpload */ = {'),
+    );
+    expect(
+      runnerTarget.indexOf('Embed App Extensions'),
+      lessThan(runnerTarget.indexOf('Thin Binary')),
+      reason: 'Xcode creates a Runner dependency cycle when Flutter Thin '
+          'Binary runs before the ReplayKit extension copy phase.',
+    );
   });
 
   test('N0 extension accepts app audio and rejects media persistence paths',
