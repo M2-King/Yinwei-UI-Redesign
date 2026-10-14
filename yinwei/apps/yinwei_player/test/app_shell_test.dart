@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:yinwei_player/bridge/mock_engine.dart';
 import 'package:yinwei_player/models/spatial_params.dart';
+import 'package:yinwei_player/platform/platform_capabilities.dart';
 import 'package:yinwei_player/screens/player_screen.dart';
 import 'package:yinwei_player/state/engine_controller.dart';
 import 'package:yinwei_player/state/window_mode.dart';
@@ -33,7 +34,10 @@ void main() {
       MaterialApp(
         debugShowCheckedModeBanner: false,
         theme: YinweiTheme.dark(),
-        home: PlayerScreen(controller: ctrl),
+        home: PlayerScreen(
+          controller: ctrl,
+          capabilities: PlatformCapabilities.windows,
+        ),
       ),
     );
     await tester.pump();

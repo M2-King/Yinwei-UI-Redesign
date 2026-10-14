@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:yinwei_player/mobile/ios_replaykit_audio_probe_panel.dart';
@@ -90,10 +92,15 @@ void main() {
     expect(find.textContaining('48000 Hz / 2 ch'), findsOneWidget);
     expect(find.textContaining('saves and uploads no media'), findsOneWidget);
     expect(tester.takeException(), isNull);
-    await expectLater(
-      find.byKey(const Key('ios-replaykit-audio-probe')),
-      matchesGoldenFile('../goldens/ios_replaykit_n0_panel.png'),
-    );
+    // This golden was captured with Flutter's Windows rasterizer. Keep the
+    // behavioral assertions platform-independent and compare pixels only on
+    // the rasterizer that produced the checked-in baseline.
+    if (Platform.isWindows) {
+      await expectLater(
+        find.byKey(const Key('ios-replaykit-audio-probe')),
+        matchesGoldenFile('../goldens/ios_replaykit_n0_panel.png'),
+      );
+    }
 
     tester.view.physicalSize = const Size(390, 844);
     await tester.pump();
