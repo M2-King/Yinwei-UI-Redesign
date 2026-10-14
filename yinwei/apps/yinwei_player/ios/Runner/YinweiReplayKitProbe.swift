@@ -7,9 +7,21 @@ import UIKit
 /// Audio stays inside the broadcast extension; this channel reads telemetry only.
 enum YinweiReplayKitProbeChannel {
   static let name = "dev.yinwei/replaykit_audio_probe"
-  static let appGroup = "group.dev.yinwei.remote.capture"
+  static let appGroup = YinweiProvisionedAppGroup.resolve(in: .main)
   static let statusKey = "yinwei.replaykit.numeric-status.v1"
-  static let extensionBundleIdentifier = "dev.yinwei.yinweiPlayer.BroadcastUpload"
+  static let extensionBundleIdentifier: String = {
+    let preferred = "dev.yinwei.yinweiPlayer.BroadcastUpload"
+    guard let plugIns = Bundle.main.builtInPlugInsURL,
+          let children = try? FileManager.default.contentsOfDirectory(
+            at: plugIns,
+            includingPropertiesForKeys: nil
+          ),
+          let extensionURL = children.first(where: { $0.pathExtension == "appex" }),
+          let identifier = Bundle(url: extensionURL)?.bundleIdentifier,
+          !identifier.isEmpty
+    else { return preferred }
+    return identifier
+  }()
 
   static func register(messenger: FlutterBinaryMessenger) {
     let channel = FlutterMethodChannel(name: name, binaryMessenger: messenger)
@@ -17,6 +29,55 @@ enum YinweiReplayKitProbeChannel {
     channel.setMethodCallHandler { call, result in
       controller.handle(call: call, result: result)
     }
+  }
+}
+
+/// Uses the product App Group when the signing profile authorizes it. Some
+/// owner-side IPA signers replace App Groups with signer-managed identifiers;
+/// both the host and extension deterministically select the same authorized
+/// fallback from their embedded profiles.
+private enum YinweiProvisionedAppGroup {
+  private static let preferred = "group.dev.yinwei.remote.capture"
+
+  static func resolve(in bundle: Bundle) -> String {
+    let groups = provisionedGroups(in: bundle)
+    if groups.contains(preferred), canOpen(preferred) { return preferred }
+    return groups.sorted().first(where: canOpen) ?? preferred
+  }
+
+  private static func canOpen(_ group: String) -> Bool {
+    FileManager.default.containerURL(
+      forSecurityApplicationGroupIdentifier: group
+    ) != nil
+  }
+
+  private static func provisionedGroups(in bundle: Bundle) -> [String] {
+    guard let profileURL = bundle.url(
+      forResource: "embedded",
+      withExtension: "mobileprovision"
+    ),
+    let profileData = try? Data(contentsOf: profileURL),
+    let profile = String(data: profileData, encoding: .isoLatin1),
+    let key = profile.range(
+      of: "<key>com.apple.security.application-groups</key>"
+    ),
+    let end = profile.range(
+      of: "</array>",
+      range: key.upperBound..<profile.endIndex
+    )
+    else { return [] }
+
+    let block = String(profile[key.upperBound..<end.lowerBound])
+    let expression = try? NSRegularExpression(
+      pattern: #"<string>(group\.[^<]+)</string>"#
+    )
+    let range = NSRange(block.startIndex..<block.endIndex, in: block)
+    return expression?.matches(in: block, range: range).compactMap { match in
+      guard let valueRange = Range(match.range(at: 1), in: block) else {
+        return nil
+      }
+      return String(block[valueRange])
+    } ?? []
   }
 }
 
@@ -257,7 +318,18 @@ private final class YinweiBroadcastPickerViewController: UIViewController {
     picker.preferredExtension = YinweiReplayKitProbeChannel.extensionBundleIdentifier
     picker.showsMicrophoneButton = false
     picker.tintColor = .white
+    picker.backgroundColor = UIColor.systemBlue.withAlphaComponent(0.9)
+    picker.layer.cornerRadius = 18
+    picker.layer.borderWidth = 1
+    picker.layer.borderColor = UIColor.white.withAlphaComponent(0.2).cgColor
+    picker.layer.masksToBounds = true
     picker.accessibilityLabel = "Start Yinwei app-audio capture"
+
+    let pickerLabel = UILabel()
+    pickerLabel.text = "Tap the blue button to start"
+    pickerLabel.textColor = UIColor.white.withAlphaComponent(0.78)
+    pickerLabel.font = .systemFont(ofSize: 14, weight: .medium)
+    pickerLabel.textAlignment = .center
 
     let close = UIButton(type: .system)
     close.setTitle("Done", for: .normal)
@@ -265,7 +337,9 @@ private final class YinweiBroadcastPickerViewController: UIViewController {
     close.titleLabel?.font = .systemFont(ofSize: 17, weight: .semibold)
     close.addTarget(self, action: #selector(closePressed), for: .touchUpInside)
 
-    let stack = UIStackView(arrangedSubviews: [titleLabel, explanation, picker, close])
+    let stack = UIStackView(
+      arrangedSubviews: [titleLabel, explanation, picker, pickerLabel, close]
+    )
     stack.axis = .vertical
     stack.alignment = .center
     stack.spacing = 22

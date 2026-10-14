@@ -41,6 +41,54 @@ final class SampleHandler: RPBroadcastSampleHandler {
   }
 }
 
+/// Mirrors the host's deterministic profile-aware App Group selection. This
+/// keeps numeric-only N0 telemetry working when an owner-side signer replaces
+/// the product entitlement with signer-managed App Groups.
+private enum YinweiProvisionedBroadcastAppGroup {
+  private static let preferred = "group.dev.yinwei.remote.capture"
+
+  static func resolve(in bundle: Bundle) -> String {
+    let groups = provisionedGroups(in: bundle)
+    if groups.contains(preferred), canOpen(preferred) { return preferred }
+    return groups.sorted().first(where: canOpen) ?? preferred
+  }
+
+  private static func canOpen(_ group: String) -> Bool {
+    FileManager.default.containerURL(
+      forSecurityApplicationGroupIdentifier: group
+    ) != nil
+  }
+
+  private static func provisionedGroups(in bundle: Bundle) -> [String] {
+    guard let profileURL = bundle.url(
+      forResource: "embedded",
+      withExtension: "mobileprovision"
+    ),
+    let profileData = try? Data(contentsOf: profileURL),
+    let profile = String(data: profileData, encoding: .isoLatin1),
+    let key = profile.range(
+      of: "<key>com.apple.security.application-groups</key>"
+    ),
+    let end = profile.range(
+      of: "</array>",
+      range: key.upperBound..<profile.endIndex
+    )
+    else { return [] }
+
+    let block = String(profile[key.upperBound..<end.lowerBound])
+    let expression = try? NSRegularExpression(
+      pattern: #"<string>(group\.[^<]+)</string>"#
+    )
+    let range = NSRange(block.startIndex..<block.endIndex, in: block)
+    return expression?.matches(in: block, range: range).compactMap { match in
+      guard let valueRange = Range(match.range(at: 1), in: block) else {
+        return nil
+      }
+      return String(block[valueRange])
+    } ?? []
+  }
+}
+
 private struct YinweiAudioMeasurement {
   let sampleRate: Int
   let channelCount: Int
@@ -168,7 +216,7 @@ private enum YinweiAudioInspector {
 }
 
 private final class YinweiBroadcastTelemetry {
-  private static let appGroup = "group.dev.yinwei.remote.capture"
+  private static let appGroup = YinweiProvisionedBroadcastAppGroup.resolve(in: .main)
   private static let statusKey = "yinwei.replaykit.numeric-status.v1"
   private static let flushInterval = 0.25
 

@@ -58,11 +58,29 @@ void main() {
     expect(source, contains('RPSystemBroadcastPickerView'));
     expect(source, contains('showsMicrophoneButton = false'));
     expect(source, contains('preferredExtension'));
+    expect(source, contains('builtInPlugInsURL'));
+    expect(source, contains('Tap the blue button to start'));
     expect(source, contains('playReturnTone'));
     expect(source, contains('997'));
     expect(source, contains('1499'));
     expect(source, isNot(contains('sendActions(for:')));
     expect(source, isNot(contains('subviews.first')));
+  });
+
+  test('host and extension share a deterministic provisioned App Group', () {
+    final host = _read('ios/Runner/YinweiReplayKitProbe.swift');
+    final extension = _read('ios/YinweiBroadcastUpload/SampleHandler.swift');
+
+    for (final source in [host, extension]) {
+      expect(source, contains('embedded'));
+      expect(
+        source,
+        contains('<key>com.apple.security.application-groups</key>'),
+      );
+      expect(source, contains('groups.sorted().first(where: canOpen)'));
+      expect(source, contains('forSecurityApplicationGroupIdentifier'));
+      expect(source, contains('group.dev.yinwei.remote.capture'));
+    }
   });
 
   test('unsigned CI ad-hoc signs both bundles for Xcode validation', () {
