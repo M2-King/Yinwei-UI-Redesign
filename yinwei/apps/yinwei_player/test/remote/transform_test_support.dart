@@ -58,6 +58,11 @@ class SyntheticTransformAdapter implements RemoteTransformAdapter {
     started = false;
     _output.clear();
   }
+
+  @override
+  void close() {
+    if (started) stop();
+  }
 }
 
 Int16List syntheticInput() => Int16List.fromList(

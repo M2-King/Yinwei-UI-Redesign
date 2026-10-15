@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:desktop_drop/desktop_drop.dart';
@@ -32,6 +33,7 @@ import 'package:yinwei_player/remote/remote_gateway.dart';
 import 'package:yinwei_player/remote/remote_deployment.dart';
 import 'package:yinwei_player/remote/remote_auth.dart';
 import 'package:yinwei_player/remote/native_output_tap.dart';
+import 'package:yinwei_player/remote/native_remote_transform.dart';
 import 'package:yinwei_player/state/island_now_playing.dart';
 import 'package:yinwei_player/state/window_chrome.dart';
 import 'package:yinwei_player/state/window_mode.dart';
@@ -1571,6 +1573,34 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
             Platform.environment['YINWEI_REMOTE_ALLOW_ORIGIN_ROTATION'] == '1',
         audioTap: NativeOutputTap.tryCreate(),
         liveAudioTap: NativeOutputTap.tryCreate(live: true),
+        transformAdapter: NativeRemoteTransform.tryCreate(
+          sourceAvailable: () =>
+              !_ctrl.playing &&
+              !_ctrl.busy &&
+              !_live.running &&
+              !_live.starting,
+          configuration: () => jsonEncode([
+            _ctrl.mode.name,
+            _ctrl.params.azimuthDeg,
+            _ctrl.params.elevationDeg,
+            _ctrl.params.distanceM,
+            _ctrl.params.motion.name,
+            _ctrl.params.orbitHz,
+            _ctrl.params.envelopment,
+            _ctrl.params.reverbMix,
+            _ctrl.params.eqDb,
+            _ctrl.array.mode.name,
+            for (final speaker in _ctrl.array.speakers)
+              [
+                speaker.azimuthDeg,
+                speaker.elevationDeg,
+                speaker.distanceM,
+                speaker.gainDb,
+                speaker.mute,
+                speaker.feed.name
+              ],
+          ]),
+        ),
         loadAsset: (path) async {
           final bytes = await rootBundle.load(path);
           return bytes.buffer

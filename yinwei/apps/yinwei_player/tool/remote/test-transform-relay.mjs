@@ -51,8 +51,10 @@ try {
   heartbeat = setInterval(attach, 1000);
   console.log('R1 isolated test relay ready; generated PCM only.');
   const log = [];
+  const testFile = process.env.YINWEI_R2_NATIVE_DLL ?
+    'test/remote/remote_native_relay_test.dart' : 'test/remote/remote_transform_relay_test.dart';
   tests = spawn('cmd.exe', ['/d', '/c',
-    'flutter test --no-pub test/remote/remote_transform_relay_test.dart'], {
+    `flutter test --no-pub ${testFile}`], {
     cwd: player, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'],
     env: {...process.env, YINWEI_R1_RELAY_ORIGIN: origin,
       YINWEI_R1_RELAY_PORT: String(port)}});
@@ -64,7 +66,7 @@ try {
   const text = log.join('');
   await writeFile(resolve(temp, 'test.log'), text);
   console.log(text.split(/\r?\n/).filter(line =>
-    /R1_PUBLIC_TRANSPORT|All tests passed|Some tests failed|Exception|Error|Expected:|Actual:/.test(line)).join('\n'));
+    /R1_PUBLIC_TRANSPORT|R2_PUBLIC_NATIVE|All tests passed|Some tests failed|Exception|Error|Expected:|Actual:/.test(line)).join('\n'));
   process.exitCode = exitCode ?? 1;
 } finally {
   clearInterval(heartbeat);

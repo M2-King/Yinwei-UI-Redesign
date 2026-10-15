@@ -93,6 +93,12 @@ impl PlayerSession {
         self.engine.params()
     }
 
+    pub(crate) fn live_configuration(&self) -> Result<(SpatialParams, PlaybackMode,
+        [f32; crate::eq::EQ_BANDS], crate::layout::ArrayLayout), SpatialError> {
+        Ok((self.engine.params()?, self.engine.playback_mode()?,
+            self.engine.eq_gains()?, self.engine.array_layout()?))
+    }
+
     pub fn apply_preset(&self, preset: PositionPreset) -> Result<SpatialParams, SpatialError> {
         let p = self.engine.apply_position_preset(preset)?;
         self.player.set_live_params(p.clone())?;

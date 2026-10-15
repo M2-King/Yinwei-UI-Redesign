@@ -93,6 +93,7 @@ abstract class RemoteTransformAdapter {
   bool tryPush(RemoteInputFrame frame, {required bool discontinuous});
   Uint8List? read();
   void stop();
+  void close() => stop();
 }
 
 /// Numeric validation and token bucket, with no retained input-media queue.
@@ -137,6 +138,7 @@ class RemoteTransformFlow {
     lastInput = now;
     final delivered =
         adapter.tryPush(frame, discontinuous: _gap || frame.discontinuous);
+    final resetOutput = delivered && (_gap || frame.discontinuous);
     _gap = !delivered;
     if (delivered) {
       ++accepted;
@@ -148,6 +150,7 @@ class RemoteTransformFlow {
       'sequence': frame.sequence,
       'epoch': epoch,
       'accepted': delivered,
+      'resetOutput': resetOutput,
       'dropped': dropped
     };
   }

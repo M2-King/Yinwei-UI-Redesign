@@ -75,7 +75,11 @@ class NativeOutputTap implements RemoteOutputSource {
     final frames = _read(_pcm, 512, _meta);
     if (frames < 0) throw StateError('Native output read failed');
     if (frames == 0) return null;
-    final m = _meta.ref;
+    return encodePacket(_pcm, _meta.ref, frames);
+  }
+
+  static Uint8List encodePacket(
+      Pointer<Float> pcm, OutputTapMetaC m, int frames) {
     if (frames > 512 ||
         m.frameCount != frames ||
         m.sampleRate < 8000 ||
@@ -96,7 +100,7 @@ class NativeOutputTap implements RemoteOutputSource {
     data.setFloat32(48, m.azimuthDeg, Endian.little);
     data.setFloat32(52, m.elevationDeg, Endian.little);
     for (var i = 0; i < frames * 2; ++i) {
-      final sample = _pcm[i];
+      final sample = pcm[i];
       data.setFloat32(56 + i * 4, sample.isFinite ? sample : 0, Endian.little);
     }
     return bytes;

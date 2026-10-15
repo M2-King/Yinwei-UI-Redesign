@@ -54,6 +54,14 @@ impl LiveDspProcessor {
         self.streamer.snap_to_params(&self.params);
     }
 
+    /// Remote discontinuity reset: retain the loaded HRIR data and DSP order,
+    /// flush only filter history. Runs on the worker, never capture/transport.
+    pub fn reset_history(&mut self) {
+        self.streamer.reset();
+        self.streamer.snap_to_params(&self.params);
+        self.eq = GraphicEq::new(self.sample_rate);
+    }
+
     pub fn params(&self) -> &SpatialParams {
         &self.params
     }

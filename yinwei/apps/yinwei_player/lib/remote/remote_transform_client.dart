@@ -11,6 +11,7 @@ class RemoteTransformClient {
   RemoteTransformClient(
       {required this.origin,
       required this.onOutput,
+      this.onOutputReset,
       this.onState,
       bool allowLoopbackForTests = false}) {
     final loopback = allowLoopbackForTests &&
@@ -28,6 +29,7 @@ class RemoteTransformClient {
 
   final Uri origin;
   final void Function(Uint8List) onOutput;
+  final void Function()? onOutputReset;
   final void Function(String)? onState;
   final _http = HttpClient()..connectionTimeout = const Duration(seconds: 5);
   final _cookies = <String, String>{};
@@ -209,8 +211,9 @@ class RemoteTransformClient {
 
   /// Copy a single 10 ms chunk or drop it immediately. Never waits for WSS.
   /// Call from the transport worker, after bounded capture-edge resampling.
-  bool trySend(Int16List pcm) {
+  bool trySend(Int16List pcm, {bool discontinuous = false}) {
     if (!connected || pcm.length != RemoteInputFrame.frames * 2) return false;
+    _gap = _gap || discontinuous;
     final sequence = ++_sequence, firstFrame = _firstFrame;
     _firstFrame += RemoteInputFrame.frames;
     final now = DateTime.now();
@@ -288,6 +291,7 @@ class RemoteTransformClient {
           data['dropped'] is int &&
           data['dropped'] >= serverDropped) {
         _pending.remove(data['sequence']);
+        if (data['resetOutput'] == true) onOutputReset?.call();
         if (data['accepted'] == true) ++accepted;
         serverDropped = data['dropped'] as int;
       } else {

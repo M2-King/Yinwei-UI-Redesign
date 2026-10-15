@@ -19,6 +19,15 @@ use crate::live_pcm::{frames_from_interleaved_f32, frames_from_interleaved_i16};
 use crate::live_queue::BoundedFrameQueue;
 use crate::params::{PlaybackMode, SpatialParams};
 
+#[cfg(feature = "realtime")]
+struct RemoteIngressState {
+    network_epoch: u64,
+    revision: AtomicU64,
+    queued_first_frame: AtomicU64,
+    expected_input_frame: AtomicU64,
+    output: crate::output_tap::OutputTap,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DspBridgeState {
     Disconnected,
@@ -91,6 +100,8 @@ impl IngressSnapshot {
 }
 
 struct Shared {
+    #[cfg(feature = "realtime")]
+    remote: Option<RemoteIngressState>,
     stop: AtomicBool,
     sample_rate: u32,
     channels: u32,
@@ -120,6 +131,8 @@ struct Shared {
 impl Shared {
     fn new(sample_rate: u32, channels: u32) -> Self {
         Self {
+            #[cfg(feature = "realtime")]
+            remote: None,
             stop: AtomicBool::new(false),
             sample_rate,
             channels,
@@ -203,7 +216,11 @@ impl LiveIngress {
                 "channelCount must be >= 1".into(),
             ));
         }
-        let shared = Arc::new(Shared::new(sample_rate, channels));
+        Self::spawn(Shared::new(sample_rate, channels))
+    }
+
+    fn spawn(shared: Shared) -> Result<Self, SpatialError> {
+        let shared = Arc::new(shared);
         // channels > 2: first L/R pair, flagged on the snapshot (not last_error).
         let worker_shared = Arc::clone(&shared);
         let worker = thread::Builder::new()
@@ -214,6 +231,74 @@ impl LiveIngress {
             shared,
             worker: Mutex::new(Some(worker)),
         })
+    }
+
+    /// Additive remote edge: separate ownership, same DSP worker and processor.
+    /// No local audio device or Android/Windows global session is touched.
+    #[cfg(feature = "realtime")]
+    pub fn start_remote(epoch: u64, params: SpatialParams, mode: PlaybackMode,
+        eq: [f32; EQ_BANDS], array: ArrayLayout) -> Result<Self, SpatialError> {
+        if epoch == 0 { return Err(SpatialError::InvalidParam("remote epoch".into())); }
+        params.validate()?;
+        let mut shared = Shared::new(48_000, 2);
+        *shared.params.get_mut().map_err(|_| SpatialError::LockPoisoned)? = params;
+        *shared.mode.get_mut().map_err(|_| SpatialError::LockPoisoned)? = mode;
+        *shared.eq_db.get_mut().map_err(|_| SpatialError::LockPoisoned)? = crate::eq::clamp_eq_gains(eq);
+        *shared.array.get_mut().map_err(|_| SpatialError::LockPoisoned)? = array;
+        let output = crate::output_tap::OutputTap::default();
+        output.set_enabled(true);
+        shared.remote = Some(RemoteIngressState { network_epoch: epoch,
+            revision: AtomicU64::new(1), queued_first_frame: AtomicU64::new(0),
+            expected_input_frame: AtomicU64::new(0), output });
+        Self::spawn(shared)
+    }
+
+    /// Exact 10 ms input. Full/contended queues reject the newest complete
+    /// chunk. A discontinuity flushes partial DSP input and pending wet PCM.
+    #[cfg(feature = "realtime")]
+    pub fn try_push_remote_i16(&self, samples: &[i16], epoch: u64,
+        first_frame: u64, discontinuous: bool) -> Result<bool, SpatialError> {
+        let remote = self.shared.remote.as_ref()
+            .ok_or_else(|| SpatialError::InvalidParam("not remote ingress".into()))?;
+        if self.shared.stop.load(Ordering::Acquire) || epoch != remote.network_epoch ||
+            samples.len() != 960 || first_frame.checked_add(480).is_none() {
+            return Err(SpatialError::InvalidParam("invalid remote input".into()));
+        }
+        let Ok(mut q) = self.shared.queue.try_lock() else {
+            self.shared.dropped_frames.fetch_add(480, Ordering::Relaxed);
+            self.shared.overruns.fetch_add(1, Ordering::Relaxed);
+            return Ok(false);
+        };
+        if !discontinuous && first_frame != remote.expected_input_frame.load(Ordering::Acquire) {
+            return Err(SpatialError::InvalidParam("remote input gap".into()));
+        }
+        if discontinuous {
+            q.clear();
+            remote.revision.fetch_add(1, Ordering::AcqRel);
+            remote.output.invalidate_nonblocking();
+            remote.queued_first_frame.store(first_frame, Ordering::Release);
+        }
+        if q.len() + 480 > q.capacity() {
+            self.shared.dropped_frames.fetch_add(480, Ordering::Relaxed);
+            self.shared.overruns.fetch_add(1, Ordering::Relaxed);
+            return Ok(false);
+        }
+        let frames = frames_from_interleaved_i16(samples, 2)?;
+        q.push_frames(&frames);
+        remote.expected_input_frame.store(first_frame + 480, Ordering::Release);
+        self.shared.input_frames.fetch_add(480, Ordering::Relaxed);
+        self.shared.queue_depth.store(q.len() as u64, Ordering::Relaxed);
+        self.shared.high_water.fetch_max(q.len() as u64, Ordering::Relaxed);
+        Ok(true)
+    }
+
+    #[cfg(feature = "realtime")]
+    pub fn read_remote_output(&self) -> Option<crate::output_tap::OutputTapPacket> {
+        let remote = self.shared.remote.as_ref()?;
+        let mut packet = remote.output.try_read()?;
+        if packet.meta.epoch != remote.output.epoch() { return None; }
+        packet.meta.epoch = remote.network_epoch;
+        Some(packet)
     }
 
     pub fn sample_rate(&self) -> u32 {
@@ -281,6 +366,8 @@ impl LiveIngress {
     /// Counters from this session remain readable until the next [`Self::start`].
     pub fn stop(&self) {
         self.shared.stop.store(true, Ordering::Relaxed);
+        #[cfg(feature = "realtime")]
+        if let Some(remote) = &self.shared.remote { remote.output.set_enabled(false); }
         if let Ok(mut w) = self.worker.lock() {
             if let Some(h) = w.take() {
                 let _ = h.join();
@@ -412,6 +499,8 @@ fn dsp_worker(shared: Arc<Shared>) {
     }
 
     let mut acc: Vec<StereoFrame> = Vec::with_capacity(STREAM_CHUNK);
+    #[cfg(feature = "realtime")]
+    let (mut revision, mut first_frame, mut tap_epoch) = (0, 0, 0);
 
     #[cfg(test)]
     {
@@ -420,8 +509,34 @@ fn dsp_worker(shared: Arc<Shared>) {
     }
 
     while !shared.stop.load(Ordering::Relaxed) {
+        #[cfg(feature = "realtime")]
+        if let Some(remote) = &shared.remote {
+            let current = remote.revision.load(Ordering::Acquire);
+            if current != revision {
+                acc.clear();
+                // Flush HRTF/EQ/reverb tails on the worker, never on capture.
+                processor.reset_history();
+                if let Ok(p) = shared.params.lock() { let _ = processor.set_params(p.clone()); }
+                processor.snap_to_current_params();
+                revision = current;
+            }
+        }
         if let Ok(mut q) = shared.queue.lock() {
-            q.pop_n(STREAM_CHUNK - acc.len(), &mut acc);
+            #[cfg(feature = "realtime")]
+            if let Some(remote) = &shared.remote {
+                if revision != remote.revision.load(Ordering::Acquire) { continue; }
+                if acc.is_empty() {
+                    first_frame = remote.queued_first_frame.load(Ordering::Acquire);
+                    tap_epoch = remote.output.epoch();
+                }
+            }
+            let taken = q.pop_n(STREAM_CHUNK - acc.len(), &mut acc);
+            #[cfg(feature = "realtime")]
+            if let Some(remote) = &shared.remote {
+                remote.queued_first_frame.fetch_add(taken as u64, Ordering::AcqRel);
+            }
+            #[cfg(not(feature = "realtime"))]
+            let _ = taken;
             shared.queue_depth.store(q.len() as u64, Ordering::Relaxed);
         }
 
@@ -476,8 +591,14 @@ fn dsp_worker(shared: Arc<Shared>) {
         shared
             .wet_frames
             .fetch_add(STREAM_CHUNK as u64, Ordering::Relaxed);
-        // A2: wet is measured and discarded. A3 will enqueue wet for output.
-        let _ = wet;
+        #[cfg(feature = "realtime")]
+        if let Some(remote) = &shared.remote {
+            if revision == remote.revision.load(Ordering::Acquire) {
+                remote.output.publish(tap_epoch, first_frame, shared.sample_rate,
+                    if processor.mode() == PlaybackMode::Original { 0 } else { 1 },
+                    processor.effective_azimuth_deg(), processor.effective_elevation_deg(), &wet);
+            }
+        }
     }
 }
 
@@ -537,8 +658,9 @@ mod tests {
     #[test]
     fn worker_processes_non_silent_float_stereo() {
         let ing = LiveIngress::start(48_000, 2).unwrap();
+        wait_ready(&ing);
         let pcm = sine_interleaved(STREAM_CHUNK * 4, 48_000, 0.4);
-        ing.push_f32(&pcm).unwrap();
+        push_accepted(&ing, &pcm);
         let snap = wait_chunks(&ing, 2, Duration::from_secs(3));
         assert!(snap.input_frames >= STREAM_CHUNK as u64 * 2);
         assert!(snap.consumed_frames >= STREAM_CHUNK as u64);
@@ -563,11 +685,17 @@ mod tests {
     #[test]
     fn pcm16_path_reaches_dsp() {
         let ing = LiveIngress::start(48_000, 2).unwrap();
+        wait_ready(&ing);
         let mut pcm = vec![0i16; STREAM_CHUNK * 2 * 3];
         for (i, s) in pcm.iter_mut().enumerate() {
             *s = ((i as f32).sin() * 8000.0) as i16;
         }
-        ing.push_i16(&pcm).unwrap();
+        let deadline = Instant::now() + Duration::from_secs(2);
+        while ing.snapshot().input_frames == 0 {
+            ing.push_i16(&pcm).unwrap();
+            assert!(Instant::now() < deadline, "PCM16 queue stayed contended");
+            thread::yield_now();
+        }
         let snap = wait_chunks(&ing, 1, Duration::from_secs(3));
         assert!(snap.dsp_chunks >= 1);
         assert!(snap.wet_rms_db.is_finite());

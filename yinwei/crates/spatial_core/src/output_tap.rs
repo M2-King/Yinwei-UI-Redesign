@@ -38,6 +38,15 @@ impl OutputTap {
         self.epoch.fetch_add(1, Ordering::AcqRel);
         if let Ok(mut queue) = self.queue.lock() { queue.clear(); }
     }
+    /// Capture-edge invalidation must not wait for a tap reader. A stale
+    /// packet is rejected by the remote reader even if clearing is contended.
+    pub fn invalidate_nonblocking(&self) {
+        self.epoch.fetch_add(1, Ordering::AcqRel);
+        if let Ok(mut queue) = self.queue.try_lock() { queue.clear(); }
+    }
+    pub fn try_read(&self) -> Option<OutputTapPacket> {
+        self.queue.try_lock().ok()?.pop_front()
+    }
     pub fn publish(&self, epoch: u64, first_frame: u64, sample_rate: u32,
                    mode: u32, azimuth_deg: f32, elevation_deg: f32, frames: &[StereoFrame]) {
         if !self.enabled.load(Ordering::Acquire) { return; }

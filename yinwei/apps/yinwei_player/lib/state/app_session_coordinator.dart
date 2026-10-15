@@ -47,6 +47,13 @@ class AppSessionCoordinator {
   String? lastCommandStatus;
   bool browserAudioAvailable = false;
   bool browserLiveAudioAvailable = false;
+  bool remoteTransformRunning = false;
+
+  void setRemoteTransformRunning(bool value) {
+    if (remoteTransformRunning == value) return;
+    remoteTransformRunning = value;
+    takeLocalControl();
+  }
 
   void registerLocalMedia(String path, String title) {
     if (_media.values.any((media) => media.path == path)) return;
@@ -72,7 +79,7 @@ class AppSessionCoordinator {
   Map<String, dynamic> acquireControl(String device) {
     if (_closed) throw const RemoteFailure('host_closed');
     if (!nativeBackend) throw const RemoteFailure('native_engine_required');
-    if (liveRunning() || controller.busy) {
+    if (liveRunning() || remoteTransformRunning || controller.busy) {
       throw const RemoteFailure('local_busy');
     }
     if (_device != null && _expires!.isAfter(_now()) && _device != device) {
@@ -104,6 +111,7 @@ class AppSessionCoordinator {
       'mode': controller.mode.name,
       'busy': controller.busy,
       'liveRunning': liveActive,
+      'remoteTransformRunning': remoteTransformRunning,
       'liveReady': liveReady,
       'liveSource': liveInfo['source'],
     });
@@ -120,7 +128,7 @@ class AppSessionCoordinator {
       'scene': spatial.snapshot(),
       'nativeBackend': nativeBackend,
       'capabilities': {
-        'pointControl': !controller.array.enabled,
+        'pointControl': !controller.array.enabled && !remoteTransformRunning,
         'browserAudio': browserAudioAvailable,
         'browserLiveAudio': browserLiveAudioAvailable,
         'remoteArray': false
@@ -157,8 +165,11 @@ class AppSessionCoordinator {
       'lastCommandStatus': lastCommandStatus,
       'media': media,
       'liveRunning': liveActive,
-      'audioSource':
-          liveActive ? (liveReady ? 'live' : 'live_starting') : 'file',
+      'audioSource': remoteTransformRunning
+          ? 'remote_ipad'
+          : liveActive
+              ? (liveReady ? 'live' : 'live_starting')
+              : 'file',
       'live': {
         'ready': liveActive && liveReady,
         'source': liveInfo['source'] is String ? liveInfo['source'] : '',
@@ -205,7 +216,7 @@ class AppSessionCoordinator {
           input['expectedSceneRevision'] != spatial.appliedRevision) {
         throw const RemoteFailure('stale_state');
       }
-      if (liveRunning() || controller.busy) {
+      if (liveRunning() || remoteTransformRunning || controller.busy) {
         throw const RemoteFailure('local_busy');
       }
       final payload = input['payload'];

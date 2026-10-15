@@ -13,7 +13,8 @@ class RemoteTransformSocket {
       required this.epoch,
       required this.sessionValid,
       required this.consumeTicket,
-      required this.onClosed}) {
+      required this.onClosed,
+      this.onStarted}) {
     _deadline = Timer(const Duration(seconds: 5), () {
       if (_flow == null) close('authentication_required');
     });
@@ -28,6 +29,7 @@ class RemoteTransformSocket {
   final bool Function() sessionValid;
   final bool Function(String) consumeTicket;
   final void Function() onClosed;
+  final void Function()? onStarted;
   late final Timer _timer, _deadline;
   RemoteTransformFlow? _flow;
   RemoteOutputValidator? _output;
@@ -89,6 +91,7 @@ class RemoteTransformSocket {
         // stop() also runs when start() throws after partial allocation.
         _adapterStarted = true;
         adapter.start(epoch);
+        onStarted?.call();
         _flow = RemoteTransformFlow(epoch, adapter);
         _output = RemoteOutputValidator(epoch);
         _deadline.cancel();
@@ -129,6 +132,10 @@ class RemoteTransformSocket {
     }
     final flow = _flow;
     if (flow == null) return;
+    if (!adapter.available) {
+      close('local_source_changed');
+      return;
+    }
     final now = DateTime.now();
     if (now.difference(flow.lastInput) > const Duration(seconds: 5)) {
       close('input_idle');

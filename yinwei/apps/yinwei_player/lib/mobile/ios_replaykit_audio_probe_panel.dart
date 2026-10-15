@@ -3,12 +3,13 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:yinwei_player/bridge/engine_bootstrap.dart';
 import 'package:yinwei_player/mobile/ios_screen_audio_probe_panel.dart';
+import 'package:yinwei_player/mobile/ios_remote_live_screen.dart';
 import 'package:yinwei_player/platform/replaykit_audio_probe.dart';
 import 'package:yinwei_player/platform/screen_audio_probe.dart';
 import 'package:yinwei_player/state/engine_controller.dart';
 import 'package:yinwei_player/theme/yinwei_theme.dart';
 
-enum _ProbeMenuAction { reset, screenAudio }
+enum _ProbeMenuAction { reset, screenAudio, liveTransform }
 
 /// Native cross-app audio feasibility gate. Audio never enters Flutter in N0.
 class IosReplayKitAudioProbePanel extends StatefulWidget {
@@ -152,6 +153,13 @@ class _IosReplayKitAudioProbePanelState
                       if (action == _ProbeMenuAction.reset) {
                         await _probe.resetStatus();
                         await _refresh();
+                      } else if (action == _ProbeMenuAction.liveTransform) {
+                        if (!mounted) return;
+                        await Navigator.of(context).push(
+                            MaterialPageRoute<void>(
+                                builder: (_) => IosRemoteLiveScreen(
+                                    controller: widget.controller,
+                                    probe: _probe)));
                       } else {
                         _showAdvancedProbe();
                       }
@@ -160,6 +168,10 @@ class _IosReplayKitAudioProbePanelState
                       PopupMenuItem(
                         value: _ProbeMenuAction.reset,
                         child: Text('Reset numeric status'),
+                      ),
+                      PopupMenuItem(
+                        value: _ProbeMenuAction.liveTransform,
+                        child: Text('Live Transform on laptop'),
                       ),
                       PopupMenuItem(
                         value: _ProbeMenuAction.screenAudio,

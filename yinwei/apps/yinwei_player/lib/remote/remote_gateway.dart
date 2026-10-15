@@ -54,9 +54,12 @@ class RemoteGateway {
   bool _activeAudioIsLive = false;
   final _audioOutstanding = <int, DateTime>{};
   int _audioLastAck = 0;
-  RemoteOutputSource? get _selectedAudioTap => coordinator.liveRunning()
-      ? (coordinator.liveReady ? liveAudioTap : null)
-      : (coordinator.controller.array.enabled ? null : audioTap);
+  RemoteOutputSource? get _selectedAudioTap =>
+      coordinator.remoteTransformRunning
+          ? null
+          : coordinator.liveRunning()
+              ? (coordinator.liveReady ? liveAudioTap : null)
+              : (coordinator.controller.array.enabled ? null : audioTap);
   Timer? _audioTimer;
   final _requests = <String, List<DateTime>>{};
   final _captureProbeReports = <String, List<Map<String, dynamic>>>{};
@@ -783,6 +786,7 @@ class RemoteGateway {
 
   void _forgetSocket(WebSocket socket) {
     if (identical(socket, _transformSocket)) {
+      coordinator.setRemoteTransformRunning(false);
       _transformSocket = null;
       _transformSession = null;
       final stream = _transformStream;
@@ -818,6 +822,7 @@ class RemoteGateway {
     _connections.clear();
     audioTap?.close();
     liveAudioTap?.close();
+    transformAdapter?.close();
     auth.close();
     await _server?.close(force: true);
     _server = null;
@@ -852,6 +857,7 @@ class RemoteGateway {
         sessionValid: () => auth.valid(session),
         consumeTicket: (ticket) =>
             auth.consumeTicket(session, ticket, 'transform'),
+        onStarted: () => coordinator.setRemoteTransformRunning(true),
         onClosed: () => _forgetSocket(socket));
   }
 

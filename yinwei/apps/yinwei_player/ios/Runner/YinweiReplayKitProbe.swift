@@ -3,8 +3,8 @@ import AVFoundation
 import ReplayKit
 import UIKit
 
-/// Host-side control surface for the ReplayKit feasibility probe.
-/// Audio stays inside the broadcast extension; this channel reads telemetry only.
+/// Numeric ReplayKit probe plus explicitly started, bounded live IPC/output.
+/// Network authorization stays in the host; media is never written to storage.
 enum YinweiReplayKitProbeChannel {
   static let name = "dev.yinwei/replaykit_audio_probe"
   static let appGroup = YinweiProvisionedAppGroup.resolve(in: .main)
@@ -84,6 +84,7 @@ private enum YinweiProvisionedAppGroup {
 final class YinweiReplayKitProbeController {
   private weak var pickerController: UIViewController?
   private let returnTone = YinweiReplayKitReturnTonePlayer()
+  private let remoteReturn = YinweiRemoteReturnPlayer()
   private var lastToneError: String?
 
   func handle(call: FlutterMethodCall, result: @escaping FlutterResult) {
@@ -103,6 +104,33 @@ final class YinweiReplayKitProbeController {
       returnTone.stop()
       lastToneError = nil
       result(["ok": true])
+    case "getRemoteIPCPath":
+      guard YinweiReplayKitProbeChannel.appGroup == "group.dev.yinwei.remote.capture",
+            let container = FileManager.default.containerURL(
+              forSecurityApplicationGroupIdentifier: YinweiReplayKitProbeChannel.appGroup)
+      else {
+        result(FlutterError(code: "dedicated_app_group_required",
+          message: "Live audio needs a signing profile that authorizes group.dev.yinwei.remote.capture for Yinwei and its broadcast extension. This signer group supports the numeric test only.", details: nil))
+        return
+      }
+      result(container.appendingPathComponent("yw.sock").path)
+    case "prepareRemoteReturn":
+      do { returnTone.stop(); try remoteReturn.prepare(); result(["ok": true]) }
+      catch { result(FlutterError(code: "return_output_failed",
+        message: "Could not open iPad audio output", details: nil)) }
+    case "writeRemoteReturn":
+      guard remoteReturn.isReady else {
+        result(FlutterError(code: "return_output_interrupted",
+          message: "iPad audio output interrupted. Start again explicitly.", details: nil))
+        return
+      }
+      if let typed = call.arguments as? FlutterStandardTypedData {
+        result(["accepted": remoteReturn.accept(typed.data)])
+      } else { result(["accepted": false]) }
+    case "resetRemoteReturn":
+      remoteReturn.reset(); result(["ok": true])
+    case "stopRemoteReturn":
+      remoteReturn.stop(); result(["ok": true])
     default:
       result(FlutterMethodNotImplemented)
     }
@@ -211,6 +239,103 @@ final class YinweiReplayKitProbeController {
       current = presented
     }
     return current
+  }
+}
+
+/// Plays only the laptop's already-processed stereo. No spatial processor,
+/// recorder or screen/microphone path exists in this output adapter.
+private final class YinweiRemoteReturnPlayer {
+  private let engine = AVAudioEngine()
+  private let player = AVAudioPlayerNode()
+  private var format: AVAudioFormat?
+  private var queued = 0
+  private var generation: UInt64 = 0
+  private var epoch: UInt64?
+  private var prepared = false
+  private var observers: [NSObjectProtocol] = []
+  var isReady: Bool { prepared && engine.isRunning }
+
+  func prepare() throws {
+    stop()
+    let session = AVAudioSession.sharedInstance()
+    try session.setCategory(.playback, mode: .default, options: [.mixWithOthers])
+    try session.setActive(true)
+    guard let format = AVAudioFormat(standardFormatWithSampleRate: 48_000, channels: 2)
+    else { throw YinweiReplayKitToneError.bufferAllocationFailed }
+    self.format = format
+    engine.attach(player)
+    engine.connect(player, to: engine.mainMixerNode, format: format)
+    prepared = true
+    do { engine.prepare(); try engine.start() }
+    catch { stop(); throw error }
+    // Do not silently restart a changed/interrupted output route with old PCM.
+    let center = NotificationCenter.default
+    observers = [
+      center.addObserver(forName: AVAudioSession.interruptionNotification,
+        object: nil, queue: .main) { [weak self] note in
+        if (note.userInfo?[AVAudioSessionInterruptionTypeKey] as? UInt)
+            == AVAudioSession.InterruptionType.began.rawValue { self?.stop() }
+      },
+      center.addObserver(forName: .AVAudioEngineConfigurationChange,
+        object: engine, queue: .main) { [weak self] _ in self?.stop() },
+    ]
+  }
+
+  func accept(_ data: Data) -> Bool {
+    guard isReady, queued < 8, data.count >= 64, data.count <= 4152,
+          let format else { return false }
+    func u32(_ offset: Int) -> UInt32 {
+      data.withUnsafeBytes { $0.loadUnaligned(fromByteOffset: offset, as: UInt32.self).littleEndian }
+    }
+    func u64(_ offset: Int) -> UInt64 {
+      data.withUnsafeBytes { $0.loadUnaligned(fromByteOffset: offset, as: UInt64.self).littleEndian }
+    }
+    let frames = Int(u32(36))
+    guard u32(0) == 0x31574e59, u32(4) == 1, u32(32) == 48_000,
+          frames > 0, frames <= 512, data.count == 56 + frames * 8 else { return false }
+    let value = u64(8)
+    if let epoch, epoch != value { return false }
+    self.epoch = value
+    guard let buffer = AVAudioPCMBuffer(pcmFormat: format,
+      frameCapacity: AVAudioFrameCount(frames)), let pcm = buffer.floatChannelData
+    else { return false }
+    for frame in 0..<frames {
+      for channel in 0..<2 {
+        let bits = u32(56 + frame * 8 + channel * 4)
+        let sample = Float(bitPattern: bits)
+        guard sample.isFinite else { return false }
+        pcm[channel][frame] = sample
+      }
+    }
+    buffer.frameLength = AVAudioFrameCount(frames)
+    let token = generation
+    queued += 1
+    player.scheduleBuffer(buffer, completionCallbackType: .dataPlayedBack) { [weak self] _ in
+      DispatchQueue.main.async {
+        guard let self, self.generation == token else { return }
+        self.queued = max(0, self.queued - 1)
+        if self.queued == 0 && self.player.isPlaying { self.player.pause() }
+      }
+    }
+    // Eight 512-frame packets = ~85 ms prefill; no hidden latency growth.
+    if queued >= 8 && !player.isPlaying { player.play() }
+    return true
+  }
+
+  func reset() {
+    generation &+= 1
+    guard prepared else { queued = 0; return }
+    player.stop(); player.reset(); queued = 0
+  }
+
+  func stop() {
+    for observer in observers { NotificationCenter.default.removeObserver(observer) }
+    observers.removeAll()
+    reset(); epoch = nil
+    guard prepared else { return }
+    engine.stop(); engine.disconnectNodeOutput(player); engine.detach(player)
+    format = nil; prepared = false
+    try? AVAudioSession.sharedInstance().setActive(false, options: [.notifyOthersOnDeactivation])
   }
 }
 

@@ -1113,6 +1113,12 @@ fn dsp_loop(shared: Arc<Shared>) -> Result<(), SpatialError> {
 
 static LIVE: Mutex<Option<Arc<LiveTransferEngine>>> = Mutex::new(None);
 
+/// A remote ingress check must never wait for WASAPI start/stop ownership.
+pub(crate) fn busy_for_remote() -> bool {
+    LIVE.try_lock().map(|slot| slot.as_ref().is_some_and(|e| e.is_running()))
+        .unwrap_or(true)
+}
+
 pub fn global_live(
 ) -> Result<std::sync::MutexGuard<'static, Option<Arc<LiveTransferEngine>>>, SpatialError> {
     LIVE.lock().map_err(|_| SpatialError::LockPoisoned)

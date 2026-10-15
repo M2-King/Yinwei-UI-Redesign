@@ -18,6 +18,10 @@ mod ffi;
 mod frb_api;
 mod live_dsp;
 mod live_ingress;
+#[cfg(feature = "realtime")]
+mod remote_ingress;
+#[cfg(all(test, feature = "realtime"))]
+mod remote_ingress_tests;
 mod live_pcm;
 mod live_queue;
 #[cfg(feature = "realtime")]

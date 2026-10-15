@@ -1,27 +1,34 @@
 import AudioToolbox
+import AVFoundation
+import Darwin
 import CoreMedia
 import Foundation
 import ReplayKit
 
-/// ReplayKit capture-only gate. It measures `.audioApp` and discards every
-/// media buffer after bounded inspection. There is no recorder or network path.
+/// ReplayKit audio probe and optional host-owned, memory-only live IPC.
+/// Video/microphone are discarded; the extension never owns network credentials.
 final class SampleHandler: RPBroadcastSampleHandler {
   private let telemetry = YinweiBroadcastTelemetry()
+  private let remotePCM = YinweiRemotePCMWriter()
 
   override func broadcastStarted(withSetupInfo setupInfo: [String: NSObject]?) {
     telemetry.begin()
+    remotePCM.begin()
   }
 
   override func broadcastPaused() {
     telemetry.setPhase("paused", active: true)
+    remotePCM.pause()
   }
 
   override func broadcastResumed() {
     telemetry.setPhase("broadcasting", active: true)
+    remotePCM.begin()
   }
 
   override func broadcastFinished() {
     telemetry.finish()
+    remotePCM.pause()
   }
 
   override func processSampleBuffer(
@@ -31,6 +38,7 @@ final class SampleHandler: RPBroadcastSampleHandler {
     switch sampleBufferType {
     case .audioApp:
       telemetry.acceptAppAudio(sampleBuffer)
+      remotePCM.tryAccept(sampleBuffer)
     case .audioMic:
       telemetry.ignoreMicrophone()
     case .video:
@@ -38,6 +46,187 @@ final class SampleHandler: RPBroadcastSampleHandler {
     @unknown default:
       break
     }
+  }
+}
+
+/// Kernel-memory IPC only. Never writes audio or a network grant into the
+/// App Group container. Signer-managed fallback groups remain numeric-only.
+private final class YinweiRemotePCMWriter {
+  private let lock = NSLock()
+  private let worker = DispatchQueue(label: "dev.yinwei.capture.ipc")
+  private var pending: [CMSampleBuffer] = []
+  private var scheduled = false
+  private var active = false
+  private var generation: UInt64 = 0
+  private var descriptor: Int32 = -1
+  private var converter: AVAudioConverter?
+  private var inputFormat: AVAudioFormat?
+  private var partial = [Int16](repeating: 0, count: 960)
+  private var partialCount = 0
+  private var gap = true
+  private var lastConnect = Date.distantPast
+  private var lastEndPTS: Double?
+  private let path: String? = {
+    let group = YinweiProvisionedBroadcastAppGroup.resolve(in: .main)
+    guard group == "group.dev.yinwei.remote.capture" else { return nil }
+    return FileManager.default.containerURL(
+      forSecurityApplicationGroupIdentifier: group
+    )?.appendingPathComponent("yw.sock").path
+  }()
+
+  func begin() { lock.lock(); active = true; generation &+= 1; lock.unlock() }
+  func pause() {
+    lock.lock(); active = false; generation &+= 1; pending.removeAll(); lock.unlock()
+    worker.async { self.disconnect() }
+  }
+
+  func tryAccept(_ sample: CMSampleBuffer) {
+    guard path != nil, lock.try() else { return }
+    guard active, pending.count < 8,
+          CMSampleBufferGetNumSamples(sample) <= 4_800 else {
+      // No retained buffer and no waiting on the ReplayKit callback.
+      lock.unlock(); return
+    }
+    pending.append(sample)
+    if scheduled { lock.unlock(); return }
+    scheduled = true
+    lock.unlock()
+    worker.async { self.drain() }
+  }
+
+  private func drain() {
+    while true {
+      lock.lock()
+      guard active, !pending.isEmpty else {
+        scheduled = false; lock.unlock(); return
+      }
+      let sample = pending.removeFirst()
+      let token = generation
+      lock.unlock()
+      guard connectIfNeeded(), let source = copyAudio(sample) else { continue }
+      let pts = CMTimeGetSeconds(CMSampleBufferGetPresentationTimeStamp(sample))
+      if let end = lastEndPTS, pts.isFinite, abs(pts - end) > 0.002 {
+        converter?.reset(); partialCount = 0; gap = true
+      }
+      lastEndPTS = pts.isFinite ? pts + Double(source.frameLength) / source.format.sampleRate : nil
+      if inputFormat != source.format {
+        guard let output = AVAudioFormat(commonFormat: .pcmFormatInt16,
+          sampleRate: 48_000, channels: 2, interleaved: true) else { continue }
+        inputFormat = source.format
+        converter = AVAudioConverter(from: source.format, to: output)
+        partialCount = 0; gap = true
+      }
+      guard let converter,
+            let converted = AVAudioPCMBuffer(pcmFormat: converter.outputFormat,
+              frameCapacity: AVAudioFrameCount(min(32_000,
+                ceil(Double(source.frameLength) * 48_000 / source.format.sampleRate) + 64)))
+      else { continue }
+      var supplied = false
+      var error: NSError?
+      let status = converter.convert(to: converted, error: &error) { _, result in
+        if supplied { result.pointee = .noDataNow; return nil }
+        supplied = true; result.pointee = .haveData; return source
+      }
+      guard status != .error, error == nil,
+            let pcm = converted.int16ChannelData?[0] else { gap = true; continue }
+      lock.lock(); let current = active && generation == token; lock.unlock()
+      guard current else { disconnect(); continue }
+      for i in 0..<(Int(converted.frameLength) * 2) {
+        partial[partialCount] = pcm[i]; partialCount += 1
+        if partialCount == 960 {
+          sendChunk(); partialCount = 0
+        }
+      }
+    }
+  }
+
+  private func copyAudio(_ sample: CMSampleBuffer) -> AVAudioPCMBuffer? {
+    guard CMSampleBufferDataIsReady(sample),
+          let desc = CMSampleBufferGetFormatDescription(sample),
+          let basic = CMAudioFormatDescriptionGetStreamBasicDescription(desc),
+          basic.pointee.mFormatID == kAudioFormatLinearPCM,
+          basic.pointee.mChannelsPerFrame >= 1,
+          basic.pointee.mChannelsPerFrame <= 2,
+          basic.pointee.mSampleRate >= 8_000,
+          basic.pointee.mSampleRate <= 192_000,
+          let format = AVAudioFormat(streamDescription: basic),
+          let result = AVAudioPCMBuffer(pcmFormat: format,
+            frameCapacity: AVAudioFrameCount(CMSampleBufferGetNumSamples(sample)))
+    else { return nil }
+    var needed = 0
+    var retained: CMBlockBuffer?
+    guard CMSampleBufferGetAudioBufferListWithRetainedBlockBuffer(sample,
+      bufferListSizeNeededOut: &needed, bufferListOut: nil, bufferListSize: 0,
+      blockBufferAllocator: kCFAllocatorDefault, blockBufferMemoryAllocator: kCFAllocatorDefault,
+      flags: 0, blockBufferOut: &retained) == noErr,
+      needed >= MemoryLayout<AudioBufferList>.size, needed <= 4096 else { return nil }
+    let raw = UnsafeMutableRawPointer.allocate(byteCount: needed,
+      alignment: MemoryLayout<AudioBufferList>.alignment)
+    defer { raw.deallocate() }
+    let list = raw.assumingMemoryBound(to: AudioBufferList.self)
+    guard CMSampleBufferGetAudioBufferListWithRetainedBlockBuffer(sample,
+      bufferListSizeNeededOut: &needed, bufferListOut: list, bufferListSize: needed,
+      blockBufferAllocator: kCFAllocatorDefault, blockBufferMemoryAllocator: kCFAllocatorDefault,
+      flags: 0, blockBufferOut: &retained) == noErr else { return nil }
+    result.frameLength = result.frameCapacity
+    let source = UnsafeMutableAudioBufferListPointer(list)
+    let target = UnsafeMutableAudioBufferListPointer(result.mutableAudioBufferList)
+    guard source.count == target.count else { return nil }
+    for i in 0..<source.count {
+      guard let src = source[i].mData, let dst = target[i].mData,
+            source[i].mDataByteSize <= target[i].mDataByteSize else { return nil }
+      memcpy(dst, src, Int(source[i].mDataByteSize))
+    }
+    return result
+  }
+
+  private func connectIfNeeded() -> Bool {
+    if descriptor >= 0 { return true }
+    guard let path, Date().timeIntervalSince(lastConnect) > 0.5 else { return false }
+    lastConnect = Date()
+    var address = sockaddr_un()
+    address.sun_family = sa_family_t(AF_UNIX)
+    let bytes = Array(path.utf8) + [0]
+    guard bytes.count <= MemoryLayout.size(ofValue: address.sun_path) else { return false }
+    withUnsafeMutableBytes(of: &address.sun_path) { dst in
+      bytes.withUnsafeBytes { src in dst.copyBytes(from: src) }
+    }
+    address.sun_len = UInt8(MemoryLayout<sockaddr_un>.size)
+    let fd = Darwin.socket(AF_UNIX, SOCK_STREAM, 0)
+    guard fd >= 0 else { return false }
+    _ = fcntl(fd, F_SETFL, O_NONBLOCK)
+    var yes: Int32 = 1
+    _ = setsockopt(fd, SOL_SOCKET, SO_NOSIGPIPE, &yes, socklen_t(MemoryLayout<Int32>.size))
+    var bufferSize: Int32 = 16_384
+    _ = setsockopt(fd, SOL_SOCKET, SO_SNDBUF, &bufferSize, socklen_t(MemoryLayout<Int32>.size))
+    let result = withUnsafePointer(to: &address) {
+      $0.withMemoryRebound(to: sockaddr.self, capacity: 1) {
+        Darwin.connect(fd, $0, socklen_t(MemoryLayout<sockaddr_un>.size))
+      }
+    }
+    guard result == 0 else { Darwin.close(fd); return false }
+    descriptor = fd; partialCount = 0; converter?.reset(); gap = true
+    return true
+  }
+
+  private func sendChunk() {
+    guard descriptor >= 0 else { gap = true; return }
+    var packet = Data()
+    for value in [UInt32(0x31434e59), 48_000, 480, gap ? 1 : 0] {
+      var le = value.littleEndian
+      withUnsafeBytes(of: &le) { packet.append(contentsOf: $0) }
+    }
+    partial.withUnsafeBytes { packet.append(contentsOf: $0) }
+    let sent = packet.withUnsafeBytes { Darwin.send(descriptor, $0.baseAddress, $0.count, 0) }
+    if sent == packet.count { gap = false }
+    else if sent < 0 && (errno == EAGAIN || errno == EWOULDBLOCK) { gap = true }
+    else { disconnect() } // Partial writes close the stream; never corrupt framing.
+  }
+
+  private func disconnect() {
+    if descriptor >= 0 { Darwin.close(descriptor); descriptor = -1 }
+    partialCount = 0; converter?.reset(); gap = true
+    lastEndPTS = nil
   }
 }
 

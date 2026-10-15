@@ -26,6 +26,40 @@ const E_IO: i32 = 6;
 const E_OTHER: i32 = 7;
 
 #[no_mangle]
+pub extern "C" fn yinwei_remote_ingress_version() -> u32 { 1 }
+#[no_mangle]
+pub extern "C" fn yinwei_remote_ingress_start(epoch: u64) -> i32 {
+    match crate::remote_ingress::start(epoch) { Ok(()) => OK, Err(e) => map_err(e) }
+}
+#[no_mangle]
+pub unsafe extern "C" fn yinwei_remote_ingress_push(samples: *const i16,
+    count: u32, epoch: u64, first_frame: u64, gap: i32) -> i32 {
+    if samples.is_null() || count != 960 || ![0, 1].contains(&gap) { return -E_PARAM; }
+    match crate::remote_ingress::push(std::slice::from_raw_parts(samples, count as usize),
+        epoch, first_frame, gap != 0) {
+        Ok(accepted) => if accepted { 1 } else { 0 }, Err(e) => -map_err(e)
+    }
+}
+#[no_mangle]
+pub extern "C" fn yinwei_remote_ingress_stop() { crate::remote_ingress::stop(); }
+#[no_mangle]
+pub unsafe extern "C" fn yinwei_remote_ingress_read(out: *mut f32, capacity: u32,
+    meta: *mut crate::output_tap::OutputTapMeta) -> i32 {
+    if out.is_null() || meta.is_null() || capacity < crate::STREAM_CHUNK as u32 {
+        return -E_PARAM;
+    }
+    let packet = match crate::remote_ingress::read() {
+        Ok(Some(packet)) => packet, Ok(None) => return 0, Err(e) => return -map_err(e)
+    };
+    if packet.frames.len() > capacity as usize { return -E_PARAM; }
+    for (i, &(l, r)) in packet.frames.iter().enumerate() {
+        out.add(i * 2).write(l); out.add(i * 2 + 1).write(r);
+    }
+    meta.write(packet.meta);
+    packet.frames.len() as i32
+}
+
+#[no_mangle]
 pub extern "C" fn yinwei_output_tap_version() -> u32 { 1 }
 #[no_mangle]
 pub extern "C" fn yinwei_output_tap_enable(enabled: i32) -> i32 {

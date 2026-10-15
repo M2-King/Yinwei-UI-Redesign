@@ -245,13 +245,25 @@ Remaining before real Music-app audio use: close N0 return-recapture/dry-route/l
 
 ## Phase R2 — existing laptop engine integration
 
+Owner approved continuing implementation on 2026-10-14. Architecture and activation boundaries:
+
+- Extend `LiveIngress` with an optional remote timeline and bounded wet-output tap; retain the existing Android ingress behavior and Windows/file queues. A separate remote FFI session reuses `LiveDspProcessor`, snapshots the existing laptop spatial/EQ/array configuration, and never opens a laptop output device by default.
+- Accept complete 480-frame packets nonblockingly into the existing four-chunk queue without changing its legacy drop-oldest policy. The remote entry point drops newest complete input when full; discontinuities clear queued/partial input, invalidate pending output and recreate DSP filter state on the worker. Rebatch to the engine's existing 512-frame chunks before processing once.
+- Add a dedicated remote ABI and native Dart adapter. Refuse activation during file playback or Windows Live Transfer. Local source/configuration changes close the remote session; a new deliberate start owns a fresh network epoch. No active laptop player is restarted during development.
+- Native ReplayKit-to-host IPC uses a Yinwei-named Unix socket inside the shared App Group container. This is a kernel-memory stream; the socket endpoint contains no recording, credentials or session grant. UserDefaults remains numeric telemetry only. The extension has no Cloudflare/account session and cannot send microphone/video. The host must be foreground/active in the initial acceptance arrangement; suspension or a stalled peer fails closed instead of accumulating audio.
+- App Group namespace is an IPC trust boundary. Live IPC requires the dedicated product group for initial activation; signer-managed fallback remains numeric-only until a safe shared-group pairing is verified. An incompatible signing profile shows an explicit provisioning message, never a silent PCM fallback into a shared signer namespace.
+- Native conversion uses AVAudioConverter to produce stereo 48 kHz PCM16. Fixed-capacity capture/network/output queues drop complete newest chunks and expose numeric overload/discontinuity status. iPad output receives only YNW1 stereo and applies no HRTF/DSP.
+- Keep Start/Stop and owner sign-in explicit. The N0 recapture/dry-route/lifecycle checks remain required before enabling real capture upload. Provide developer-only synthetic/native integration tests first, then a signed IPA for actual-device acceptance. No real-device playback or source change occurs automatically.
+
+IPC reference: [Apple App Groups and Unix-domain sockets](https://developer.apple.com/documentation/BundleResources/Entitlements/com.apple.security.application-groups).
+
 1. Reuse `LiveIngress` and `LiveDspProcessor`; do not create a Python, Dart or JavaScript DSP engine.
 2. Add an epoch-aware input ABI owned by `spatial_core`. Gateway pushes validated PCM with nonblocking `try` semantics. A full/contended input queue drops complete newest chunks so latency does not grow.
 3. Add the missing bounded wet-output tap immediately after `LiveDspProcessor::process_chunk`. Reuse the existing eight-chunk `OutputTap` policy and metadata layout where compatible.
 4. Preserve exact DSP order, HRTF data, EQ, reverb, Point/array behavior and coordinate projection. The remote UI updates the same existing spatial state used by the engine and renderer.
 5. Make source modes mutually exclusive through one coordinator: File, Windows Live Transfer or Remote iPad. Starting Remote iPad never silently stops another active source. Runtime activation that interrupts playback requires owner approval.
 6. Default the first accepted remote session to iPad return output. Laptop monitoring remains an explicit option and uses the same wet PCM; it must not create another capture/feedback path.
-7. Input discontinuity, source switch, mode switch, stop and reconnect flush both directions and advance one shared epoch. No old iPad audio may return after a transition.
+7. Input discontinuities retain the connection's network epoch but advance the ingress revision, clearing partial input, processor history and pending wet output. Ordered `resetOutput` acknowledgements flush iPad output before new wet packets. Source/configuration switches end the connection; stop/reconnect requires a fresh network epoch and ticket. No old iPad audio may return after a transition.
 8. Browser disconnect or a slow downlink disables only the remote session. It must not corrupt the engine, routes or later local playback.
 
 Gate R2: native tests prove input/wet-output parity, one DSP invocation, bounded queues, drop/underrun telemetry, epoch flushing, exact Original/Spatial behavior and unchanged Windows/file playback.
