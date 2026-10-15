@@ -2,7 +2,7 @@
 
 Date: 2026-10-15
 
-Status: **Implementation exists in the working tree. The updated iOS build, matched laptop package, signing validation and real-iPad round-trip acceptance are unfinished.**
+Status: **R2 code is committed and published. The new IPA and matching Windows release are built and verified; the matched backend is active and the fixed link is online. Signing validation and real-iPad round-trip acceptance remain unfinished.** See [release record](R2_RELEASE_RECORD_2026-10-15.md) for artifacts and verification limits.
 
 This is the next section of [IMPLEMENTATION_IPAD_REMOTE_LIVE_TRANSFORM.md](IMPLEMENTATION_IPAD_REMOTE_LIVE_TRANSFORM.md). Finish the approved R2 implementation and release gate before starting R3 fixed-origin PWA work or R4 remote spatial controls.
 
@@ -33,7 +33,7 @@ These are prior verification results, not a new test run performed for this docu
 
 The owner approved this section. Release review repaired cancellation during IPC bind/output preparation, guarded stale capture callbacks, stopped unsupported background listening, and made native output interruptions fail closed. The new listening screen distinguishes capture connected/waiting for return from received output.
 
-Verification so far: 84 Rust tests passed; the complete Flutter run passed 550 tests with four explicit skips; targeted new-source analysis found no issues. Additional landscape/enlarged-text/suspension checks and macOS/iOS compilation are recorded separately as they finish. No active laptop bundle has been replaced or restarted; signing compatibility and actual-iPad round-trip acceptance remain pending.
+Verification: 84 Windows Rust tests; 550 Windows Flutter passes with four explicit skips; separate landscape/enlarged-text/suspension and packaged-runtime checks passed. CI run `38676072534` built the IPA successfully with 69 macOS Rust passes and 549 Flutter passes/six skips. The actual release DLL passed native FFI and temporary public-relay checks (64 generated-audio packets). The packaged player passed fixture authentication, native output, stop/start, fresh epoch and console-error checks (24 packets). Archive inspection confirmed both required arm64 bundles and App Group entitlements. The matched backend was activated only after confirming no player was running: fixed bookmark online, native engine ready, public sign-in/health HTTP 200, unauthenticated session/transform HTTP 401, zero detected unhandled Flutter errors. Existing audio was not interrupted; signing compatibility and actual-iPad round-trip acceptance remain pending.
 
 ## Constraints
 

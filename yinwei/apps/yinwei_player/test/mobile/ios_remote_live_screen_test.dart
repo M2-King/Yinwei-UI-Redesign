@@ -33,7 +33,7 @@ void main() {
         theme: YinweiTheme.dark(),
         builder: (context, child) => MediaQuery(
             data: MediaQuery.of(context)
-                .copyWith(textScaler: TextScaler.linear(1.6)),
+                .copyWith(textScaler: const TextScaler.linear(1.6)),
             child: child!),
         home: IosRemoteLiveScreen(session: session)));
     tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
@@ -62,7 +62,7 @@ void main() {
     if (fontFile != null) {
       await tester.runAsync(() async {
         final bytes = await File(fontFile).readAsBytes();
-        final loader = FontLoader('Ahem')
+        final loader = FontLoader('SF Pro Text')
           ..addFont(Future.value(ByteData.sublistView(bytes)));
         await loader.load();
       });
