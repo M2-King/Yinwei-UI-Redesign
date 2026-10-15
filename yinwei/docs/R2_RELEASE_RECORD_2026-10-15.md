@@ -29,7 +29,7 @@ Windows staging folder: `outputs/r2/463b88b/windows/`.
 
 Unsigned IPA: `outputs/r2/463b88b/Yinwei-R2-unsigned-463b88b.ipa` (10,368,495 bytes), SHA-256 `9238470bb4dd0ebc1f614c5f400075e0c60ae489d65b7cb8089128a24f8aae0e`.
 
-[Download build package on GitHub](https://github.com/M2-King/Yinwei-UI-Redesign/actions/runs/38676072534/artifacts/11946523124). The downloaded ZIP contains `Yinwei-unsigned.ipa` and build information. GitHub may require your repository login; the CI artifact expires on 2026-10-29. The local files remain available independently.
+[Download the IPA directly](https://github.com/M2-King/Yinwei-UI-Redesign/releases/download/yinwei-r2-463b88b/Yinwei-R2-unsigned-463b88b.ipa), or open the [release page](https://github.com/M2-King/Yinwei-UI-Redesign/releases/tag/yinwei-r2-463b88b). This replaces the Actions artifact link that showed a 404 in the owner's signed-out Safari. Anonymous download was verified: HTTP 200, 10,368,495 bytes, matching SHA-256. No GitHub login is needed for this release asset. The original CI artifact expires on 2026-10-29; the release asset and local files are separate copies.
 
 Windows ZIP: `outputs/r2/463b88b/Yinwei-R2-Windows-463b88b.zip`. Full file hashes are in `windows-manifest.json`. The IPA build information and bounded public bundle/capability inspection are in `ios/`. A readable desktop test render is included as `live-screen-desktop-test.png`; it is not a real iPad screenshot.
 
