@@ -34,7 +34,7 @@ function send(rate=48000, value=.25) {
   const pcm=new Float32Array(1024);
   for(let i=0;i<512;i++){pcm[i*2]=value;pcm[i*2+1]=-value;}
   sink.port.onmessage({data:{type:'pcm',buffer:pcm.buffer,sampleRate:rate,
-    sequence:++sequence,firstFrame,azimuth:30,elevation:15}});
+    sequence:++sequence,firstFrame,epoch:1,mode:1,azimuth:30,elevation:15}});
   firstFrame+=512;
 }
 const render=()=>{const out=[new Float32Array(128),new Float32Array(128)]; sink.process([], [out]); return out;};
@@ -43,6 +43,16 @@ for(let i=0;i<8;i++)send();
 const out=render(); assert.equal(out[0][0],.25); assert.equal(out[1][0],-.25);
 for(let i=0;i<12;i++)render();
 assert.ok(messages.some(x=>x.type==='presentation'&&x.azimuth===30));
+assert.ok(messages.some(x=>x.type==='presentation'&&x.epoch===1&&x.mode===1));
+assert.equal(messages.filter(x=>x.type==='presentation').at(-1).signalPresent,true);
+// Continuous silent PCM must not be described as music merely because the
+// worklet is rendering. Feed at real-time cadence without triggering overflow.
+sink.port.onmessage({data:{type:'flush'}});
+for(let i=0;i<8;i++)send(48000,0);
+for(let i=0;i<120;i++){send(48000,0);for(let j=0;j<4;j++)render();}
+assert.equal(messages.filter(x=>x.type==='presentation').at(-1).signalPresent,false);
+for(let i=0;i<20;i++){send(48000,.1);for(let j=0;j<4;j++)render();}
+assert.equal(messages.filter(x=>x.type==='presentation').at(-1).signalPresent,true);
 sink.port.onmessage({data:{type:'flush'}});
 assert.equal(render()[0].every(x=>x===0),true,'seek flush removes queued audio');
 for(let i=0;i<8;i++)send(44100);
@@ -82,9 +92,22 @@ assert.deepEqual(socket.sent[0],{ticket:'test-ticket'});
 socket.onmessage({data:packet()});
 assert.equal(client.pending.size,1);
 assert.equal(clientMessages.at(-1).type,'pcm');
+assert.match(statuses.at(-1),/Buffering/,'packet arrival is not output confirmation');
+client.node.port.onmessage({data:{type:'presentation',epoch:1,mode:1}});
+assert.match(statuses.at(-1),/Playing laptop stereo/);
+client.node.port.onmessage({data:{type:'presentation',epoch:1,mode:1,signalPresent:false}});
+assert.match(statuses.at(-1),/Receiving silence/);
+client.setVolume(0);
+client.node.port.onmessage({data:{type:'presentation',epoch:1,mode:1,signalPresent:true}});
+assert.match(statuses.at(-1),/volume is muted/);
+client.setVolume(1);
+client.node.port.onmessage({data:{type:'underrun'}});
+assert.match(statuses.at(-1),/buffering/);
 client.node.port.onmessage({data:{type:'accepted',sequence:1}});
 assert.equal(client.pending.size,0); assert.deepEqual(socket.sent.at(-1),{ack:1});
 client.flush(true); assert.equal(client.minimumEpoch,2);
+client.node.port.onmessage({data:{type:'presentation',epoch:1,mode:1}});
+assert.match(statuses.at(-1),/Buffering/,'stale presentation cannot undo seek buffering');
 socket.onmessage({data:packet()}); assert.equal(client.pending.size,0,'old epoch is acknowledged without playback');
 await client.stop(); assert.ok(contextClosed); assert.equal(client.active,false); assert.equal(socket.onmessage,null);
 client.updateTransport({playing:false,positionMs:0},60000,{live:true});
@@ -96,7 +119,20 @@ assert.match(statuses.at(-1),/Live stream ready/);
 socket.onclose({reason:'live_stopped'});
 assert.match(statuses.at(-1),/Live Transfer stopped on laptop/);
 assert.equal(client.active,false);
+await client.start({source:'live'});socket.onopen();
+socket.onclose({reason:'socket_limit'});
+assert.match(statuses.at(-1),/busy/);
+assert.equal(client.active,false);
 resumeFails=true; contextClosed=false;
 await client.start(); assert.equal(client.active,false); assert.ok(contextClosed);
 assert.match(statuses.at(-1),/unavailable/);
+resumeFails=false;
+const busyClient=new BrowserAudio({request:async()=>{throw Error('audio_busy');},status:text=>statuses.push(text),pose:()=>{}});
+await busyClient.start();
+assert.equal(busyClient.active,false);
+assert.match(statuses.at(-1),/busy/,'ticket rejection explains single-listener ownership');
+delete globalThis.AudioContext;
+await client.start();
+assert.equal(client.active,false);
+assert.match(statuses.at(-1),/This browser cannot/);
 console.log('PASS: browser client authentication, PCM transfer, ACK, stale epoch filtering, shutdown, denied audio device');

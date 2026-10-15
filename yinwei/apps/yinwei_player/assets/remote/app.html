@@ -15,7 +15,6 @@
       </div>
       <div class="header-actions">
         <span id="connection" role="status">Connecting…</span
-        ><a class="button-link" href="/remote/capture-probe">Test iPad live audio</a
         ><button id="reconnect">Reconnect</button
         ><button id="entry" hidden>Check laptop status</button
         ><button id="signout">Sign out</button>
@@ -35,9 +34,9 @@
         <h2 id="title">Waiting for laptop</h2>
         <p id="artist"></p>
         <p id="live-hint" hidden></p>
-        <p class="output">Audio output: laptop speakers / headphones</p>
+        <p class="output">Laptop audio → this browser’s speakers or headphones</p>
         <div class="browser-listen">
-          <button id="listen">Listen in browser</button>
+          <button id="listen" disabled>Listen in browser</button>
           <button id="stop-listening" disabled>Stop browser audio</button>
           <label
             >Browser volume<input
@@ -49,8 +48,10 @@
               value="1"
           /></label>
           <p id="audio-status" role="status">
-            Press Listen to use browser headphones.
+            Waiting for the laptop audio source.
           </p>
+          <p>On iPad, choose speakers or connected headphones in Control Center.
+            Browser volume affects only this device. Keep this page open while listening.</p>
         </div>
         <label
           >Approved files<select id="media">

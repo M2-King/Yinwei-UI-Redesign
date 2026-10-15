@@ -71,10 +71,16 @@ export class BrowserAudio {
   }
   async start({ source = 'file' } = {}) {
     if (this.active) return;
+    if (typeof globalThis.AudioContext !== 'function' ||
+        typeof globalThis.AudioWorkletNode !== 'function') {
+      this.status('This browser cannot play the live stereo stream. Open Yinwei in an up-to-date Safari or Chrome browser.');
+      return;
+    }
     const generation = ++this.generation;
     try {
       const context = new AudioContext();
       this.context = context;
+      this.status('Starting browser audio…');
       // Resume directly inside the user gesture, before asynchronous setup.
       await context.resume();
       if (generation !== this.generation) return;
@@ -95,7 +101,15 @@ export class BrowserAudio {
           if (this.socket?.readyState === WebSocket.OPEN)
             this.socket.send(JSON.stringify({ ack: data.sequence }));
         } else if (data.type === "presentation") {
+          if (this.paused || data.epoch !== this.epoch || data.epoch < this.minimumEpoch) return;
           this.pose(data);
+          this.status(this.volume === 0
+            ? 'Browser volume is muted · raise Browser volume to listen'
+            : data.signalPresent === false
+              ? 'Receiving silence from laptop · check source playback and laptop processing'
+              : data.mode === 2
+            ? 'DSP error · rendering original audio'
+            : 'Playing laptop stereo · output follows this device’s sound settings');
         } else if (data.type === "underrun" || data.type === "resync") {
           this.status(source === 'live'
             ? "Buffering live audio · waiting for the Windows source"
@@ -135,6 +149,7 @@ export class BrowserAudio {
             packet.firstFrame !== this.nextFrame
           ) {
             this.node.port.postMessage({ type: "flush" });
+            this.status('Buffering laptop stereo…');
           }
           this.epoch = packet.epoch;
           this.lastSequence = packet.sequence;
@@ -143,11 +158,6 @@ export class BrowserAudio {
           this.node.port.postMessage({ ...packet, type: "pcm" }, [
             packet.buffer,
           ]);
-          this.status(
-            packet.mode === 2
-              ? "DSP error · receiving original audio"
-              : "Listening in browser · laptop output continues",
-          );
         } catch (_) {
           this.stop("Browser audio interrupted. Press Listen to restart.");
         }
@@ -158,18 +168,24 @@ export class BrowserAudio {
             ? "Live Transfer stopped on laptop · start it there, then press Listen"
             : event.reason === 'audio_source_changed'
               ? "Audio source changed · press Listen again"
+              : event.reason === 'socket_limit'
+                ? 'Browser audio is busy · stop listening on the other device, then press Listen'
               : "Browser audio stopped · press Listen to reconnect");
       };
-      socket.onerror = () =>
-        this.status("Browser audio connection unavailable");
+      socket.onerror = () => {
+        if (generation === this.generation)
+          this.status("Browser audio connection unavailable");
+      };
       context.onstatechange = () => {
         if (generation === this.generation && context.state !== "running")
           this.stop("Browser audio suspended · press Listen to resume");
       };
-    } catch (_) {
+    } catch (error) {
       if (generation === this.generation) {
         await this.stop(
-          "Browser audio unavailable. Check the native engine and connection.",
+          error.message === 'audio_busy'
+            ? 'Browser audio is busy · stop listening on the other device, then press Listen'
+            : "Browser audio unavailable. Check the native engine and connection.",
         );
       }
     }
@@ -179,10 +195,14 @@ export class BrowserAudio {
     this.pose(null);
     if (discontinuity && previousEpoch != null)
       this.minimumEpoch = Math.max(this.minimumEpoch, previousEpoch + 1);
+    if (this.active) this.status('Buffering laptop stereo…');
   }
   updateTransport(transport, durationMs, { live = false } = {}) {
     const paused = !live && !transport.playing && transport.positionMs < durationMs;
-    if (paused && !this.paused) this.flush();
+    if (paused && !this.paused) {
+      this.flush();
+      if (this.active) this.status('Laptop playback paused · browser audio waiting');
+    }
     this.paused = paused;
   }
   setVolume(value) {

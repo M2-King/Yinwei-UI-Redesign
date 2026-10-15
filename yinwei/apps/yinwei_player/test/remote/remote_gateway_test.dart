@@ -500,6 +500,10 @@ void main() {
     final sequence = packet.getUint64(16, Endian.little);
     socket.add(jsonEncode({'ack': sequence}));
     socket.add(jsonEncode({'ack': sequence}));
+    final busy = await request('/remote/api/ws-ticket',
+        body: {'purpose': 'audio'}, csrfToken: csrf);
+    expect(busy.status, 409);
+    expect((jsonDecode(busy.text) as Map)['error'], 'audio_busy');
     await Future<void>.delayed(const Duration(milliseconds: 30));
     expect(audioTap.enabled, isTrue);
     final closing = socket.close();

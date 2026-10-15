@@ -2,6 +2,8 @@
 
 Date: 2026-10-14
 
+**Direction update — 2026-10-15:** The owner approved laptop-origin audio with browser-only iPad control/listening. See [the laptop web listening plan](IMPLEMENTATION_LAPTOP_WEB_LISTENING.md) and its W1 verification record. This native iPad capture/uplink track is deferred; the status/evidence below is historical and is not a completion claim. Its IPA/signing gates do not block the new downlink-only route.
+
 Status: **The pure-PWA Gate R0 failed, while the signed native N0.1 capture companion has now passed live Music-app capture and generated-return playback on the owner's actual iPad (2026-10-14).** ReplayKit delivered non-silent stereo app audio and Yinwei played its native return test while capture remained active. The remaining N0 routing/lifecycle checks below must close before R1 networking starts: exclude return-audio recapture, classify the dry Music path, and verify stop/start recovery.
 
 ## Product outcome

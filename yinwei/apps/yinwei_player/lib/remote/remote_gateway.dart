@@ -492,6 +492,9 @@ class RemoteGateway {
             }
             return;
           case '/remote/api/ws-ticket':
+            if (data['purpose'] == 'audio' && _audioSocket != null) {
+              throw const RemoteFailure('audio_busy', httpStatus: 409);
+            }
             if (!['events', 'audio', 'transform'].contains(data['purpose']) ||
                 (data['purpose'] == 'audio' && _selectedAudioTap == null) ||
                 (data['purpose'] == 'transform' &&

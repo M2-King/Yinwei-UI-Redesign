@@ -19,6 +19,7 @@ const browserAudio = new BrowserAudio({
   status: (text) => {
     $("audio-status").textContent = text;
     $("stop-listening").disabled = !browserAudio.active;
+    updateListenButton();
   },
   pose: (packet) => {
     audioPresentation = packet;
@@ -67,23 +68,31 @@ function sendScene() {
   }
 }
 function render(snapshot) {
+  const sourceChanged = state?.audioSource !== snapshot.audioSource;
   state = snapshot;
   const live = !!state.liveRunning;
   const liveReady = state.audioSource === 'live';
-  const listeningAvailable = live
-    ? liveReady && state.capabilities.browserLiveAudio
-    : state.track.hasFile && state.capabilities.browserAudio && state.capabilities.pointControl;
   browserAudio.updateTransport(state.transport, state.track.durationMs, { live });
-  $("listen").disabled =
-    !connected ||
-    browserAudio.active ||
-    !listeningAvailable;
+  updateListenButton();
   $("stop-listening").disabled = !browserAudio.active;
-  if (live && !state.capabilities.browserLiveAudio) {
+  if (!connected) {
+    $("audio-status").textContent = 'Laptop disconnected · browser audio stopped';
+  } else if (state.audioSource === 'remote_ipad') {
+    $("audio-status").textContent = 'An iPad input session is active on the laptop. End it there before listening to laptop sources.';
+  } else if (live && !liveReady) {
+    $("audio-status").textContent = 'Live Transfer is starting · waiting for the laptop';
+  } else if (live && !state.capabilities.browserLiveAudio) {
     $("audio-status").textContent = "Live listening is unavailable in this laptop build.";
   } else if (!live && !state.capabilities.browserAudio) {
     $("audio-status").textContent =
       "Browser listening is unavailable on this laptop session.";
+  } else if (!live && !state.capabilities.pointControl) {
+    $("audio-status").textContent = 'File array playback is not available in the browser. Select point playback on the laptop to listen here.';
+  } else if (!live && !state.track.hasFile) {
+    $("audio-status").textContent = 'Open a file or start Live Transfer on the laptop, then press Listen.';
+  } else if (!browserAudio.active && (sourceChanged ||
+      /^(Laptop disconnected|Waiting for|Open a file|Live Transfer is starting)/.test($("audio-status").textContent))) {
+    $("audio-status").textContent = 'Press Listen to hear laptop stereo through this device’s speakers or headphones.';
   }
   if (!state.controlOwned) lease = null;
   $("title").textContent = live ? state.live?.title || 'Live Transfer' : state.track.hasFile
@@ -96,7 +105,9 @@ function render(snapshot) {
     : !liveReady
     ? 'Start Live Transfer on the laptop. Listening will become available here.'
     : state.live?.captureHealthy
-      ? 'Live Transfer is running on the laptop. Press Listen here.'
+      ? browserAudio.active
+        ? 'Live Transfer is running on the laptop.'
+        : 'Live Transfer is running on the laptop. Press Listen here.'
       : 'Live Transfer is running. Waiting for source audio on the laptop.';
   $("play").disabled = !connected || !lease || pending || !state.track.hasFile;
   document.querySelectorAll("[data-control]").forEach((element) => {
@@ -153,6 +164,12 @@ function render(snapshot) {
     !connected || pending || state.liveRunning || state.transport.busy;
   sendScene();
 }
+function updateListenButton() {
+  const available = state && state.audioSource !== 'remote_ipad' && (state.liveRunning
+    ? state.audioSource === 'live' && state.capabilities.browserLiveAudio
+    : state.track.hasFile && state.capabilities.browserAudio && state.capabilities.pointControl);
+  $("listen").disabled = !connected || browserAudio.active || !available;
+}
 async function command(type, payload = {}) {
   if (!lease || !connected || pending) return;
   pending = true;
@@ -208,6 +225,7 @@ async function connect() {
     socket.close();
   }
   connected = false;
+  sequence = 0;
   lease = null;
   $("connection").textContent = "Connecting…";
   try {

@@ -13,8 +13,12 @@ class YinweiPcmSink extends AudioWorkletProcessor {
     this.presentationFrame = 0;
     this.metadata = [];
     this.ticks = 0;
+    this.signalPresent = false;
+    this.silentFrames = 0;
     this.port.onmessage = ({ data }) => {
       if (data.type === "flush") {
+        this.signalPresent = false;
+        this.silentFrames = 0;
         this.count = 0;
         this.phase = 0;
         this.ready = false;
@@ -32,6 +36,8 @@ class YinweiPcmSink extends AudioWorkletProcessor {
       )
         return;
       if (this.inputRate !== data.sampleRate) {
+        this.signalPresent = false;
+        this.silentFrames = 0;
         this.count = 0;
         this.phase = 0;
         this.ready = false;
@@ -45,6 +51,8 @@ class YinweiPcmSink extends AudioWorkletProcessor {
         Math.floor(this.inputRate * 0.5),
       );
       if (this.count + frames > maximum) {
+        this.signalPresent = false;
+        this.silentFrames = 0;
         this.count = 0;
         this.phase = 0;
         this.ready = false;
@@ -80,6 +88,7 @@ class YinweiPcmSink extends AudioWorkletProcessor {
         if (out[1]) out[1][i] = 0;
         if (this.ready) {
           this.ready = false;
+          this.signalPresent = false;
           ++this.underruns;
           this.port.postMessage({ type: "underrun", count: this.underruns });
         }
@@ -91,6 +100,14 @@ class YinweiPcmSink extends AudioWorkletProcessor {
       if (out[1])
         out[1][i] =
           this.pcm[a + 1] + (this.pcm[b + 1] - this.pcm[a + 1]) * this.phase;
+      // Transport/rendering can be healthy while every sample is silent.
+      // Inspect the rendered stereo only; never alter the received samples.
+      if (Math.max(Math.abs(out[0][i]), Math.abs(out[1]?.[i] ?? 0)) >= 0.00001) {
+        this.signalPresent = true;
+        this.silentFrames = 0;
+      } else if (++this.silentFrames >= sampleRate) {
+        this.signalPresent = false;
+      }
       this.phase += step;
       const advance = Math.floor(this.phase);
       this.phase -= advance;
@@ -108,6 +125,9 @@ class YinweiPcmSink extends AudioWorkletProcessor {
       if (pose)
         this.port.postMessage({
           type: "presentation",
+          epoch: pose.epoch,
+          mode: pose.mode,
+          signalPresent: this.signalPresent,
           azimuth: pose.azimuth,
           elevation: pose.elevation,
           positionMs: (this.presentationFrame * 1000) / this.inputRate,

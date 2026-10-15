@@ -2,6 +2,8 @@
 
 Date: 2026-10-15
 
+**Priority change:** The owner's latest direction is [laptop-origin audio with browser-only listening](IMPLEMENTATION_LAPTOP_WEB_LISTENING.md). Native capture/uplink acceptance below is deferred, not passed. Its pending signing/device gates no longer prevent planning or approving the browser/PWA downlink route. Existing R2 code and release records remain preserved.
+
 Status: **R2 code is committed and published. The new IPA and matching Windows release are built and verified; the matched backend is active and the fixed link is online. Signing validation and real-iPad round-trip acceptance remain unfinished.** See [release record](R2_RELEASE_RECORD_2026-10-15.md) for artifacts and verification limits.
 
 This is the next section of [IMPLEMENTATION_IPAD_REMOTE_LIVE_TRANSFORM.md](IMPLEMENTATION_IPAD_REMOTE_LIVE_TRANSFORM.md). Finish the approved R2 implementation and release gate before starting R3 fixed-origin PWA work or R4 remote spatial controls.

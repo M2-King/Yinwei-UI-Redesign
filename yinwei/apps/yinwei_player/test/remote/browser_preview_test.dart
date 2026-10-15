@@ -47,9 +47,10 @@ void main() {
               'title': 'Synthetic Live Transfer',
               'captureHealthy': liveActive
             });
-    if (!livePreview)
+    if (!livePreview) {
       coordinator.registerLocalMedia(
           'synthetic-preview.wav', 'Synthetic UI test');
+    }
     final gateway = RemoteGateway(
         auth: auth,
         coordinator: coordinator,
@@ -61,7 +62,7 @@ void main() {
             return Uint8List.fromList(utf8.encode(utf8
                 .decode(bytes)
                 .replaceFirst(
-                    'Audio output: laptop speakers / headphones',
+                    'Laptop audio → this browser’s speakers or headphones',
                     livePreview
                         ? 'SYNTHETIC LIVE TEST · No Windows capture or real DSP'
                         : 'SYNTHETIC UI TEST · No real audio engine')));
@@ -89,8 +90,9 @@ void main() {
             final nextSource = next['source'] == 'B'
                 ? 'Synthetic Windows source B'
                 : 'Synthetic Windows source A';
-            if (nextSource != liveSource && liveTap.enabled)
+            if (nextSource != liveSource && liveTap.enabled) {
               liveTap.setEnabled(true);
+            }
             liveActive = nextActive;
             liveSource = nextSource;
           }
