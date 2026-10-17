@@ -170,5 +170,6 @@ jobs:
         with:
           name: Yinwei-iOS-logs-${{ github.run_id }}-${{ github.run_attempt }}
           path: .ci-ios-logs/
+          include-hidden-files: true
           if-no-files-found: warn
           retention-days: 14
