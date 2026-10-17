@@ -209,11 +209,9 @@ class MethodChannelReplayKitAudioProbe implements ReplayKitAudioProbe {
 
   @override
   Future<void> showBroadcastPicker() async {
-    try {
-      await _channel.invokeMethod<dynamic>('showBroadcastPicker');
-    } on PlatformException {
-      // getStatus carries the native error without turning cancellation into one.
-    }
+    // Native startup failures must reach live-session cleanup and the probe UI.
+    // Dismissing Apple's picker is a successful presentation, not an exception.
+    await _channel.invokeMethod<dynamic>('showBroadcastPicker');
   }
 
   @override

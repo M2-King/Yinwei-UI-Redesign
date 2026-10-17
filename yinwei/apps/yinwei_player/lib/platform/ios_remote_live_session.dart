@@ -62,9 +62,12 @@ class IosRemoteLiveSession extends ChangeNotifier {
   bool busy = false, active = false, signedIn = false, _disposed = false;
   bool _connecting = false;
   bool _operationInFlight = false;
+  bool _pollingOutput = false;
   Future<void>? _stopping;
   String status = 'Laptop processing · iPad capture and listening';
   int inputChunks = 0,
+      receivedChunks = 0,
+      playedChunks = 0,
       outputChunks = 0,
       outputDrops = 0,
       _writes = 0,
@@ -131,7 +134,7 @@ class IosRemoteLiveSession extends ChangeNotifier {
       if (_disposed || generation != _generation) return;
       final client = RemoteTransformClient(
           origin: origin,
-          onOutput: _returnAudio,
+          onOutput: acceptReturnAudio,
           onOutputReset: () {
             unawaited(_native
                 .invokeMethod<void>('resetRemoteReturn')
@@ -141,7 +144,14 @@ class IosRemoteLiveSession extends ChangeNotifier {
             if (state == 'disconnected' ||
                 state == 'invalidStream' ||
                 state == 'slowConnection') {
-              unawaited(stop(message: 'Disconnected · tap Start to reconnect'));
+              unawaited(stop(
+                  message: switch (state) {
+                'invalidStream' =>
+                  'Invalid processed audio received · restart laptop processing',
+                'slowConnection' =>
+                  'Laptop connection too slow · restart live listening',
+                _ => 'Laptop disconnected · tap Start to reconnect',
+              }));
             }
           });
       _client = client;
@@ -197,7 +207,8 @@ class IosRemoteLiveSession extends ChangeNotifier {
       _server = server;
       await _native.invokeMethod<void>('prepareRemoteReturn');
       if (_disposed || generation != _generation) return;
-      inputChunks = outputChunks = outputDrops = _writes = 0;
+      inputChunks = receivedChunks =
+          playedChunks = outputChunks = outputDrops = _writes = 0;
       _lastCapture = null;
       final startedAt = DateTime.now();
       active = true;
@@ -234,7 +245,8 @@ class IosRemoteLiveSession extends ChangeNotifier {
           try {
             parser.add(bytes);
           } catch (_) {
-            unawaited(stop(message: 'Capture interrupted · start again'));
+            unawaited(stop(
+                message: 'Invalid captured audio packet · restart sharing'));
           }
         }, onDone: () {
           if (active && generation == _generation) {
@@ -255,13 +267,12 @@ class IosRemoteLiveSession extends ChangeNotifier {
                 const Duration(seconds: 30)) {
           unawaited(stop(
               message:
-                  'No capture received · keep Yinwei visible beside Music and start sharing'));
+                  'No capture received · start Yinwei Music Audio and verify both signed bundles select the same App Group'));
         } else if (active &&
             _lastCapture != null &&
             DateTime.now().difference(_lastCapture!) >
                 const Duration(seconds: 5)) {
-          unawaited(
-              stop(message: 'No live audio received · restart Music sharing'));
+          unawaited(stop(message: 'Capture stalled · restart audio sharing'));
         } else if (active) {
           _changed(inputChunks == 0
               ? 'Choose Yinwei in Apple’s sharing picker'
@@ -269,16 +280,30 @@ class IosRemoteLiveSession extends ChangeNotifier {
                   ? 'Connecting live audio to laptop…'
                   : outputChunks == 0
                       ? 'Capture connected · waiting for processed return'
-                      : 'Receiving laptop-processed audio · iPad output active');
+                      : playedChunks == 0
+                          ? 'Processed audio received · waiting for iPad playback'
+                          : 'iPad playback confirmed · receiving processed audio');
+          unawaited(refreshOutputStatus());
         }
       });
       _changed('Choose Yinwei in Apple’s sharing picker');
       await _probe.showBroadcastPicker();
     } on PlatformException catch (error) {
       await stop(message: error.message ?? 'Native live audio unavailable');
+    } on SocketException catch (_) {
+      await stop(
+          message:
+              'Capture connection could not open · restart Yinwei and check App Group access');
+    } on FileSystemException catch (_) {
+      await stop(
+          message:
+              'Capture endpoint unavailable · check App Group access in this signed build');
+    } on FormatException catch (error) {
+      await stop(message: error.message);
     } catch (_) {
       await stop(
-          message: 'Live start failed. Check the laptop and signing setup.');
+          message:
+              'Live session could not start · check capture and laptop diagnostics');
     } finally {
       _operationInFlight = false;
       busy = _stopping != null;
@@ -286,8 +311,10 @@ class IosRemoteLiveSession extends ChangeNotifier {
     }
   }
 
-  void _returnAudio(Uint8List packet) {
+  @visibleForTesting
+  void acceptReturnAudio(Uint8List packet) {
     if (!active) return;
+    ++receivedChunks;
     if (_writes >= 8) {
       ++outputDrops;
       return;
@@ -303,13 +330,44 @@ class IosRemoteLiveSession extends ChangeNotifier {
       } else {
         ++outputDrops;
       }
-    }).catchError((Object _) {
+    }).catchError((Object error) {
       if (generation == _generation) {
-        unawaited(stop(message: 'iPad audio output interrupted'));
+        unawaited(stop(
+            message: error is PlatformException
+                ? error.message ?? 'iPad audio output interrupted'
+                : 'Could not deliver processed audio to iPad output'));
       }
     }).whenComplete(() {
       if (generation == _generation) --_writes;
     });
+  }
+
+  @visibleForTesting
+  Future<void> refreshOutputStatus() async {
+    if (!active || _pollingOutput) return;
+    _pollingOutput = true;
+    final generation = _generation;
+    try {
+      final result = await _native
+          .invokeMapMethod<String, dynamic>('getRemoteReturnStatus');
+      if (!active || generation != _generation) return;
+      if (result?['ready'] == false) {
+        await stop(
+            message:
+                'iPad output stopped · check your audio route and start again');
+        return;
+      }
+      final played = result?['played'];
+      if (played is int && played >= 0) playedChunks = played;
+      _changed();
+    } on PlatformException catch (error) {
+      if (active && generation == _generation) {
+        await stop(
+            message: error.message ?? 'iPad playback diagnostics unavailable');
+      }
+    } finally {
+      _pollingOutput = false;
+    }
   }
 
   Future<void> stop({String? message}) {

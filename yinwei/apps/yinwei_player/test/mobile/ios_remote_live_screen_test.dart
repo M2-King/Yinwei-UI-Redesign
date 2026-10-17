@@ -24,7 +24,8 @@ class _LiveFixture extends IosRemoteLiveSession {
 }
 
 void main() {
-  testWidgets('landscape enlarged text scrolls and suspension stops listening',
+  testWidgets(
+      'landscape enlarged text scrolls and background preserves listening',
       (tester) async {
     await tester.binding.setSurfaceSize(const Size(1024, 768));
     addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -41,12 +42,19 @@ void main() {
         session.stops, 0); // Apple's picker temporarily makes the app inactive.
     tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.hidden);
     tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
-    expect(session.stops, 1);
-    expect(session.active, false);
+    expect(session.stops, 0);
+    expect(session.active, true);
     tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.hidden);
     tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
     tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
     expect(session.starts, 0);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.hidden);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.detached);
+    expect(session.stops, 1);
+    expect(session.active, false);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
     await tester.ensureVisible(find.text('Stop live transform'));
     await tester.pump();
     expect(tester.takeException(), isNull);
@@ -57,7 +65,13 @@ void main() {
       (tester) async {
     await tester.binding.setSurfaceSize(const Size(1024, 1366));
     addTearDown(() => tester.binding.setSurfaceSize(null));
-    final session = _LiveFixture()..signedIn = true;
+    final session = _LiveFixture()
+      ..signedIn = true
+      ..inputChunks = 125
+      ..receivedChunks = 118
+      ..outputChunks = 116
+      ..playedChunks = 108
+      ..outputDrops = 2;
     final fontFile = Platform.environment['YINWEI_R2_UI_FONT_FILE'];
     if (fontFile != null) {
       await tester.runAsync(() async {
@@ -85,8 +99,10 @@ void main() {
     expect(session.starts, 0);
     await tester.ensureVisible(start);
     await tester.tap(start);
-    await tester.pump();
+    await tester.pumpAndSettle();
     expect(session.starts, 1);
+    expect(find.textContaining('Capture received: 125'), findsOneWidget);
+    expect(find.textContaining('Queued: 116 · Played: 108'), findsOneWidget);
     expect(tester.takeException(), isNull);
     if (fontFile != null) {
       final boundary = tester.renderObject<RenderRepaintBoundary>(

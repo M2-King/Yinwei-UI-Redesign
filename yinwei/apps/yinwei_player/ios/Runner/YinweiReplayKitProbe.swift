@@ -7,20 +7,21 @@ import UIKit
 /// Network authorization stays in the host; media is never written to storage.
 enum YinweiReplayKitProbeChannel {
   static let name = "dev.yinwei/replaykit_audio_probe"
-  static let appGroup = YinweiProvisionedAppGroup.resolve(in: .main)
+  static let appGroup = YinweiCaptureGroup.current
   static let statusKey = "yinwei.replaykit.numeric-status.v1"
-  static let extensionBundleIdentifier: String = {
-    let preferred = "dev.yinwei.yinweiPlayer.BroadcastUpload"
+  static let extensionBundleIdentifier: String? = {
     guard let plugIns = Bundle.main.builtInPlugInsURL,
           let children = try? FileManager.default.contentsOfDirectory(
-            at: plugIns,
-            includingPropertiesForKeys: nil
-          ),
-          let extensionURL = children.first(where: { $0.pathExtension == "appex" }),
-          let identifier = Bundle(url: extensionURL)?.bundleIdentifier,
-          !identifier.isEmpty
-    else { return preferred }
-    return identifier
+            at: plugIns, includingPropertiesForKeys: nil) else { return nil }
+    return children.filter { $0.pathExtension == "appex" }
+      .sorted { $0.lastPathComponent < $1.lastPathComponent }
+      .compactMap { url -> String? in
+        guard let bundle = Bundle(url: url),
+              let info = bundle.infoDictionary?["NSExtension"] as? [String: Any],
+              info["NSExtensionPointIdentifier"] as? String == "com.apple.broadcast-services-upload",
+              let identifier = bundle.bundleIdentifier, !identifier.isEmpty else { return nil }
+        return identifier
+      }.first
   }()
 
   static func register(messenger: FlutterBinaryMessenger) {
@@ -29,55 +30,6 @@ enum YinweiReplayKitProbeChannel {
     channel.setMethodCallHandler { call, result in
       controller.handle(call: call, result: result)
     }
-  }
-}
-
-/// Uses the product App Group when the signing profile authorizes it. Some
-/// owner-side IPA signers replace App Groups with signer-managed identifiers;
-/// both the host and extension deterministically select the same authorized
-/// fallback from their embedded profiles.
-private enum YinweiProvisionedAppGroup {
-  private static let preferred = "group.dev.yinwei.remote.capture"
-
-  static func resolve(in bundle: Bundle) -> String {
-    let groups = provisionedGroups(in: bundle)
-    if groups.contains(preferred), canOpen(preferred) { return preferred }
-    return groups.sorted().first(where: canOpen) ?? preferred
-  }
-
-  private static func canOpen(_ group: String) -> Bool {
-    FileManager.default.containerURL(
-      forSecurityApplicationGroupIdentifier: group
-    ) != nil
-  }
-
-  private static func provisionedGroups(in bundle: Bundle) -> [String] {
-    guard let profileURL = bundle.url(
-      forResource: "embedded",
-      withExtension: "mobileprovision"
-    ),
-    let profileData = try? Data(contentsOf: profileURL),
-    let profile = String(data: profileData, encoding: .isoLatin1),
-    let key = profile.range(
-      of: "<key>com.apple.security.application-groups</key>"
-    ),
-    let end = profile.range(
-      of: "</array>",
-      range: key.upperBound..<profile.endIndex
-    )
-    else { return [] }
-
-    let block = String(profile[key.upperBound..<end.lowerBound])
-    let expression = try? NSRegularExpression(
-      pattern: #"<string>(group\.[^<]+)</string>"#
-    )
-    let range = NSRange(block.startIndex..<block.endIndex, in: block)
-    return expression?.matches(in: block, range: range).compactMap { match in
-      guard let valueRange = Range(match.range(at: 1), in: block) else {
-        return nil
-      }
-      return String(block[valueRange])
-    } ?? []
   }
 }
 
@@ -105,12 +57,12 @@ final class YinweiReplayKitProbeController {
       lastToneError = nil
       result(["ok": true])
     case "getRemoteIPCPath":
-      guard YinweiReplayKitProbeChannel.appGroup == "group.dev.yinwei.remote.capture",
+      guard let group = YinweiReplayKitProbeChannel.appGroup,
             let container = FileManager.default.containerURL(
-              forSecurityApplicationGroupIdentifier: YinweiReplayKitProbeChannel.appGroup)
+              forSecurityApplicationGroupIdentifier: group)
       else {
-        result(FlutterError(code: "dedicated_app_group_required",
-          message: "Live audio needs a signing profile that authorizes group.dev.yinwei.remote.capture for Yinwei and its broadcast extension. This signer group supports the numeric test only.", details: nil))
+        result(FlutterError(code: "app_group_unavailable",
+          message: YinweiCaptureGroup.unavailable, details: nil))
         return
       }
       result(container.appendingPathComponent("yw.sock").path)
@@ -127,6 +79,8 @@ final class YinweiReplayKitProbeController {
       if let typed = call.arguments as? FlutterStandardTypedData {
         result(["accepted": remoteReturn.accept(typed.data)])
       } else { result(["accepted": false]) }
+    case "getRemoteReturnStatus":
+      result(remoteReturn.status)
     case "resetRemoteReturn":
       remoteReturn.reset(); result(["ok": true])
     case "stopRemoteReturn":
@@ -137,23 +91,22 @@ final class YinweiReplayKitProbeController {
   }
 
   private func availability() -> [String: Any] {
-    let defaultsAvailable = UserDefaults(
-      suiteName: YinweiReplayKitProbeChannel.appGroup
-    ) != nil
+    let defaultsAvailable = YinweiReplayKitProbeChannel.appGroup.flatMap {
+      FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: $0)
+    } != nil
     return [
       "supported": true,
       "replayKitAvailable": true,
       "appGroupAvailable": defaultsAvailable,
-      "extensionBundleIdentifier": YinweiReplayKitProbeChannel.extensionBundleIdentifier,
+      "extensionBundleIdentifier": YinweiReplayKitProbeChannel.extensionBundleIdentifier ?? "",
       "osVersion": UIDevice.current.systemVersion,
     ]
   }
 
   private func status() -> [String: Any] {
-    guard let defaults = UserDefaults(
-      suiteName: YinweiReplayKitProbeChannel.appGroup
-    ) else {
-      return emptyStatus(error: "Yinwei capture App Group is unavailable in this signed build")
+    guard let group = YinweiReplayKitProbeChannel.appGroup,
+          let defaults = UserDefaults(suiteName: group) else {
+      return emptyStatus(error: YinweiCaptureGroup.unavailable)
     }
     guard let saved = defaults.dictionary(
       forKey: YinweiReplayKitProbeChannel.statusKey
@@ -168,7 +121,8 @@ final class YinweiReplayKitProbeController {
   }
 
   private func resetStatus() {
-    UserDefaults(suiteName: YinweiReplayKitProbeChannel.appGroup)?.removeObject(
+    guard let group = YinweiReplayKitProbeChannel.appGroup else { return }
+    UserDefaults(suiteName: group)?.removeObject(
       forKey: YinweiReplayKitProbeChannel.statusKey
     )
   }
@@ -207,6 +161,16 @@ final class YinweiReplayKitProbeController {
   }
 
   private func showBroadcastPicker(result: @escaping FlutterResult) {
+    guard YinweiReplayKitProbeChannel.extensionBundleIdentifier != nil else {
+      result(FlutterError(code: "broadcast_extension_missing",
+        message: "Broadcast extension missing · reinstall a signed build that includes Yinwei Music Audio.", details: nil))
+      return
+    }
+    guard YinweiReplayKitProbeChannel.appGroup != nil else {
+      result(FlutterError(code: "app_group_unavailable",
+        message: YinweiCaptureGroup.unavailable, details: nil))
+      return
+    }
     DispatchQueue.main.async {
       guard self.pickerController == nil else {
         result(["ok": true, "alreadyPresented": true])
@@ -249,14 +213,19 @@ private final class YinweiRemoteReturnPlayer {
   private let player = AVAudioPlayerNode()
   private var format: AVAudioFormat?
   private var queued = 0
-  private var generation: UInt64 = 0
+  private var counters = YinweiReturnCounters()
   private var epoch: UInt64?
   private var prepared = false
   private var observers: [NSObjectProtocol] = []
   var isReady: Bool { prepared && engine.isRunning }
+  var status: [String: Any] {
+    ["received": counters.received, "accepted": counters.accepted,
+     "played": counters.played, "queued": queued, "ready": isReady]
+  }
 
   func prepare() throws {
     stop()
+    counters.begin()
     let session = AVAudioSession.sharedInstance()
     try session.setCategory(.playback, mode: .default, options: [.mixWithOthers])
     try session.setActive(true)
@@ -282,6 +251,7 @@ private final class YinweiRemoteReturnPlayer {
   }
 
   func accept(_ data: Data) -> Bool {
+    counters.receive()
     guard isReady, queued < 8, data.count >= 64, data.count <= 4152,
           let format else { return false }
     func u32(_ offset: Int) -> UInt32 {
@@ -308,11 +278,13 @@ private final class YinweiRemoteReturnPlayer {
       }
     }
     buffer.frameLength = AVAudioFrameCount(frames)
-    let token = generation
+    let token = counters.generation
+    counters.enqueue()
     queued += 1
     player.scheduleBuffer(buffer, completionCallbackType: .dataPlayedBack) { [weak self] _ in
       DispatchQueue.main.async {
-        guard let self, self.generation == token else { return }
+        guard let self, self.counters.generation == token else { return }
+        self.counters.complete(token: token)
         self.queued = max(0, self.queued - 1)
         if self.queued == 0 && self.player.isPlaying { self.player.pause() }
       }
@@ -323,7 +295,7 @@ private final class YinweiRemoteReturnPlayer {
   }
 
   func reset() {
-    generation &+= 1
+    counters.invalidate()
     guard prepared else { queued = 0; return }
     player.stop(); player.reset(); queued = 0
   }

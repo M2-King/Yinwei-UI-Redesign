@@ -24,8 +24,8 @@ void main() {
 
     final runnerTarget = project.substring(
       project.indexOf('97C146ED1CF9000F007C117D /* Runner */ = {'),
-      project.indexOf(
-          'D8A000010000000000000301 /* YinweiBroadcastUpload */ = {'),
+      project
+          .indexOf('D8A000010000000000000301 /* YinweiBroadcastUpload */ = {'),
     );
     expect(
       runnerTarget.indexOf('Embed App Extensions'),
@@ -67,20 +67,40 @@ void main() {
     expect(source, isNot(contains('subviews.first')));
   });
 
-  test('host and extension share a deterministic provisioned App Group', () {
-    final host = _read('ios/Runner/YinweiReplayKitProbe.swift');
-    final extension = _read('ios/YinweiBroadcastUpload/SampleHandler.swift');
-
-    for (final source in [host, extension]) {
-      expect(source, contains('embedded'));
-      expect(
-        source,
-        contains('<key>com.apple.security.application-groups</key>'),
-      );
-      expect(source, contains('groups.sorted().first(where: canOpen)'));
-      expect(source, contains('forSecurityApplicationGroupIdentifier'));
-      expect(source, contains('group.dev.yinwei.remote.capture'));
+  test(
+      'both targets compile the same signed and container-validated group resolver',
+      () {
+    final shared = _read('ios/Shared/YinweiCaptureSupport.swift');
+    final project = _read('ios/Runner.xcodeproj/project.pbxproj');
+    for (final path in [
+      'ios/Runner/YinweiReplayKitProbe.swift',
+      'ios/YinweiBroadcastUpload/SampleHandler.swift'
+    ]) {
+      final source = _read(path);
+      expect(source, contains('YinweiCaptureGroup.current'));
+      expect(source, isNot(contains('group.dev.yinwei.remote.capture')));
     }
+    expect(shared, contains('bundle.executableURL'));
+    expect(shared, contains('.sorted().first(where: canOpen)'));
+    expect(shared, contains('forSecurityApplicationGroupIdentifier'));
+    expect(
+        project,
+        contains(
+            'D8A000020000000000000201 /* YinweiCaptureSupport.swift in Sources */,'));
+    expect(
+        project,
+        contains(
+            'D8A000020000000000000202 /* YinweiCaptureSupport.swift in Sources */,'));
+  });
+
+  test('sample-buffer capture and background playback are declared', () {
+    expect(_read('ios/YinweiBroadcastUpload/Info.plist'),
+        contains('<key>RPBroadcastProcessMode</key>'));
+    expect(_read('ios/YinweiBroadcastUpload/Info.plist'),
+        contains('RPBroadcastProcessModeSampleBuffer'));
+    expect(_read('ios/Runner/Info.plist'),
+        contains('<key>UIBackgroundModes</key>'));
+    expect(_read('ios/Runner/Info.plist'), contains('<string>audio</string>'));
   });
 
   test('unsigned CI ad-hoc signs both bundles for Xcode validation', () {

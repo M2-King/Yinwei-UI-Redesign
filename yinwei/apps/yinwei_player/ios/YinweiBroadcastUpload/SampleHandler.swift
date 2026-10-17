@@ -12,6 +12,11 @@ final class SampleHandler: RPBroadcastSampleHandler {
   private let remotePCM = YinweiRemotePCMWriter()
 
   override func broadcastStarted(withSetupInfo setupInfo: [String: NSObject]?) {
+    guard YinweiCaptureGroup.current != nil else {
+      finishBroadcastWithError(NSError(domain: "dev.yinwei.capture", code: 1,
+        userInfo: [NSLocalizedDescriptionKey: YinweiCaptureGroup.unavailable]))
+      return
+    }
     telemetry.begin()
     remotePCM.begin()
   }
@@ -50,7 +55,7 @@ final class SampleHandler: RPBroadcastSampleHandler {
 }
 
 /// Kernel-memory IPC only. Never writes audio or a network grant into the
-/// App Group container. Signer-managed fallback groups remain numeric-only.
+/// App Group container. Both signed bundles must select the same accessible group.
 private final class YinweiRemotePCMWriter {
   private let lock = NSLock()
   private let worker = DispatchQueue(label: "dev.yinwei.capture.ipc")
@@ -59,6 +64,8 @@ private final class YinweiRemotePCMWriter {
   private var active = false
   private var generation: UInt64 = 0
   private var descriptor: Int32 = -1
+  private var connecting = false
+  private var connectStarted: TimeInterval = 0
   private var converter: AVAudioConverter?
   private var inputFormat: AVAudioFormat?
   private var partial = [Int16](repeating: 0, count: 960)
@@ -67,8 +74,7 @@ private final class YinweiRemotePCMWriter {
   private var lastConnect = Date.distantPast
   private var lastEndPTS: Double?
   private let path: String? = {
-    let group = YinweiProvisionedBroadcastAppGroup.resolve(in: .main)
-    guard group == "group.dev.yinwei.remote.capture" else { return nil }
+    guard let group = YinweiCaptureGroup.current else { return nil }
     return FileManager.default.containerURL(
       forSecurityApplicationGroupIdentifier: group
     )?.appendingPathComponent("yw.sock").path
@@ -181,7 +187,7 @@ private final class YinweiRemotePCMWriter {
   }
 
   private func connectIfNeeded() -> Bool {
-    if descriptor >= 0 { return true }
+    if descriptor >= 0 { return connecting ? finishConnect() : true }
     guard let path, Date().timeIntervalSince(lastConnect) > 0.5 else { return false }
     lastConnect = Date()
     var address = sockaddr_un()
@@ -204,9 +210,34 @@ private final class YinweiRemotePCMWriter {
         Darwin.connect(fd, $0, socklen_t(MemoryLayout<sockaddr_un>.size))
       }
     }
-    guard result == 0 else { Darwin.close(fd); return false }
-    descriptor = fd; partialCount = 0; converter?.reset(); gap = true
-    return true
+    let error = errno
+    let progress = YinweiConnectProgress.started(result: result, error: error)
+    guard progress != .failed else { Darwin.close(fd); return false }
+    descriptor = fd
+    connecting = progress == .pending
+    connectStarted = ProcessInfo.processInfo.systemUptime
+    partialCount = 0; converter?.reset(); gap = true
+    return connecting ? finishConnect() : true
+  }
+
+  // Called on the worker for subsequent buffers; never waits on ReplayKit.
+  // Writability alone is not success: failed connects also become writable.
+  private func finishConnect() -> Bool {
+    var event = pollfd(fd: descriptor, events: Int16(POLLOUT), revents: 0)
+    let ready = Darwin.poll(&event, 1, 0)
+    let pollError = errno
+    var error: Int32 = 0
+    var size = socklen_t(MemoryLayout<Int32>.size)
+    let socketError: Int32? = ready > 0 &&
+      getsockopt(descriptor, SOL_SOCKET, SO_ERROR, &error, &size) == 0 ? error : nil
+    let progress = YinweiConnectProgress.polled(result: ready, pollError: pollError,
+      events: event.revents, socketError: socketError,
+      elapsed: ProcessInfo.processInfo.systemUptime - connectStarted)
+    switch progress {
+    case .pending: return false
+    case .connected: connecting = false; return true
+    case .failed: disconnect(); return false
+    }
   }
 
   private func sendChunk() {
@@ -225,56 +256,9 @@ private final class YinweiRemotePCMWriter {
 
   private func disconnect() {
     if descriptor >= 0 { Darwin.close(descriptor); descriptor = -1 }
+    connecting = false
     partialCount = 0; converter?.reset(); gap = true
     lastEndPTS = nil
-  }
-}
-
-/// Mirrors the host's deterministic profile-aware App Group selection. This
-/// keeps numeric-only N0 telemetry working when an owner-side signer replaces
-/// the product entitlement with signer-managed App Groups.
-private enum YinweiProvisionedBroadcastAppGroup {
-  private static let preferred = "group.dev.yinwei.remote.capture"
-
-  static func resolve(in bundle: Bundle) -> String {
-    let groups = provisionedGroups(in: bundle)
-    if groups.contains(preferred), canOpen(preferred) { return preferred }
-    return groups.sorted().first(where: canOpen) ?? preferred
-  }
-
-  private static func canOpen(_ group: String) -> Bool {
-    FileManager.default.containerURL(
-      forSecurityApplicationGroupIdentifier: group
-    ) != nil
-  }
-
-  private static func provisionedGroups(in bundle: Bundle) -> [String] {
-    guard let profileURL = bundle.url(
-      forResource: "embedded",
-      withExtension: "mobileprovision"
-    ),
-    let profileData = try? Data(contentsOf: profileURL),
-    let profile = String(data: profileData, encoding: .isoLatin1),
-    let key = profile.range(
-      of: "<key>com.apple.security.application-groups</key>"
-    ),
-    let end = profile.range(
-      of: "</array>",
-      range: key.upperBound..<profile.endIndex
-    )
-    else { return [] }
-
-    let block = String(profile[key.upperBound..<end.lowerBound])
-    let expression = try? NSRegularExpression(
-      pattern: #"<string>(group\.[^<]+)</string>"#
-    )
-    let range = NSRange(block.startIndex..<block.endIndex, in: block)
-    return expression?.matches(in: block, range: range).compactMap { match in
-      guard let valueRange = Range(match.range(at: 1), in: block) else {
-        return nil
-      }
-      return String(block[valueRange])
-    } ?? []
   }
 }
 
@@ -405,7 +389,7 @@ private enum YinweiAudioInspector {
 }
 
 private final class YinweiBroadcastTelemetry {
-  private static let appGroup = YinweiProvisionedBroadcastAppGroup.resolve(in: .main)
+  private static let appGroup = YinweiCaptureGroup.current
   private static let statusKey = "yinwei.replaykit.numeric-status.v1"
   private static let flushInterval = 0.25
 
@@ -495,6 +479,7 @@ private final class YinweiBroadcastTelemetry {
   }
 
   private static func save(_ snapshot: [String: Any]) {
+    guard let appGroup else { return }
     UserDefaults(suiteName: appGroup)?.set(snapshot, forKey: statusKey)
   }
 }

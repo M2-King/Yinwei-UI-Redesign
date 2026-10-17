@@ -5,6 +5,25 @@ import 'package:yinwei_player/platform/replaykit_audio_probe.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
+  test('picker failure reaches the caller instead of being swallowed',
+      () async {
+    const channel = MethodChannel('test/replaykit-picker-error');
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, (_) async {
+      throw PlatformException(
+          code: 'broadcast_extension_missing',
+          message: 'Broadcast extension missing');
+    });
+    addTearDown(() => TestDefaultBinaryMessengerBinding
+        .instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, null));
+    final probe = MethodChannelReplayKitAudioProbe(channel: channel);
+    await expectLater(
+        probe.showBroadcastPicker(),
+        throwsA(isA<PlatformException>()
+            .having((e) => e.code, 'code', 'broadcast_extension_missing')));
+  });
+
   test('ReplayKit probe remains unavailable outside iOS', () {
     expect(ReplayKitAudioProbe.create(isIOS: false).supported, isFalse);
   });

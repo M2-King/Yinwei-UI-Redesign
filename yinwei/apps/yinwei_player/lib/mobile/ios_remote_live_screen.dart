@@ -46,11 +46,11 @@ class _IosRemoteLiveScreenState extends State<IosRemoteLiveScreen>
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.paused ||
-        state == AppLifecycleState.detached) {
+    // The playback audio session and UIBackgroundModes keep live listening
+    // eligible for background audio while the user switches to the source app.
+    if (state == AppLifecycleState.detached) {
       unawaited(_session.stop(
-          message:
-              'Listening suspended · keep Yinwei visible and Start again'));
+          message: 'Listening stopped · reopen Yinwei to start again'));
     }
   }
 
@@ -77,7 +77,7 @@ class _IosRemoteLiveScreenState extends State<IosRemoteLiveScreen>
                                         .headlineSmall),
                                 const SizedBox(height: 12),
                                 const Text(
-                                    'Keep Yinwei visible beside Music for this first live test. '
+                                    'Start sharing, then switch to your audio app and play. '
                                     'Set spatial position and processing mode on the laptop. '
                                     'The iPad plays the returned stereo audio.'),
                                 const SizedBox(height: 24),
@@ -174,7 +174,8 @@ class _IosRemoteLiveScreenState extends State<IosRemoteLiveScreen>
                                     child: Text(_session.status)),
                                 const SizedBox(height: 8),
                                 Text(
-                                    'Capture: ${_session.inputChunks} · Return: ${_session.outputChunks} '
+                                    'Capture received: ${_session.inputChunks} · Return received: ${_session.receivedChunks}\n'
+                                    'Queued: ${_session.outputChunks} · Played: ${_session.playedChunks} '
                                     '· Output drops: ${_session.outputDrops}'),
                                 const SizedBox(height: 16),
                                 const Text(

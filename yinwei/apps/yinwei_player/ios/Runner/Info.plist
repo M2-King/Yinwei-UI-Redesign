@@ -43,6 +43,10 @@
 	<string>Yinwei uses screen audio capture only when you start Live Transfer, so it can process audio you choose to share.</string>
 	<key>NSSupportsLiveActivities</key>
 	<true/>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>audio</string>
+	</array>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

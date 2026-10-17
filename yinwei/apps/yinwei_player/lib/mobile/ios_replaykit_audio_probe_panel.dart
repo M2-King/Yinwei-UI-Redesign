@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:yinwei_player/bridge/engine_bootstrap.dart';
 import 'package:yinwei_player/mobile/ios_screen_audio_probe_panel.dart';
 import 'package:yinwei_player/mobile/ios_remote_live_screen.dart';
@@ -58,7 +59,15 @@ class _IosReplayKitAudioProbePanelState
   }
 
   Future<void> _chooseSource() async {
-    await _probe.showBroadcastPicker();
+    try {
+      await _probe.showBroadcastPicker();
+    } on PlatformException catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(error.message ?? 'Could not open Yinwei Music Audio'),
+        ));
+      }
+    }
     await _refresh();
   }
 
