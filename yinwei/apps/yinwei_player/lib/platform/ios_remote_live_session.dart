@@ -353,7 +353,9 @@ class IosRemoteLiveSession extends ChangeNotifier {
   void acceptReturnAudio(Uint8List packet) {
     if (!active) return;
     ++receivedChunks;
-    if (_writes >= 8) {
+    // Network bursts deliver many packets at once; the native jitter buffer
+    // (bounded at 600 ms) decides what to keep, so do not drop them here.
+    if (_writes >= 64) {
       ++outputDrops;
       return;
     }

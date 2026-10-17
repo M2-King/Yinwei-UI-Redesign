@@ -212,7 +212,18 @@ private final class YinweiRemoteReturnPlayer {
   private let engine = AVAudioEngine()
   private let player = AVAudioPlayerNode()
   private var format: AVAudioFormat?
+  // The return path crosses the internet twice (iPad → laptop → iPad), so
+  // packets arrive in bursts. Buffer by time, start at 160 ms, and grow the
+  // start threshold after each underrun so a jittery link settles instead of
+  // stuttering. Capacity is bounded so latency cannot grow without limit.
+  private static let initialTargetFrames = 7_680  // 160 ms at 48 kHz
+  private static let targetStepFrames = 2_400     // +50 ms per underrun
+  private static let maxTargetFrames = 19_200     // 400 ms
+  private static let capacityFrames = 28_800      // 600 ms; newest dropped beyond
   private var queued = 0
+  private var queuedFrames = 0
+  private var targetFrames = initialTargetFrames
+  private var underruns = 0
   private var counters = YinweiReturnCounters()
   private var epoch: UInt64?
   private var prepared = false
@@ -220,14 +231,21 @@ private final class YinweiRemoteReturnPlayer {
   var isReady: Bool { prepared && engine.isRunning }
   var status: [String: Any] {
     ["received": counters.received, "accepted": counters.accepted,
-     "played": counters.played, "queued": queued, "ready": isReady]
+     "played": counters.played, "queued": queued, "ready": isReady,
+     "underruns": underruns, "bufferMs": targetFrames / 48]
   }
 
   func prepare() throws {
     stop()
     counters.begin()
+    targetFrames = Self.initialTargetFrames
+    underruns = 0
     let session = AVAudioSession.sharedInstance()
-    try session.setCategory(.playback, mode: .default, options: [.mixWithOthers])
+    // ReplayKit cannot silence the source app, so its original audio would
+    // play on top of the spatial return. Ducking lowers the source app while
+    // the return plays; it does not stop it, so capture continues.
+    try session.setCategory(.playback, mode: .default,
+                            options: [.mixWithOthers, .duckOthers])
     try session.setActive(true)
     guard let format = AVAudioFormat(standardFormatWithSampleRate: 48_000, channels: 2)
     else { throw YinweiReplayKitToneError.bufferAllocationFailed }
@@ -252,7 +270,7 @@ private final class YinweiRemoteReturnPlayer {
 
   func accept(_ data: Data) -> Bool {
     counters.receive()
-    guard isReady, queued < 8, data.count >= 64, data.count <= 4152,
+    guard isReady, data.count >= 64, data.count <= 4152,
           let format else { return false }
     func u32(_ offset: Int) -> UInt32 {
       data.withUnsafeBytes { $0.loadUnaligned(fromByteOffset: offset, as: UInt32.self).littleEndian }
@@ -262,7 +280,8 @@ private final class YinweiRemoteReturnPlayer {
     }
     let frames = Int(u32(36))
     guard u32(0) == 0x31574e59, u32(4) == 1, u32(32) == 48_000,
-          frames > 0, frames <= 512, data.count == 56 + frames * 8 else { return false }
+          frames > 0, frames <= 512, data.count == 56 + frames * 8,
+          queuedFrames + frames <= Self.capacityFrames else { return false }
     let value = u64(8)
     if let epoch, epoch != value { return false }
     self.epoch = value
@@ -281,23 +300,32 @@ private final class YinweiRemoteReturnPlayer {
     let token = counters.generation
     counters.enqueue()
     queued += 1
+    queuedFrames += frames
     player.scheduleBuffer(buffer, completionCallbackType: .dataPlayedBack) { [weak self] _ in
       DispatchQueue.main.async {
         guard let self, self.counters.generation == token else { return }
         self.counters.complete(token: token)
         self.queued = max(0, self.queued - 1)
-        if self.queued == 0 && self.player.isPlaying { self.player.pause() }
+        self.queuedFrames = max(0, self.queuedFrames - frames)
+        // Ran dry: pause and refill a larger cushion rather than playing
+        // each late packet the moment it lands (audible stutter).
+        if self.queued == 0 && self.player.isPlaying {
+          self.player.pause()
+          self.underruns += 1
+          self.targetFrames = min(Self.maxTargetFrames,
+                                  self.targetFrames + Self.targetStepFrames)
+        }
       }
     }
-    // Eight 512-frame packets = ~85 ms prefill; no hidden latency growth.
-    if queued >= 8 && !player.isPlaying { player.play() }
+    if queuedFrames >= targetFrames && !player.isPlaying { player.play() }
     return true
   }
 
   func reset() {
     counters.invalidate()
-    guard prepared else { queued = 0; return }
-    player.stop(); player.reset(); queued = 0
+    queued = 0; queuedFrames = 0
+    guard prepared else { return }
+    player.stop(); player.reset()
   }
 
   func stop() {
