@@ -88,10 +88,34 @@ bash yinwei/tools/test_ios_capture.sh
 ```
 
 The existing unsigned iOS build script now runs that suite before building.
-This Windows host has no Swift/Xcode toolchain: the native suite, iOS build,
-signed-binary validation, physical audio output and device console verification
-are still pending. Flutter mock-runtime tests do not establish native iOS audio
-correctness or background survival.
+The subsequent [macOS Actions run 39017399030](https://github.com/M2-King/Yinwei-UI-Redesign/actions/runs/39017399030)
+passed for commit `d664be5915d0df87193aa9377d08ec4087251b91` on
+`codex/ios-capture-ci`:
+
+- 566 native Swift capture checks passed, including the unsorted five-group
+  profile, sorted container validation, denied/missing groups, host/extension
+  ordering, signed-entitlement parsing and nonblocking socket transitions.
+- Full Flutter suite: 556 passed, 7 skipped; Rust suite on macOS: 69 passed.
+- `flutter build ios --release --no-codesign` succeeded on `macos-latest`
+  (arm64), using Xcode 26.6 and Flutter 3.47.2. Native FFI verification passed.
+- IPA and test/build logs were uploaded and downloaded successfully. The
+  log-upload configuration includes hidden files so `.ci-ios-logs` is retained.
+- Local verification of the downloaded ZIP matched the CI verification JSON.
+  Both Runner and `Payload/Runner.app/PlugIns/YinweiBroadcastUpload.appex`
+  contain arm64 iOS device executables. The extension's Info.plist contains
+  `NSExtension.NSExtensionAttributes.RPBroadcastProcessMode` set to
+  `RPBroadcastProcessModeSampleBuffer`; Runner's Info.plist contains
+  `UIBackgroundModes: [audio]`.
+- Final IPA: 10,185,942 bytes; SHA-256
+  `c892954d28a0fc94181dcc8358a3405eb9d921bedd32606ad5f8b33103ce945c`.
+  Local download: `outputs/ios-actions/39017399030/Yinwei-unsigned.ipa`.
+- No signing secrets were added. The IPA contains no provisioning profiles
+  and requires signing before installation. The Windows audio DLL checksum
+  remains unchanged from the value recorded above.
+
+Final re-signed binary validation, physical iPad audio output and device console
+verification remain pending. These build and mock-runtime checks do not establish
+native iOS audio correctness or background survival on a physical device.
 
 ## Device acceptance
 
