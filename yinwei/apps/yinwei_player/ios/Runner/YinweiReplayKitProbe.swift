@@ -389,6 +389,68 @@ private enum YinweiReplayKitToneError: Error {
   case bufferAllocationFailed
 }
 
+/// RPSystemBroadcastPickerView sizes its private UIButton from the init frame
+/// only. Created at .zero and resized by Auto Layout, the button stays tiny and
+/// off-centre, so taps on the visible tile never start the broadcast. This tile
+/// keeps Apple's button filling the whole tile and forwards stray taps to it.
+private final class YinweiBroadcastPickerTile: UIView {
+  private let picker: RPSystemBroadcastPickerView
+  private static let side: CGFloat = 72
+
+  init(preferredExtension: String?) {
+    let frame = CGRect(x: 0, y: 0, width: Self.side, height: Self.side)
+    picker = RPSystemBroadcastPickerView(frame: frame)
+    super.init(frame: frame)
+    picker.preferredExtension = preferredExtension
+    picker.showsMicrophoneButton = false
+    picker.tintColor = .white
+    picker.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+    addSubview(picker)
+
+    backgroundColor = UIColor.systemBlue.withAlphaComponent(0.9)
+    layer.cornerRadius = 18
+    layer.borderWidth = 1
+    layer.borderColor = UIColor.white.withAlphaComponent(0.2).cgColor
+    layer.masksToBounds = true
+    isAccessibilityElement = true
+    accessibilityTraits = .button
+    accessibilityLabel = "Start Yinwei app-audio capture"
+
+    // Recognised taps cancel the button's own touch, so one tap fires once.
+    addGestureRecognizer(
+      UITapGestureRecognizer(target: self, action: #selector(tilePressed)))
+  }
+
+  @available(*, unavailable)
+  required init?(coder: NSCoder) { fatalError("init(coder:) is unavailable") }
+
+  override var intrinsicContentSize: CGSize {
+    CGSize(width: Self.side, height: Self.side)
+  }
+
+  override func layoutSubviews() {
+    super.layoutSubviews()
+    picker.frame = bounds
+    for button in pickerButtons() {
+      button.frame = picker.bounds
+      button.imageView?.contentMode = .scaleAspectFit
+    }
+  }
+
+  override func accessibilityActivate() -> Bool {
+    tilePressed()
+    return true
+  }
+
+  @objc private func tilePressed() {
+    pickerButtons().first?.sendActions(for: .touchUpInside)
+  }
+
+  private func pickerButtons() -> [UIButton] {
+    picker.subviews.compactMap { $0 as? UIButton }
+  }
+}
+
 private final class YinweiBroadcastPickerViewController: UIViewController {
   var onDismiss: (() -> Void)?
 
@@ -411,16 +473,9 @@ private final class YinweiBroadcastPickerViewController: UIViewController {
     explanation.textAlignment = .center
     explanation.numberOfLines = 0
 
-    let picker = RPSystemBroadcastPickerView(frame: .zero)
-    picker.preferredExtension = YinweiReplayKitProbeChannel.extensionBundleIdentifier
-    picker.showsMicrophoneButton = false
-    picker.tintColor = .white
-    picker.backgroundColor = UIColor.systemBlue.withAlphaComponent(0.9)
-    picker.layer.cornerRadius = 18
-    picker.layer.borderWidth = 1
-    picker.layer.borderColor = UIColor.white.withAlphaComponent(0.2).cgColor
-    picker.layer.masksToBounds = true
-    picker.accessibilityLabel = "Start Yinwei app-audio capture"
+    let picker = YinweiBroadcastPickerTile(
+      preferredExtension: YinweiReplayKitProbeChannel.extensionBundleIdentifier
+    )
 
     let pickerLabel = UILabel()
     pickerLabel.text = "Tap the blue button to start"
