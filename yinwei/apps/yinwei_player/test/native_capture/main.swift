@@ -28,6 +28,8 @@ check(YinweiCaptureGroup.select(candidates) { _ in false } == nil, "No accessibl
 check(YinweiCaptureGroup.select([]) { _ in true } == nil, "Missing groups must fail closed")
 check(YinweiCaptureGroup.profileGroups(in: Data("invalid profile".utf8)).isEmpty, "Malformed profile")
 
+print("PASS: unsorted five-group profile, sorted container validation, denied/missing groups and host/extension ordering")
+
 func word(_ value: UInt32, big: Bool = false) -> Data {
   var value = big ? value.bigEndian : value.littleEndian
   return withUnsafeBytes(of: &value) { Data($0) }
@@ -73,6 +75,8 @@ check(YinweiConnectProgress.polled(result: 1, pollError: 0, events: Int16(POLLOU
       "Writable failed socket must never send PCM")
 check(YinweiConnectProgress.polled(result: 0, pollError: 0, events: 0, socketError: nil, elapsed: 3) == .failed,
       "Pending connection must time out")
+
+print("PASS: signed entitlement parsing and nonblocking socket transitions")
 
 var counters = YinweiReturnCounters()
 counters.begin()
