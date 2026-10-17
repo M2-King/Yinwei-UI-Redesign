@@ -5,6 +5,14 @@ import 'dart:typed_data';
 
 import 'remote_transform.dart';
 
+/// HTTP metadata only; never include credentials or response bodies in errors.
+class RemoteRequestException extends HttpException {
+  RemoteRequestException(this.path, this.statusCode)
+      : super('Yinwei request failed ($statusCode)');
+  final String path;
+  final int statusCode;
+}
+
 /// Native transport only: capture and output devices are provided by the host.
 /// No DSP, recording, automatic reconnect, or credentials in App Group storage.
 class RemoteTransformClient {
@@ -75,7 +83,7 @@ class RemoteTransformClient {
       }
     }
     if (response.statusCode != 200) {
-      throw HttpException('Yinwei request failed (${response.statusCode})');
+      throw RemoteRequestException(path, response.statusCode);
     }
     for (final cookie in response.cookies) {
       if (![

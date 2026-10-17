@@ -7,6 +7,11 @@ import 'package:flutter/services.dart';
 import 'package:yinwei_player/platform/replaykit_audio_probe.dart';
 import 'package:yinwei_player/remote/remote_transform_client.dart';
 
+class _EntryFailure implements Exception {
+  const _EntryFailure(this.message);
+  final String message;
+}
+
 /// Bounded stream parser: a fragmented/coalesced Unix read never retains more
 /// than one 1,936-byte PCM chunk. No media file or account storage is involved.
 class IosCapturePCMParser {
@@ -83,7 +88,7 @@ class IosRemoteLiveSession extends ChangeNotifier {
         initial.hasQuery ||
         initial.hasFragment ||
         !['', '/'].contains(initial.path)) {
-      throw const FormatException('Use your fixed Yinwei HTTPS bookmark');
+      throw const _EntryFailure('Use your fixed Yinwei HTTPS bookmark');
     }
     // Resolve only a known Cloudflare launcher/temporary origin. Passwords
     // are never sent to the launcher, an arbitrary redirect or an HTTP URL.
@@ -94,16 +99,23 @@ class IosRemoteLiveSession extends ChangeNotifier {
     if (quick(initial)) return initial.replace(path: '');
     if (initial.host !=
         'yinwei-remote-entry-01a12de8.yinwei-01a12de8.workers.dev') {
-      throw const FormatException('Use the Yinwei entry link');
+      throw const _EntryFailure('Use the Yinwei entry link');
     }
     final http = HttpClient()..connectionTimeout = const Duration(seconds: 10);
     try {
-      final request = await http.getUrl(initial);
+      // The bookmark root is a landing page, even when the laptop is online.
+      // Only /open returns the current checked laptop origin.
+      final request = await http.getUrl(initial.resolve('/open'));
       request.followRedirects = false;
       final response =
           await request.close().timeout(const Duration(seconds: 10));
       final location = response.headers.value('location');
-      await response.drain<void>();
+      await response.drain<void>().timeout(const Duration(seconds: 10));
+      if (response.statusCode == 200 && location == null) {
+        throw const _EntryFailure(
+            'Laptop unavailable · run Start-Yinwei-Backend.bat on the laptop, '
+            'wait for BACKEND READY, then sign in again.');
+      }
       final next = location == null ? null : Uri.tryParse(location);
       if (![301, 302, 303, 307, 308].contains(response.statusCode) ||
           next == null ||
@@ -112,8 +124,9 @@ class IosRemoteLiveSession extends ChangeNotifier {
           next.hasQuery ||
           next.hasFragment ||
           !['', '/', '/remote/signin'].contains(next.path)) {
-        throw const FormatException(
-            'Laptop connection unavailable. Keep Yinwei running and try again.');
+        throw const _EntryFailure(
+            'Yinwei entry could not provide a trusted laptop connection. '
+            'Check the laptop connection and try again.');
       }
       return next.replace(path: '');
     } finally {
@@ -162,6 +175,31 @@ class IosRemoteLiveSession extends ChangeNotifier {
       }
       signedIn = true;
       _changed('Signed in · start only after checking headphone routing');
+    } on _EntryFailure catch (error) {
+      _changed(error.message);
+    } on RemoteRequestException catch (error) {
+      _changed(switch (error.statusCode) {
+        401 when error.path == '/remote/api/auth/signin' =>
+          'Owner account or password was rejected. Re-enter your laptop login.',
+        401 ||
+        403 =>
+          'Sign-in session expired or was rejected · sign in again.',
+        429 => 'Too many sign-in attempts · wait a minute and try again.',
+        _ => 'Laptop connection failed (HTTP ${error.statusCode}) · '
+            'check the laptop backend and try again.',
+      });
+    } on TimeoutException {
+      _changed('Laptop connection timed out · check the laptop and network, '
+          'then sign in again.');
+    } on SocketException {
+      _changed('Cannot reach the laptop · check the internet connection and '
+          'keep the laptop backend running.');
+    } on HandshakeException {
+      _changed('Secure laptop connection failed · check the network and '
+          'device date, then try again.');
+    } on FormatException {
+      _changed('Laptop returned an invalid sign-in response · '
+          'check the laptop backend and try again.');
     } on PlatformException catch (error) {
       _changed(error.message ?? 'Native audio unavailable');
     } catch (_) {
