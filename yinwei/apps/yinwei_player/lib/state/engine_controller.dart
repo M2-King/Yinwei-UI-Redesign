@@ -275,10 +275,14 @@ class EngineController extends ChangeNotifier {
     elevationDeg = params.elevationDeg;
   }
 
-  Future<void> _syncLivePose() async {
+  Future<void> _syncLivePose(Timer tick) async {
     if (playing && mode == PlaybackMode.spatial) {
-      azimuthDeg = await _engine.currentAzimuthDeg();
-      elevationDeg = await _engine.currentElevationDeg();
+      final azimuth = await _engine.currentAzimuthDeg();
+      if (!tick.isActive) return;
+      final elevation = await _engine.currentElevationDeg();
+      if (!tick.isActive) return;
+      azimuthDeg = azimuth;
+      elevationDeg = elevation;
     } else {
       _syncAzimuth();
     }
@@ -292,20 +296,24 @@ class EngineController extends ChangeNotifier {
   void _startTick() {
     _tick?.cancel();
     _tickInFlight = false;
-    _tick = Timer.periodic(const Duration(milliseconds: 33), (_) async {
+    _tick = Timer.periodic(const Duration(milliseconds: 33), (tick) async {
       if (!playing || _tickInFlight) return;
       _tickInFlight = true;
       try {
         final pos = await _engine.position();
-        if (!playing) return;
+        // Cancellation prevents new ticks, but an awaited read may still finish
+        // after pause, replacement or disposal. Never continue that old tick.
+        if (!tick.isActive || !playing) return;
         final still = await _engine.isPlaying();
+        if (!tick.isActive) return;
         position = pos;
-        await _syncLivePose();
+        await _syncLivePose(tick);
+        if (!tick.isActive) return;
         playing = still;
         if (!playing) _tick?.cancel();
         notifyListeners();
       } finally {
-        _tickInFlight = false;
+        if (identical(_tick, tick)) _tickInFlight = false;
       }
     });
   }
