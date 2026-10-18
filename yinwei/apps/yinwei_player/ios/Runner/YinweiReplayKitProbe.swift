@@ -1,5 +1,6 @@
 import Flutter
 import AVFoundation
+import MediaPlayer
 import ReplayKit
 import UIKit
 
@@ -29,6 +30,12 @@ enum YinweiReplayKitProbeChannel {
     let controller = YinweiReplayKitProbeController()
     channel.setMethodCallHandler { call, result in
       controller.handle(call: call, result: result)
+    }
+    let nowPlayingChannel = FlutterMethodChannel(
+      name: YinweiNowPlayingController.channelName, binaryMessenger: messenger)
+    let nowPlaying = YinweiNowPlayingController(channel: nowPlayingChannel)
+    nowPlayingChannel.setMethodCallHandler { call, result in
+      nowPlaying.handle(call: call, result: result)
     }
   }
 }
@@ -67,7 +74,9 @@ final class YinweiReplayKitProbeController {
       }
       result(container.appendingPathComponent("yw.sock").path)
     case "prepareRemoteReturn":
-      do { returnTone.stop(); try remoteReturn.prepare(); result(["ok": true]) }
+      // listen: "Listen to laptop" (no iPad source app is playing).
+      let listen = (call.arguments as? [String: Any])?["listen"] as? Bool == true
+      do { returnTone.stop(); try remoteReturn.prepare(listen: listen); result(["ok": true]) }
       catch { result(FlutterError(code: "return_output_failed",
         message: "Could not open iPad audio output", details: nil)) }
     case "writeRemoteReturn":
@@ -82,7 +91,13 @@ final class YinweiReplayKitProbeController {
     case "getRemoteReturnStatus":
       result(remoteReturn.status)
     case "resetRemoteReturn":
-      remoteReturn.reset(); result(["ok": true])
+      let args = call.arguments as? [String: Any]
+      if args?["newStream"] as? Bool == true, let rate = args?["sampleRate"] as? Int {
+        remoteReturn.newStream(sampleRate: Double(rate))
+      } else {
+        remoteReturn.reset()
+      }
+      result(["ok": true])
     case "stopRemoteReturn":
       remoteReturn.stop(); result(["ok": true])
     default:
@@ -232,16 +247,22 @@ private final class YinweiRemoteReturnPlayer {
   private var epoch: UInt64?
   private var prepared = false
   private var observers: [NSObjectProtocol] = []
+  // Listen to laptop: Yinwei is the only audio here (no iPad source app), so
+  // it holds the session non-mixable, which the lock-screen controls need,
+  // and rides through route changes and interruptions instead of stopping.
+  private var listenMode = false
+  private var interrupted = false
   var isReady: Bool { prepared && engine.isRunning }
   var status: [String: Any] {
     ["received": counters.received, "accepted": counters.accepted,
      "played": counters.played, "queued": queued, "ready": isReady,
      "underruns": underruns, "bufferMs": targetFrames / 48,
-     "queuedMs": queuedFrames / 48]
+     "queuedMs": queuedFrames / 48, "interrupted": interrupted]
   }
 
-  func prepare() throws {
+  func prepare(listen: Bool = false) throws {
     stop()
+    listenMode = listen
     counters.begin()
     targetFrames = Self.initialTargetFrames
     underruns = 0
@@ -249,7 +270,8 @@ private final class YinweiRemoteReturnPlayer {
     let session = AVAudioSession.sharedInstance()
     // No .duckOthers: on device it did not stop the source app's original
     // audio and may lower the level ReplayKit captures for the laptop.
-    try session.setCategory(.playback, mode: .default, options: [.mixWithOthers])
+    try session.setCategory(.playback, mode: .default,
+                            options: listen ? [] : [.mixWithOthers])
     try session.setActive(true)
     guard let format = AVAudioFormat(standardFormatWithSampleRate: 48_000, channels: 2)
     else { throw YinweiReplayKitToneError.bufferAllocationFailed }
@@ -260,16 +282,67 @@ private final class YinweiRemoteReturnPlayer {
     do { engine.prepare(); try engine.start() }
     catch { stop(); throw error }
     // Do not silently restart a changed/interrupted output route with old PCM.
+    // Listen mode drops the queued PCM and plays the live stream on.
     let center = NotificationCenter.default
     observers = [
       center.addObserver(forName: AVAudioSession.interruptionNotification,
         object: nil, queue: .main) { [weak self] note in
-        if (note.userInfo?[AVAudioSessionInterruptionTypeKey] as? UInt)
-            == AVAudioSession.InterruptionType.began.rawValue { self?.stop() }
+        self?.interruption(note)
       },
       center.addObserver(forName: .AVAudioEngineConfigurationChange,
-        object: engine, queue: .main) { [weak self] _ in self?.stop() },
+        object: engine, queue: .main) { [weak self] _ in
+        guard let self else { return }
+        if !self.listenMode { self.stop() } else if !self.interrupted { self.restart() }
+      },
     ]
+  }
+
+  private func interruption(_ note: Notification) {
+    guard let raw = note.userInfo?[AVAudioSessionInterruptionTypeKey] as? UInt,
+          let type = AVAudioSession.InterruptionType(rawValue: raw) else { return }
+    guard listenMode else {
+      if type == .began { stop() }
+      return
+    }
+    switch type {
+    case .began:
+      // A call, Siri or another app's audio: wait for the end.
+      interrupted = true
+      reset()
+    case .ended:
+      let options = AVAudioSession.InterruptionOptions(
+        rawValue: note.userInfo?[AVAudioSessionInterruptionOptionKey] as? UInt ?? 0)
+      guard options.contains(.shouldResume),
+            (try? AVAudioSession.sharedInstance().setActive(true)) != nil
+      else { stop(); return }
+      interrupted = false
+      restart()
+    @unknown default:
+      stop()
+    }
+  }
+
+  /// Listen mode: play on from the current route (AirPods connected or
+  /// removed, or an interruption ended) without giving up the session.
+  private func restart() {
+    reset()
+    guard prepared else { return }
+    engine.prepare()
+    do { try engine.start() } catch { stop() }
+  }
+
+  /// Listen mode: the laptop started a new stream (Live started or stopped,
+  /// a seek). Drop queued audio and take its sample rate.
+  func newStream(sampleRate: Double) {
+    reset()
+    epoch = nil
+    guard prepared, sampleRate >= 8_000, sampleRate <= 192_000,
+          let current = format, current.sampleRate != sampleRate,
+          let next = AVAudioFormat(standardFormatWithSampleRate: sampleRate, channels: 2)
+    else { return }
+    format = next
+    engine.disconnectNodeOutput(player)
+    engine.connect(player, to: engine.mainMixerNode, format: next)
   }
 
   func accept(_ data: Data) -> Bool {
@@ -283,7 +356,7 @@ private final class YinweiRemoteReturnPlayer {
       data.withUnsafeBytes { $0.loadUnaligned(fromByteOffset: offset, as: UInt64.self).littleEndian }
     }
     let frames = Int(u32(36))
-    guard u32(0) == 0x31574e59, u32(4) == 1, u32(32) == 48_000,
+    guard u32(0) == 0x31574e59, u32(4) == 1, Double(u32(32)) == format.sampleRate,
           frames > 0, frames <= 512, data.count == 56 + frames * 8,
           queuedFrames + frames <= Self.capacityFrames else { return false }
     let value = u64(8)
@@ -344,11 +417,74 @@ private final class YinweiRemoteReturnPlayer {
   func stop() {
     for observer in observers { NotificationCenter.default.removeObserver(observer) }
     observers.removeAll()
+    listenMode = false; interrupted = false
     reset(); epoch = nil
     guard prepared else { return }
     engine.stop(); engine.disconnectNodeOutput(player); engine.detach(player)
     format = nil; prepared = false
     try? AVAudioSession.sharedInstance().setActive(false, options: [.notifyOthersOnDeactivation])
+  }
+}
+
+/// Lock screen and Control Center for "Listen to laptop": shows what the
+/// laptop plays and forwards its buttons to Dart, which sends them to the
+/// laptop. Enabled only while listening.
+final class YinweiNowPlayingController {
+  static let channelName = "dev.yinwei/now_playing"
+  private let channel: FlutterMethodChannel
+  private var targets: [(MPRemoteCommand, Any)] = []
+
+  init(channel: FlutterMethodChannel) { self.channel = channel }
+
+  func handle(call: FlutterMethodCall, result: @escaping FlutterResult) {
+    switch call.method {
+    case "enable":
+      enable(); result(["ok": true])
+    case "disable":
+      disable(); result(["ok": true])
+    case "update":
+      let args = call.arguments as? [String: Any] ?? [:]
+      let playing = args["playing"] as? Bool == true
+      MPNowPlayingInfoCenter.default().nowPlayingInfo = [
+        MPMediaItemPropertyTitle: args["title"] as? String ?? "Yinwei",
+        MPMediaItemPropertyArtist: args["artist"] as? String ?? "",
+        MPNowPlayingInfoPropertyIsLiveStream: true,
+        MPNowPlayingInfoPropertyPlaybackRate: playing ? 1.0 : 0.0,
+      ]
+      result(["ok": true])
+    case "clear":
+      MPNowPlayingInfoCenter.default().nowPlayingInfo = nil
+      result(["ok": true])
+    default:
+      result(FlutterMethodNotImplemented)
+    }
+  }
+
+  private func enable() {
+    disable()
+    let center = MPRemoteCommandCenter.shared()
+    let commands: [(MPRemoteCommand, String)] = [
+      (center.playCommand, "play"), (center.pauseCommand, "pause"),
+      (center.togglePlayPauseCommand, "toggle"),
+      (center.nextTrackCommand, "next"), (center.previousTrackCommand, "previous"),
+    ]
+    for (command, action) in commands {
+      command.isEnabled = true
+      let target = command.addTarget { [weak self] _ in
+        self?.channel.invokeMethod("command", arguments: action)
+        return .success
+      }
+      targets.append((command, target))
+    }
+    UIApplication.shared.beginReceivingRemoteControlEvents()
+  }
+
+  private func disable() {
+    for (command, target) in targets {
+      command.removeTarget(target)
+      command.isEnabled = false
+    }
+    targets.removeAll()
   }
 }
 

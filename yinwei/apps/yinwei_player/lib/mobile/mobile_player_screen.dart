@@ -1,7 +1,9 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:yinwei_player/bridge/engine_bootstrap.dart';
 import 'package:yinwei_player/contracts/coordinate_frame_v1.dart';
 import 'package:yinwei_player/mobile/android_playback_capture_panel.dart';
+import 'package:yinwei_player/mobile/ios_laptop_listen_screen.dart';
 import 'package:yinwei_player/mobile/ios_runtime_status.dart';
 import 'package:yinwei_player/mobile/ios_replaykit_audio_probe_panel.dart';
 import 'package:yinwei_player/mobile/mobile_now_playing_header.dart';
@@ -140,6 +142,10 @@ class _MobilePlayerScreenState extends State<MobilePlayerScreen> {
                     status: status,
                     androidCaptureOnly:
                         widget.capabilities.androidPlaybackCapture,
+                    onListenToLaptop:
+                        defaultTargetPlatform == TargetPlatform.iOS
+                            ? () => openLaptopListen(context, c)
+                            : null,
                   ),
                   const SizedBox(height: 8),
                   IosRuntimeStatusBanner(

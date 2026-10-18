@@ -11,6 +11,7 @@ class MobileNowPlayingHeader extends StatelessWidget {
     required this.status,
     this.loadError,
     this.androidCaptureOnly = false,
+    this.onListenToLaptop,
   });
 
   final EngineController controller;
@@ -18,6 +19,9 @@ class MobileNowPlayingHeader extends StatelessWidget {
   final String status;
   final String? loadError;
   final bool androidCaptureOnly;
+
+  /// Opens "Listen to laptop" (iPad only).
+  final VoidCallback? onListenToLaptop;
 
   @override
   Widget build(BuildContext context) {
@@ -28,13 +32,26 @@ class MobileNowPlayingHeader extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          '音围  Yinwei',
-          style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                letterSpacing: 2.2,
-                color: YinweiColors.textTertiary,
-                fontWeight: FontWeight.w600,
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                '音围  Yinwei',
+                style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                      letterSpacing: 2.2,
+                      color: YinweiColors.textTertiary,
+                      fontWeight: FontWeight.w600,
+                    ),
               ),
+            ),
+            if (onListenToLaptop != null)
+              TextButton.icon(
+                key: const Key('yinwei-listen-to-laptop'),
+                onPressed: onListenToLaptop,
+                icon: const Icon(Icons.laptop_mac_rounded, size: 18),
+                label: const Text('Listen to laptop'),
+              ),
+          ],
         ),
         const SizedBox(height: 10),
         Text(
