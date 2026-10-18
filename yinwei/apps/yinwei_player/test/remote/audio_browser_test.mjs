@@ -39,7 +39,10 @@ function send(rate=48000, value=.25) {
 }
 const render=()=>{const out=[new Float32Array(128),new Float32Array(128)]; sink.process([], [out]); return out;};
 send(); assert.equal(render()[0].every(x=>x===0),true,'prefill is silent');
-for(let i=0;i<8;i++)send();
+// 160 ms prefill: 15 packets (7680 frames) at 48 kHz.
+for(let i=0;i<13;i++)send();
+assert.equal(render()[0].every(x=>x===0),true,'still prefilling below 160 ms');
+send();
 const out=render(); assert.equal(out[0][0],.25); assert.equal(out[1][0],-.25);
 for(let i=0;i<12;i++)render();
 assert.ok(messages.some(x=>x.type==='presentation'&&x.azimuth===30));
@@ -55,16 +58,23 @@ for(let i=0;i<20;i++){send(48000,.1);for(let j=0;j<4;j++)render();}
 assert.equal(messages.filter(x=>x.type==='presentation').at(-1).signalPresent,true);
 sink.port.onmessage({data:{type:'flush'}});
 assert.equal(render()[0].every(x=>x===0),true,'seek flush removes queued audio');
-for(let i=0;i<8;i++)send(44100);
+for(let i=0;i<14;i++)send(44100);
 const before=sink.count; render();
 assert.equal(before-sink.count,117,'continuous resampling advances source frames');
 for(let i=0;i<100;i++)send(44100);
-assert.ok(sink.count<=22050,'buffer remains bounded');
+assert.ok(sink.count<=44100,'buffer remains bounded');
 assert.ok(messages.some(x=>x.type==='resync'));
+assert.ok(sink.ready&&sink.count>0,'overflow skips ahead instead of emptying the queue');
 for(let i=0;i<500;i++)render();
 assert.ok(messages.some(x=>x.type==='underrun'));
 assert.equal(render()[0].every(x=>x===0),true,'underrun produces silence');
-console.log('PASS: PCM validation, stereo, jitter prefill, presentation pose, resampling, flush, bounded backlog, underrun');
+assert.ok(Math.abs(sink.targetSeconds-0.21)<1e-9,'underrun grows the prefill by 50 ms');
+// Ten stable seconds give 25 ms back, never below 160 ms.
+sink.port.onmessage({data:{type:'flush'}});
+for(let i=0;i<20;i++)send();
+for(let i=0;i<940;i++){send();for(let j=0;j<4;j++)render();}
+assert.ok(Math.abs(sink.targetSeconds-0.185)<1e-9,'stable playback shrinks the prefill');
+console.log('PASS: PCM validation, stereo, adaptive jitter prefill, presentation pose, resampling, flush, bounded skip-ahead backlog, underrun');
 
 // Exercise client lifecycle and packet delivery independently of a device.
 const clientMessages=[], statuses=[];

@@ -524,7 +524,7 @@ void main() {
     while (await stream.events.moveNext().timeout(const Duration(seconds: 7))) {
       if (stream.events.current is List<int>) chunks++;
     }
-    expect(chunks, 24);
+    expect(chunks, RemoteGateway.audioCredit);
     expect(stream.socket.closeCode, 1008);
     expect(audioTap.enabled, isFalse);
     expect(controller.playing, isTrue);

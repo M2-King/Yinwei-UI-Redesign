@@ -13,6 +13,9 @@ import 'package:yinwei_player/state/app_session_coordinator.dart';
 typedef RemoteAssetLoader = Future<Uint8List> Function(String asset);
 
 class RemoteGateway {
+  /// Unacknowledged browser-listening packets allowed in flight.
+  static const audioCredit = 64;
+
   RemoteGateway(
       {required this.auth,
       required this.coordinator,
@@ -885,9 +888,12 @@ class RemoteGateway {
       return;
     }
     try {
-      // At most 24 unacknowledged chunks: bounded network credit, not an
-      // unlimited WebSocket send queue. Native production never waits here.
-      for (var i = 0; i < 2 && _audioOutstanding.length < 24; ++i) {
+      // At most 64 unacknowledged chunks (~680 ms): bounded network credit,
+      // not an unlimited WebSocket send queue, and wide enough to cover an
+      // internet round trip. Up to 4 per tick so the stream catches up after
+      // a stall (Windows timers can fire every ~15.6 ms). Native production
+      // never waits here.
+      for (var i = 0; i < 4 && _audioOutstanding.length < audioCredit; ++i) {
         final packet = _activeAudioTap!.read();
         if (packet == null) break;
         final sequence =
