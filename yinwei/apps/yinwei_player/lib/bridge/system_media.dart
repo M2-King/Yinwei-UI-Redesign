@@ -220,6 +220,33 @@ class SystemMediaService extends ChangeNotifier {
     );
   }
 
+  /// Play, pause, next or previous on the current media session (the Live
+  /// source app). Uses the same session choice as [togglePlayPause].
+  Future<void> sendCommand(String action) async {
+    if (!Platform.isWindows) return;
+    final method = const {
+      'play': 'TryPlayAsync',
+      'pause': 'TryPauseAsync',
+      'next': 'TrySkipNextAsync',
+      'previous': 'TrySkipPreviousAsync',
+    }[action];
+    if (method == null) throw ArgumentError.value(action, 'action');
+    final result = await Process.run(
+      'powershell.exe',
+      [
+        '-NoProfile',
+        '-NonInteractive',
+        '-ExecutionPolicy',
+        'Bypass',
+        '-Command',
+        _kToggleScript.replaceFirst('TryTogglePlayPauseAsync', method),
+      ],
+    );
+    if (result.exitCode != 0) {
+      throw ProcessException('powershell.exe', [action], '', result.exitCode);
+    }
+  }
+
   /// Intentionally a no-op.
   ///
   /// Muting / zeroing the music app session (ISimpleAudioVolume) makes many
@@ -351,12 +378,9 @@ class SystemMediaService extends ChangeNotifier {
       if (start < 0 || end <= start) return null;
       final map =
           jsonDecode(raw.substring(start, end + 1)) as Map<String, dynamic>;
-      final pid = (map['pid'] as num?)?.toInt() ??
-          (map['Pid'] as num?)?.toInt() ??
-          0;
-      final name = (map['name'] as String?) ??
-          (map['Name'] as String?) ??
-          '';
+      final pid =
+          (map['pid'] as num?)?.toInt() ?? (map['Pid'] as num?)?.toInt() ?? 0;
+      final name = (map['name'] as String?) ?? (map['Name'] as String?) ?? '';
       if (pid <= 0) return null;
       if (SmtcLoopbackPicker.isExcludedProcess(name)) return null;
       return (pid: pid, name: name);

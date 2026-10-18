@@ -110,15 +110,29 @@ function render(snapshot) {
         : 'Live Transfer is running on the laptop. Press Listen here.'
       : 'Live Transfer is running. Waiting for source audio on the laptop.';
   $("play").disabled = !connected || !lease || pending || !state.track.hasFile;
+  // During Live Transfer only position and Original/Spatial are remote;
+  // start/stop, source and file transport stay on the laptop.
+  const liveControl = live && !!state.capabilities.liveControl;
+  const liveMedia = live && !!state.capabilities.liveMedia;
   document.querySelectorAll("[data-control]").forEach((element) => {
     element.disabled =
       !connected ||
       !lease ||
       pending ||
-      state.liveRunning ||
+      (state.liveRunning &&
+        !(liveControl && element.hasAttribute("data-live-control")) &&
+        !(liveMedia && element.hasAttribute("data-live-media"))) ||
       state.transport.busy;
   });
-  $("play").disabled ||= !state.track.hasFile;
+  // Previous/Next only exist for a Live source app (no file playlist).
+  $("previous").hidden = !liveMedia;
+  $("next").hidden = !liveMedia;
+  if (liveMedia) {
+    $("play").disabled ||= !!state.live?.playing;
+    $("pause").disabled ||= !state.live?.playing;
+  } else {
+    $("play").disabled ||= !state.track.hasFile;
+  }
   $("seek").disabled ||= !state.track.hasFile;
   $("seek").max = state.track.durationMs;
   if (document.activeElement !== $("seek"))
@@ -156,12 +170,19 @@ function render(snapshot) {
     $("media").value = selected;
   $("open").disabled ||= state.media.length === 0;
   $("ownership").textContent = live
-    ? 'Live controls are on the laptop. Listening does not require control.'
+    ? liveControl
+      ? lease
+        ? 'You control the music, position and mode. Live start/stop stays on the laptop.'
+        : 'Take control to change the music, position and mode. Live start/stop stays on the laptop.'
+      : 'Live controls are on the laptop. Listening does not require control.'
     : lease
     ? "You control this session. Local controls take priority."
     : "Viewing only. Take control to make changes.";
   $("control").disabled =
-    !connected || pending || state.liveRunning || state.transport.busy;
+    !connected ||
+    pending ||
+    (state.liveRunning && !liveControl) ||
+    state.transport.busy;
   sendScene();
 }
 function updateListenButton() {
@@ -286,8 +307,14 @@ $("control").addEventListener("click", async () => {
     message(e.message.replaceAll("_", " "));
   }
 });
-$("play").addEventListener("click", () => command("play"));
-$("pause").addEventListener("click", () => command("pause"));
+// During Live these drive the laptop's music app, not a Yinwei file.
+const liveMediaActive = () => !!state?.liveRunning && !!state.capabilities.liveMedia;
+$("play").addEventListener("click", () =>
+  command(liveMediaActive() ? "media.play" : "play"));
+$("pause").addEventListener("click", () =>
+  command(liveMediaActive() ? "media.pause" : "pause"));
+$("previous").addEventListener("click", () => command("media.previous"));
+$("next").addEventListener("click", () => command("media.next"));
 $("original").addEventListener("click", () =>
   command("mode", { mode: "original" }),
 );

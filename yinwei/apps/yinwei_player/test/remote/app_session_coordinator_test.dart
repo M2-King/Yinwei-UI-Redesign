@@ -136,4 +136,106 @@ void main() {
     expect('${state['media']}', isNot(contains(r'C:\private')));
     expect(coordinator.media.single['title'], 'Song');
   });
+
+  group('live control hooks', () {
+    late AppSessionCoordinator liveCoordinator;
+    final liveParams = <SpatialParams>[];
+    final liveModes = <PlaybackMode>[];
+    final mediaActions = <String>[];
+
+    setUp(() {
+      liveParams.clear();
+      liveModes.clear();
+      mediaActions.clear();
+      live = true;
+      liveCoordinator = AppSessionCoordinator(
+          controller: controller,
+          spatial: spatial,
+          nativeBackend: true,
+          liveRunning: () => live,
+          applyLiveParams: (params) async {
+            liveParams.add(params);
+            await controller.setParamsAcknowledged(params);
+          },
+          applyLiveMode: (mode) async => liveModes.add(mode),
+          liveMedia: (action) async => mediaActions.add(action),
+          now: () => now);
+    });
+    tearDown(() => liveCoordinator.close());
+
+    Map<String, dynamic> command(String type, Map<String, dynamic> payload) {
+      final snapshot = liveCoordinator.snapshot();
+      final lease = liveCoordinator.acquireControl('ipad');
+      return {
+        'protocolVersion': 1,
+        'commandId': 'live_${type.replaceAll('.', '_')}',
+        'hostSessionId': snapshot['hostSessionId'],
+        'controlLeaseId': lease['controlLeaseId'],
+        'expectedStateVersion': snapshot['stateVersion'],
+        'expectedSceneRevision': snapshot['sceneRevision'],
+        'type': type,
+        'payload': payload
+      };
+    }
+
+    test('advertise live control and route position into the live engine',
+        () async {
+      expect((liveCoordinator.snapshot()['capabilities'] as Map)['liveControl'],
+          isTrue);
+      final result = await liveCoordinator.command(
+          'ipad',
+          command('point.set',
+              {'azimuthDeg': 60, 'elevationDeg': 10, 'distanceM': 2}));
+      expect(result['status'], 'native_applied');
+      expect(liveParams.single.azimuthDeg, closeTo(60, 1e-8));
+      expect(controller.params.azimuthDeg, closeTo(60, 1e-8));
+      expect(spatial.appliedRevision, 2);
+    });
+
+    test('route Original/Spatial into the live engine', () async {
+      await liveCoordinator.command(
+          'ipad', command('mode', {'mode': 'original'}));
+      expect(liveModes, [PlaybackMode.original]);
+    });
+
+    test('media commands drive the Live source app only', () async {
+      expect((liveCoordinator.snapshot()['capabilities'] as Map)['liveMedia'],
+          isTrue);
+      for (final type in [
+        'media.pause',
+        'media.play',
+        'media.next',
+        'media.previous'
+      ]) {
+        await liveCoordinator.command('ipad', command(type, const {}));
+      }
+      expect(mediaActions, ['pause', 'play', 'next', 'previous']);
+      expect(liveParams, isEmpty);
+      expect(liveModes, isEmpty);
+    });
+
+    test('media commands are refused when Live is not running', () async {
+      live = false;
+      await expectLater(
+          liveCoordinator.command('ipad', command('media.next', const {})),
+          throwsA(isA<RemoteFailure>()
+              .having((e) => e.code, 'code', 'live_media_unavailable')));
+      expect(mediaActions, isEmpty);
+    });
+
+    test('keep live transport on the laptop', () async {
+      await expectLater(
+          liveCoordinator.command('ipad', command('play', const {})),
+          throwsA(isA<RemoteFailure>()
+              .having((e) => e.code, 'code', 'live_transport_on_laptop')));
+      expect(liveParams, isEmpty);
+    });
+
+    test('without hooks live still refuses remote control', () {
+      expect((coordinator.snapshot()['capabilities'] as Map)['liveControl'],
+          isFalse);
+      expect(() => coordinator.acquireControl('ipad'),
+          throwsA(isA<RemoteFailure>()));
+    });
+  });
 }

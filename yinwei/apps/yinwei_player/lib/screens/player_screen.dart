@@ -197,7 +197,19 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
         'source': _smtc.state.sourceApp,
         'title': _smtc.state.title,
         'captureHealthy': _live.captureHealthy,
+        'playing': _smtc.state.playing,
       },
+      // Same effect as the local controls, minus takeLocalControl(): a
+      // remote change must not revoke the remote's own lease.
+      applyLiveParams: (params) async {
+        if (_live.running) _live.applyLiveParams(params);
+        await _ctrl.setParamsAcknowledged(params);
+      },
+      applyLiveMode: (mode) async {
+        if (_live.running) _live.applyLiveMode(mode);
+        await _ctrl.setMode(mode);
+      },
+      liveMedia: _caps.systemMedia ? _smtc.sendCommand : null,
     );
     if (_backend == EngineBackend.native &&
         Platform.isWindows &&
