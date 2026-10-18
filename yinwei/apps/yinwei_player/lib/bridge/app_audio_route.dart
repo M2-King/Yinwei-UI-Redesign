@@ -742,7 +742,9 @@ function Invoke-YinweiAction([string]$Action, [string]$Arg1, [string]$Arg2, [str
     }
     if ($routed -eq 0) { $script:YwCode = 2; return }
     $hr = [YinweiPolicy]::SetMuted($dev, $true)
-    if ($hr -ne 0) {
+    # SetMute returns S_FALSE (1) when the device already had that state;
+    # only negative HRESULTs (and -1: device missing) are failures.
+    if ($hr -lt 0) {
       foreach ($p in $applied) { [void][YinweiPolicy]::Clear([uint32]$p) }
       $script:YwCode = 3; return
     }
@@ -777,7 +779,8 @@ function Invoke-YinweiAction([string]$Action, [string]$Arg1, [string]$Arg2, [str
 
   if ($Action -eq 'unmute') {
     $hr = [YinweiPolicy]::SetMuted([string]$Arg1, $false)
-    if ($hr -ne 0) { $script:YwCode = 6; return }
+    # Already unmuted returns S_FALSE (1), which is success, not an error.
+    if ($hr -lt 0) { $script:YwCode = 6; return }
     $script:YwCode = 0; return
   }
 
