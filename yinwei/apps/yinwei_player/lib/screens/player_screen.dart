@@ -117,6 +117,9 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
   late final LiveActivityCoordinator _liveActivity;
   late final MediaFileAcquisition _mediaFiles;
   IosInboxImport? _inbox;
+  Timer? _defaultOutputWatch;
+  String _plannedDefaultOutput = '';
+  bool _defaultReplanBusy = false;
   AppLifecycleListener? _inboxLifecycle;
   bool _inboxBusy = false;
   late final MediaExportDelivery _mediaExport;
@@ -175,6 +178,12 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
         );
     _smtc = widget.systemMedia ?? SystemMediaService();
     _live = widget.liveTransfer ?? LiveTransferController(capabilities: _caps);
+    if (_caps.liveTransfer) {
+      _defaultOutputWatch = Timer.periodic(
+        const Duration(seconds: 2),
+        (_) => _checkDefaultOutput(),
+      );
+    }
     if (widget.controller != null) {
       _ctrl = widget.controller!;
       _backend = EngineBackend.mock;
@@ -197,6 +206,16 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
         'source': _smtc.state.sourceApp,
         'title': _smtc.state.title,
         'captureHealthy': _live.captureHealthy,
+      },
+      // Same effect as the local controls, minus takeLocalControl(): a
+      // remote change must not revoke the remote's own lease.
+      applyLiveParams: (params) async {
+        if (_live.running) _live.applyLiveParams(params);
+        await _ctrl.setParamsAcknowledged(params);
+      },
+      applyLiveMode: (mode) async {
+        if (_live.running) _live.applyLiveMode(mode);
+        await _ctrl.setMode(mode);
       },
     );
     if (_backend == EngineBackend.native &&
@@ -501,6 +520,56 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
     return result;
   }
 
+  /// The dry/wet split is planned for the default output at Transfer start.
+  /// Windows can change that default later (earbuds connecting, Steam or
+  /// ToDesk virtual speakers), and wet follows it. Re-plan so the music app
+  /// is pinned to muted speakers again instead of joining wet in the earbuds.
+  void _checkDefaultOutput() {
+    if (!_live.running || _followBusy || _defaultReplanBusy) return;
+    final current = _live.readDefaultOutput();
+    if (current == _plannedDefaultOutput) return;
+    _plannedDefaultOutput = current;
+    unawaited(_replanForDefaultOutput());
+  }
+
+  Future<void> _replanForDefaultOutput() async {
+    final pid = _live.lastPid;
+    if (pid <= 0) return;
+    _defaultReplanBusy = true;
+    _live.refreshDevices();
+    _split = null; // Re-detect: headphones may have just connected.
+    final held = _live.setOutputHold(true);
+    _routeGen++;
+    final gen = _routeGen;
+    try {
+      final note = await _routeSplit(
+        pid,
+        gen,
+        keepSpeakerMute: _audioRoute.isRouted,
+      );
+      if (gen != _routeGen) return;
+      if (_split == null && _audioRoute.isRouted) {
+        // Wet is now on the speakers: unmute them rather than silence wet.
+        await _audioRoute.restore();
+      }
+      debugPrint(
+          '[AudioRoute] default output -> $_plannedDefaultOutput; $note');
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('输出设备已切换 · $note'),
+          behavior: SnackBarBehavior.floating,
+          duration: const Duration(seconds: 5),
+        ),
+      );
+    } catch (error) {
+      debugPrint('[AudioRoute] default output re-plan failed: $error');
+    } finally {
+      if (held) _live.setOutputHold(false);
+      _defaultReplanBusy = false;
+    }
+  }
+
   void _onSmtcChange() {
     _onChange();
     _scheduleLiveFollow();
@@ -643,6 +712,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
     // Honor the picker: empty = Windows default (Nahimic-compatible).
     // Never copy detectSplit()'s Sony/WH- name onto wet output.
     _live.refreshDevices();
+    _plannedDefaultOutput = _live.defaultOutputName;
     _live.setOutputDevice(
       WetOutputPolicy.wetNameAfterDetect(
         selectedOutput: _live.selectedOutput,
@@ -877,6 +947,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
   void dispose() {
     _disposing = true;
     _inboxLifecycle?.dispose();
+    _defaultOutputWatch?.cancel();
     if (_nativeWindow) windowManager.removeListener(this);
     _followDebounce?.cancel();
     _islandAnim?.cancel();

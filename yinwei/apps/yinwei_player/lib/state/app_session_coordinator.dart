@@ -19,6 +19,8 @@ class AppSessionCoordinator {
     this.liveAudioReady,
     this.liveSnapshot,
     this.sceneBridge,
+    this.applyLiveParams,
+    this.applyLiveMode,
     DateTime Function()? now,
   }) : _now = now ?? DateTime.now;
 
@@ -30,6 +32,15 @@ class AppSessionCoordinator {
   final Map<String, dynamic> Function()? liveSnapshot;
   bool get liveReady => liveAudioReady?.call() ?? liveRunning();
   final SpatialSceneBridge? sceneBridge;
+
+  /// Live Transfer hooks. When both are supplied, a remote with the control
+  /// lease may change the live source's position and Original/Spatial mode
+  /// through the same path as the laptop's own controls. Live start/stop and
+  /// source choice stay on the laptop; file transport is unavailable.
+  final Future<void> Function(SpatialParams params)? applyLiveParams;
+  final Future<void> Function(PlaybackMode mode)? applyLiveMode;
+  bool get liveControl => applyLiveParams != null && applyLiveMode != null;
+  static const _liveCommands = {'mode', 'point.set', 'scene.commit'};
   final DateTime Function() _now;
   final String hostSessionId = remoteSecret();
   final _results = <String, Future<Map<String, dynamic>>>{};
@@ -79,7 +90,9 @@ class AppSessionCoordinator {
   Map<String, dynamic> acquireControl(String device) {
     if (_closed) throw const RemoteFailure('host_closed');
     if (!nativeBackend) throw const RemoteFailure('native_engine_required');
-    if (liveRunning() || remoteTransformRunning || controller.busy) {
+    if ((liveRunning() && !liveControl) ||
+        remoteTransformRunning ||
+        controller.busy) {
       throw const RemoteFailure('local_busy');
     }
     if (_device != null && _expires!.isAfter(_now()) && _device != device) {
@@ -131,6 +144,7 @@ class AppSessionCoordinator {
         'pointControl': !controller.array.enabled && !remoteTransformRunning,
         'browserAudio': browserAudioAvailable,
         'browserLiveAudio': browserLiveAudioAvailable,
+        'liveControl': liveControl,
         'remoteArray': false
       },
       'track': {
@@ -216,8 +230,12 @@ class AppSessionCoordinator {
           input['expectedSceneRevision'] != spatial.appliedRevision) {
         throw const RemoteFailure('stale_state');
       }
-      if (liveRunning() || remoteTransformRunning || controller.busy) {
+      final live = liveRunning();
+      if ((live && !liveControl) || remoteTransformRunning || controller.busy) {
         throw const RemoteFailure('local_busy');
+      }
+      if (live && !_liveCommands.contains(input['type'])) {
+        throw const RemoteFailure('live_transport_on_laptop');
       }
       final payload = input['payload'];
       if (payload is! Map<String, dynamic>) {
@@ -256,9 +274,14 @@ class AppSessionCoordinator {
             if (!['original', 'spatial'].contains(payload['mode'])) {
               throw const RemoteFailure('invalid_payload', httpStatus: 400);
             }
-            await controller.setMode(payload['mode'] == 'original'
+            final mode = payload['mode'] == 'original'
                 ? PlaybackMode.original
-                : PlaybackMode.spatial);
+                : PlaybackMode.spatial;
+            if (live) {
+              await applyLiveMode!(mode);
+            } else {
+              await controller.setMode(mode);
+            }
           case 'point.set':
             if (controller.array.enabled) {
               throw const RemoteFailure('array_active');
@@ -276,7 +299,7 @@ class AppSessionCoordinator {
             if (!adopted.shouldWriteEngine) {
               throw const RemoteFailure('invalid_scene');
             }
-            await controller.setParamsAcknowledged(adopted.engineParams!);
+            await _applyParams(adopted.engineParams!, live: live);
           case 'scene.commit':
             if (sceneBridge == null ||
                 controller.array.enabled ||
@@ -309,7 +332,7 @@ class AppSessionCoordinator {
                 ..elevationDeg = projected.elevationDeg
                 ..distanceM = projected.distanceM
                 ..selectedPreset = null;
-              await controller.setParamsAcknowledged(next);
+              await _applyParams(next, live: live);
             }
           default:
             throw const RemoteFailure('unsupported_command', httpStatus: 400);
@@ -339,6 +362,10 @@ class AppSessionCoordinator {
         onError: (Object _, StackTrace __) => _trimHistory());
     return result;
   }
+
+  Future<void> _applyParams(SpatialParams params, {required bool live}) => live
+      ? applyLiveParams!(params)
+      : controller.setParamsAcknowledged(params);
 
   void _trimHistory() {
     if (_results.length > 64) {

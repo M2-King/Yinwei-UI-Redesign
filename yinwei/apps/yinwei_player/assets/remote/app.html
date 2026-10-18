@@ -62,8 +62,8 @@
         <button id="control">Take control</button>
         <p id="ownership">Viewing the laptop session.</p>
         <div class="modes">
-          <button id="original" data-control>Original</button
-          ><button id="spatial" data-control>Spatial</button>
+          <button id="original" data-control data-live-control>Original</button
+          ><button id="spatial" data-control data-live-control>Spatial</button>
         </div>
         <div class="pose">
           <label
@@ -74,7 +74,8 @@
               min="-180"
               max="180"
               step="1"
-              data-control /></label
+              data-control
+              data-live-control /></label
           ><label
             >Elevation <output id="el-value"></output
             ><input
@@ -83,7 +84,8 @@
               min="-90"
               max="90"
               step="1"
-              data-control /></label
+              data-control
+              data-live-control /></label
           ><label
             >Distance <output id="distance-value"></output
             ><input
@@ -92,8 +94,9 @@
               min="0.5"
               max="10"
               step="0.1"
-              data-control /></label
-          ><button id="apply" data-control>Apply position</button>
+              data-control
+              data-live-control /></label
+          ><button id="apply" data-control data-live-control>Apply position</button>
         </div>
         <p id="message" role="status" aria-live="polite"></p>
       </aside>
