@@ -239,7 +239,7 @@ class SystemMediaService extends ChangeNotifier {
         '-ExecutionPolicy',
         'Bypass',
         '-Command',
-        _kToggleScript.replaceFirst('TryTogglePlayPauseAsync', method),
+        _kMediaCommandScript.replaceFirst('__METHOD__', method),
       ],
     );
     if (result.exitCode != 0) {
@@ -610,6 +610,36 @@ while ($true) {
   [Console]::Out.Flush()
   Start-Sleep -Milliseconds 400
 }
+''';
+
+/// Same session choice as [_kToggleScript], but waits for the WinRT result
+/// with the AsTask helper: Windows PowerShell 5.1 cannot call
+/// `.GetAwaiter()` on WinRT async operations. Exit 0 = done, 2 = the app
+/// refused (e.g. no next track), 3 = no media session.
+const _kMediaCommandScript = r'''
+Add-Type -AssemblyName System.Runtime.WindowsRuntime | Out-Null
+$asTaskGeneric = ([System.WindowsRuntimeSystemExtensions].GetMethods() | Where-Object { $_.Name -eq 'AsTask' -and $_.GetParameters().Count -eq 1 -and $_.GetParameters()[0].ParameterType.Name -eq 'IAsyncOperation`1' })[0]
+function Await($WinRtTask, $ResultType) {
+  $asTask = $asTaskGeneric.MakeGenericMethod($ResultType)
+  $netTask = $asTask.Invoke($null, @($WinRtTask))
+  $netTask.Wait(-1) | Out-Null
+  $netTask.Result
+}
+[void][Windows.Media.Control.GlobalSystemMediaTransportControlsSessionManager,Windows.Media.Control,ContentType=WindowsRuntime]
+$mgr = Await ([Windows.Media.Control.GlobalSystemMediaTransportControlsSessionManager]::RequestAsync()) ([Windows.Media.Control.GlobalSystemMediaTransportControlsSessionManager])
+$sessions = $mgr.GetSessions()
+$best = $null; $bestScore = 0
+foreach ($s in $sessions) {
+  $pb = $s.GetPlaybackInfo()
+  $st = [string]$pb.PlaybackStatus
+  $score = 1
+  if ($st -eq 'Playing') { $score = 3 } elseif ($st -eq 'Paused') { $score = 2 }
+  if ($score -gt $bestScore) { $bestScore = $score; $best = $s }
+}
+if (-not $best) { exit 3 }
+$ok = Await ($best.__METHOD__()) ([bool])
+if ($ok) { exit 0 }
+exit 2
 ''';
 
 const _kToggleScript = r'''

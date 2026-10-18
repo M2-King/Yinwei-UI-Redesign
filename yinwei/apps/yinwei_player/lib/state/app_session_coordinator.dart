@@ -291,7 +291,13 @@ class AppSessionCoordinator {
           case 'media.pause':
           case 'media.next':
           case 'media.previous':
-            await liveMedia!(media!);
+            try {
+              await liveMedia!(media!);
+            } catch (_) {
+              // The music app refused or no session: not an engine failure,
+              // and the remote keeps its lease.
+              throw const RemoteFailure('media_command_failed');
+            }
           case 'mode':
             if (!['original', 'spatial'].contains(payload['mode'])) {
               throw const RemoteFailure('invalid_payload', httpStatus: 400);

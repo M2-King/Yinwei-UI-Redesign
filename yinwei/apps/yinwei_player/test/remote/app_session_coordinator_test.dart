@@ -214,6 +214,34 @@ void main() {
       expect(liveModes, isEmpty);
     });
 
+    test('a refused media command reports media_command_failed', () async {
+      final failing = AppSessionCoordinator(
+          controller: controller,
+          spatial: spatial,
+          nativeBackend: true,
+          liveRunning: () => true,
+          applyLiveParams: (params) async {},
+          applyLiveMode: (mode) async {},
+          liveMedia: (action) async => throw StateError('no next track'),
+          now: () => now);
+      addTearDown(failing.close);
+      final snapshot = failing.snapshot();
+      final lease = failing.acquireControl('ipad');
+      await expectLater(
+          failing.command('ipad', {
+            'protocolVersion': 1,
+            'commandId': 'media_fail',
+            'hostSessionId': snapshot['hostSessionId'],
+            'controlLeaseId': lease['controlLeaseId'],
+            'expectedStateVersion': snapshot['stateVersion'],
+            'expectedSceneRevision': snapshot['sceneRevision'],
+            'type': 'media.next',
+            'payload': const <String, dynamic>{}
+          }),
+          throwsA(isA<RemoteFailure>()
+              .having((e) => e.code, 'code', 'media_command_failed')));
+    });
+
     test('media commands are refused when Live is not running', () async {
       live = false;
       await expectLater(

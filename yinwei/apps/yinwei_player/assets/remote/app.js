@@ -223,10 +223,16 @@ async function command(type, payload = {}) {
         : "Local controls superseded this change.",
     );
   } catch (error) {
-    lease = null;
-    message(
-      `Change not applied: ${error.message.replaceAll("_", " ")}. Take control again.`,
-    );
+    // A music-app command the app refused keeps control; anything else
+    // (lost lease, stale state, engine failure) needs control again.
+    if (error.message === "media_command_failed") {
+      message("The laptop music app did not accept that command.");
+    } else {
+      lease = null;
+      message(
+        `Change not applied: ${error.message.replaceAll("_", " ")}. Take control again.`,
+      );
+    }
     try {
       render((await request("session")).snapshot);
     } catch (_) {}
