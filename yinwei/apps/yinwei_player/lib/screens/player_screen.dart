@@ -30,6 +30,7 @@ import 'package:yinwei_player/runtime/workspace_presentation.dart';
 import 'package:yinwei_player/state/engine_controller.dart';
 import 'package:yinwei_player/state/app_session_coordinator.dart';
 import 'package:yinwei_player/remote/remote_gateway.dart';
+import 'package:yinwei_player/remote/remote_guest.dart';
 import 'package:yinwei_player/remote/remote_deployment.dart';
 import 'package:yinwei_player/remote/remote_auth.dart';
 import 'package:yinwei_player/remote/native_output_tap.dart';
@@ -1644,7 +1645,13 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
         auth.close();
         return;
       }
+      // Friend accounts stay off unless explicitly enabled (Option L, Gate A).
+      final guests = Platform.environment['YINWEI_GUEST_ENABLED'] == '1'
+          ? GuestService(GuestStore(Directory(
+              '${File(path).parent.path}${Platform.pathSeparator}guests')))
+          : null;
       final gateway = RemoteGateway(
+        guests: guests,
         auth: auth,
         coordinator: _appSession,
         entryOrigin: deployment.entryOrigin,

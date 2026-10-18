@@ -4,6 +4,7 @@ import 'dart:io';
 import 'dart:math';
 import 'dart:typed_data';
 import 'package:yinwei_player/remote/remote_auth.dart';
+import 'package:yinwei_player/remote/remote_guest.dart';
 import 'package:yinwei_player/remote/native_output_tap.dart';
 import 'package:yinwei_player/remote/remote_protocol.dart';
 import 'package:yinwei_player/remote/remote_transform.dart';
@@ -24,7 +25,12 @@ class RemoteGateway {
       this.allowOriginRotation = false,
       this.audioTap,
       this.liveAudioTap,
-      this.transformAdapter});
+      this.transformAdapter,
+      this.guests});
+
+  /// Friend accounts (Option L). Null unless YINWEI_GUEST_ENABLED=1; then
+  /// every `/remote/guest/*` request returns 404.
+  final GuestService? guests;
   final RemoteTransformAdapter? transformAdapter;
   WebSocket? _transformSocket;
   RemoteTransformSocket? _transformStream;
@@ -287,6 +293,23 @@ class RemoteGateway {
               coordinator.browserLiveAudioAvailable,
           'browserLiveAudio': coordinator.browserLiveAudioAvailable,
         });
+        return;
+      }
+      // Friend routes are handled entirely apart from the owner's: their own
+      // cookies and sessions, never this owner session lookup.
+      if (path == '/remote/guest' || path.startsWith('/remote/guest/')) {
+        final guests = this.guests;
+        if (guests == null) {
+          throw const RemoteFailure('not_found', httpStatus: 404);
+        }
+        await guests.handle(request, response, (
+          json: _json,
+          body: _body,
+          cookie: _cookie,
+          requestCookie: _requestCookie,
+          loadAsset: loadAsset,
+          secure: _secure,
+        ));
         return;
       }
       final session = auth.authenticate(_requestCookie(request, _cookieName));
@@ -828,6 +851,7 @@ class RemoteGateway {
     _connections.clear();
     audioTap?.close();
     liveAudioTap?.close();
+    guests?.close();
     transformAdapter?.close();
     auth.close();
     await _server?.close(force: true);

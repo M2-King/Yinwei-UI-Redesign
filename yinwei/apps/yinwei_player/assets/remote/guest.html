@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <meta name="csrf" content="GUEST_CSRF_TOKEN" />
+    <meta name="guest-mode" content="GUEST_MODE" />
+    <title>Yinwei · Friends</title>
+    <link rel="stylesheet" href="/remote/style.css" />
+    <script src="/remote/guest/guest.js" defer></script>
+  </head>
+  <body class="login">
+    <main class="login-card">
+      <span class="eyebrow">YINWEI / FRIENDS</span>
+
+      <section id="invite-view" hidden>
+        <h1>You're invited.</h1>
+        <p>Create your own account. Your music and settings are private to you.</p>
+        <form id="invite">
+          <label
+            >Your name<input
+              name="displayName"
+              autocomplete="nickname"
+              required
+              maxlength="40" /></label
+          ><label
+            >Username<input
+              name="username"
+              autocomplete="username"
+              required
+              minlength="3"
+              maxlength="32"
+              pattern="[A-Za-z0-9_.\-]{3,32}" /></label
+          ><label
+            >Password (12+ characters)<input
+              name="password"
+              type="password"
+              autocomplete="new-password"
+              required
+              minlength="12"
+              maxlength="256" /></label
+          ><button type="submit">Create account</button>
+          <p class="message" role="status" aria-live="polite"></p>
+        </form>
+      </section>
+
+      <section id="signin-view" hidden>
+        <h1>Welcome back.</h1>
+        <p>Sign in to your Yinwei listening room.</p>
+        <form id="signin">
+          <label
+            >Username<input
+              name="username"
+              autocomplete="username"
+              required
+              maxlength="32" /></label
+          ><label
+            >Password<input
+              name="password"
+              type="password"
+              autocomplete="current-password"
+              required
+              maxlength="256" /></label
+          ><button type="submit">Sign in</button>
+          <p class="message" role="status" aria-live="polite"></p>
+        </form>
+      </section>
+
+      <section id="room-view" hidden>
+        <h1 id="room-title">Your listening room.</h1>
+        <p>
+          Your account is ready. Uploading your own music and listening here
+          arrive in the next update.
+        </p>
+        <button id="signout" type="button">Sign out</button>
+        <p class="message" role="status" aria-live="polite"></p>
+      </section>
+
+      <small>Private · Hosted on a friend's laptop, available while it is on.</small>
+    </main>
+  </body>
+</html>
