@@ -110,16 +110,12 @@ function render(snapshot) {
         : 'Live Transfer is running on the laptop. Press Listen here.'
       : 'Live Transfer is running. Waiting for source audio on the laptop.';
   $("play").disabled = !connected || !lease || pending || !state.track.hasFile;
-  // During Live Transfer only position and Original/Spatial are remote;
-  // start/stop, source and file transport stay on the laptop.
-  const liveControl = live && !!state.capabilities.liveControl;
   document.querySelectorAll("[data-control]").forEach((element) => {
     element.disabled =
       !connected ||
       !lease ||
       pending ||
-      (state.liveRunning &&
-        !(liveControl && element.hasAttribute("data-live-control"))) ||
+      state.liveRunning ||
       state.transport.busy;
   });
   $("play").disabled ||= !state.track.hasFile;
@@ -160,19 +156,12 @@ function render(snapshot) {
     $("media").value = selected;
   $("open").disabled ||= state.media.length === 0;
   $("ownership").textContent = live
-    ? liveControl
-      ? lease
-        ? 'You control position and mode. Live start/stop stays on the laptop.'
-        : 'Take control to change position and mode. Live start/stop stays on the laptop.'
-      : 'Live controls are on the laptop. Listening does not require control.'
+    ? 'Live controls are on the laptop. Listening does not require control.'
     : lease
     ? "You control this session. Local controls take priority."
     : "Viewing only. Take control to make changes.";
   $("control").disabled =
-    !connected ||
-    pending ||
-    (state.liveRunning && !liveControl) ||
-    state.transport.busy;
+    !connected || pending || state.liveRunning || state.transport.busy;
   sendScene();
 }
 function updateListenButton() {

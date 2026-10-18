@@ -75,17 +75,6 @@ class LiveTransferController extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Current Windows default render device, without re-listing devices.
-  String readDefaultOutput() {
-    final b = _b;
-    if (b == null) return defaultOutputName;
-    try {
-      return b.liveDefaultOutputDevice();
-    } catch (_) {
-      return defaultOutputName;
-    }
-  }
-
   void setOutputDevice(String name) {
     selectedOutput = name;
     final b = _b;
