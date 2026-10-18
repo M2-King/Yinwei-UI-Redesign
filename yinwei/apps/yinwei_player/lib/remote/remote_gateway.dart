@@ -505,7 +505,11 @@ class RemoteGateway {
             return;
           case '/remote/api/control/lease':
             coordinator.snapshot();
-            await _json(response, coordinator.acquireControl(session.deviceId));
+            await _json(
+              response,
+              coordinator.acquireControl(session.deviceId,
+                  auto: data['auto'] == true),
+            );
             return;
           case '/remote/api/commands':
             try {

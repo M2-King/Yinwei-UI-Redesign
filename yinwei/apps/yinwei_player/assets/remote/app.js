@@ -21,6 +21,9 @@ let autoListen = false;
 const editing = new Set();
 // Sliders currently under a finger or pointer; never released by a send.
 const held = new Set();
+// The user took control here; re-take it after the page was in the
+// background (its lease expires while iPad Safari pauses the page).
+let wantControl = false;
 const browserAudio = new BrowserAudio({
   request: (path, body) => request(path, body),
   status: (text) => {
@@ -234,7 +237,7 @@ function updateListenButton() {
     : state.track.hasFile && state.capabilities.browserAudio && state.capabilities.pointControl);
   $("listen").disabled = !connected || browserAudio.active || !available;
 }
-async function command(type, payload = {}) {
+async function command(type, payload = {}, retried = false) {
   if (!lease || !connected || pending) return;
   pending = true;
   const previousAudioEpoch = browserAudio.epoch;
@@ -266,6 +269,20 @@ async function command(type, payload = {}) {
         : "Local controls superseded this change.",
     );
   } catch (error) {
+    // The laptop's state moved on (a song change) or the lease lapsed while
+    // the page was paused: refresh, re-take control and try once more.
+    if (!retried && ["stale_state", "control_lost"].includes(error.message)) {
+      try {
+        if (error.message === "control_lost") {
+          lease = (await request("control/lease", { auto: true })).controlLeaseId;
+        }
+        render((await request("session")).snapshot);
+        pending = false;
+        return await command(type, payload, true);
+      } catch (_) {
+        // Fall through: report it below.
+      }
+    }
     // A music-app command the app refused keeps control; anything else
     // (lost lease, stale state, engine failure) needs control again.
     if (error.message === "media_command_failed") {
@@ -352,6 +369,7 @@ async function connect() {
 $("control").addEventListener("click", async () => {
   try {
     lease = (await request("control/lease", {})).controlLeaseId;
+    wantControl = true;
     render((await request("session")).snapshot);
     message("Control acquired.");
   } catch (e) {
@@ -446,6 +464,7 @@ for (const id of ["az", "el", "distance"]) {
     commitLatest("position", sendPosition, ["az", "el", "distance"]));
 }
 $("signout").addEventListener("click", async () => {
+  wantControl = false;
   await browserAudio.stop();
   try {
     await request("auth/signout", {});
@@ -479,12 +498,34 @@ window.addEventListener("message", (event) => {
     command("scene.commit", event.data.payload);
   }
 });
+// Re-take control the user had, e.g. after iPad Safari paused this page.
+// Someone at the laptop changing settings still wins: that clears the lease
+// through the snapshot and is not undone here.
+async function reclaimControl() {
+  if (!wantControl || lease || !connected || pending) return;
+  try {
+    lease = (await request("control/lease", { auto: true })).controlLeaseId;
+    if (state) render(state);
+  } catch (e) {
+    // The laptop or another device has it now: wait for a Take control tap.
+    if (["control_taken", "control_busy"].includes(e.message)) wantControl = false;
+  }
+}
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible") reclaimControl();
+});
 setInterval(async () => {
-  if (!lease || !connected || pending) return;
+  if (!connected || pending) return;
+  // Not renewed: keep trying to re-take control while the user wants it
+  // (e.g. the network came back after a longer drop).
+  if (!lease) return reclaimControl();
   try {
     lease = (await request("control/lease", {})).controlLeaseId;
   } catch (_) {
+    // A renewal that failed on its own (network blip, paused page) is
+    // retried once instead of greying out every control.
     lease = null;
+    await reclaimControl();
     if (state) render(state);
   }
 }, 10000);
@@ -497,6 +538,7 @@ $("live-start").addEventListener("click", async () => {
   try {
     if (!lease) {
       lease = (await request("control/lease", {})).controlLeaseId;
+      wantControl = true;
       render((await request("session")).snapshot);
     }
     message("Starting the music and Live Transfer on the laptop…");

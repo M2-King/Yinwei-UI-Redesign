@@ -87,6 +87,7 @@ class AppSessionCoordinator {
   int _localGeneration = 0;
   int _stateVersion = 0;
   String? _lastFingerprint;
+  String? _lastControlFingerprint;
   bool _closed = false;
   bool _remoteApplying = false;
   String? lastCommandStatus;
@@ -110,8 +111,14 @@ class AppSessionCoordinator {
       .map((entry) => {'id': entry.key, 'title': entry.value.title})
       .toList();
 
+  // The device the laptop last took control from. Its page may re-take
+  // control on its own after a pause, but not after a laptop takeover;
+  // tapping Take control there still works.
+  String? _takenFrom;
+
   void takeLocalControl() {
     ++_localGeneration;
+    if (_device != null) _takenFrom = _device;
     _device = null;
     _lease = null;
     _expires = null;
@@ -119,9 +126,12 @@ class AppSessionCoordinator {
 
   void releaseDevice(String device) {
     if (_device == device) takeLocalControl();
+    if (_takenFrom == device) _takenFrom = null;
   }
 
-  Map<String, dynamic> acquireControl(String device) {
+  /// [auto]: the page re-taking control it had (after iPad Safari paused
+  /// it), refused once the laptop has taken over.
+  Map<String, dynamic> acquireControl(String device, {bool auto = false}) {
     if (_closed) throw const RemoteFailure('host_closed');
     if (!nativeBackend) throw const RemoteFailure('native_engine_required');
     if ((liveRunning() && !liveControl) ||
@@ -132,6 +142,10 @@ class AppSessionCoordinator {
     if (_device != null && _expires!.isAfter(_now()) && _device != device) {
       throw const RemoteFailure('control_busy');
     }
+    if (auto && _takenFrom == device) {
+      throw const RemoteFailure('control_taken');
+    }
+    if (_takenFrom == device) _takenFrom = null;
     if (_device != device || !_expires!.isAfter(_now())) {
       _lease = remoteSecret();
     }
@@ -143,7 +157,9 @@ class AppSessionCoordinator {
   Map<String, dynamic> snapshot({String? device}) {
     final liveActive = liveRunning();
     final liveInfo = liveSnapshot?.call() ?? const <String, dynamic>{};
-    final fingerprint = jsonEncode({
+    // Settings a person changes. If one changes at the laptop (not by the
+    // remote), the laptop has taken over and the remote loses its lease.
+    final controlFingerprint = jsonEncode({
       'sceneRevision': spatial.appliedRevision,
       'params': [
         controller.params.azimuthDeg,
@@ -155,16 +171,27 @@ class AppSessionCoordinator {
       'array': controller.runtimeAudioDiag()['speakers'],
       'arrayMode': controller.array.mode.name,
       'path': controller.track.path,
-      'playing': controller.playing,
       'mode': controller.mode.name,
+    });
+    // Everything else changes by itself (song change, Live re-attaching to
+    // the music app, playback ending): it refreshes the state version but
+    // must not take control away from the remote.
+    final fingerprint = jsonEncode({
+      'control': controlFingerprint,
+      'playing': controller.playing,
       'busy': controller.busy,
       'liveRunning': liveActive,
       'remoteTransformRunning': remoteTransformRunning,
       'liveReady': liveReady,
       'liveSource': liveInfo['source'],
     });
+    if (controlFingerprint != _lastControlFingerprint) {
+      if (_lastControlFingerprint != null && !_remoteApplying) {
+        takeLocalControl();
+      }
+      _lastControlFingerprint = controlFingerprint;
+    }
     if (fingerprint != _lastFingerprint) {
-      if (_lastFingerprint != null && !_remoteApplying) takeLocalControl();
       _lastFingerprint = fingerprint;
       ++_stateVersion;
     }

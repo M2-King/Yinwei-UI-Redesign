@@ -130,6 +130,59 @@ void main() {
     expect(spatial.appliedRevision, 1);
   });
 
+  test('automatic laptop changes keep the lease; laptop edits revoke it',
+      () async {
+    final lease = coordinator.acquireControl('device')['controlLeaseId'];
+    Map<String, dynamic> point(String id) {
+      final snap = coordinator.snapshot();
+      return {
+        'protocolVersion': 1,
+        'commandId': id,
+        'hostSessionId': snap['hostSessionId'],
+        'controlLeaseId': lease,
+        'expectedStateVersion': snap['stateVersion'],
+        'expectedSceneRevision': snap['sceneRevision'],
+        'type': 'point.set',
+        'payload': {'azimuthDeg': 45, 'elevationDeg': 0, 'distanceM': 2}
+      };
+    }
+
+    // Live starting and stopping at the laptop changes state by itself.
+    live = true;
+    coordinator.snapshot();
+    live = false;
+    final applied = await coordinator.command('device', point('command_auto_keep'));
+    expect(applied['status'], 'native_applied');
+
+    // Someone at the laptop moves the source: the remote loses control.
+    await controller
+        .setParamsAcknowledged(controller.params.copy()..azimuthDeg = -120);
+    await expectLater(
+        coordinator.command('device', point('command_after_local')),
+        throwsA(isA<RemoteFailure>()
+            .having((e) => e.code, 'code', 'control_lost')));
+  });
+
+  test('a paused page re-takes control unless the laptop took over', () {
+    coordinator.acquireControl('device');
+    // iPad Safari paused the page: the lease lapses, nobody else took it.
+    now = now.add(const Duration(seconds: 31));
+    expect(coordinator.acquireControl('device', auto: true)['controlLeaseId'],
+        isA<String>());
+
+    // The laptop takes over: no automatic re-take, a Take control tap works.
+    coordinator.takeLocalControl();
+    expect(
+        () => coordinator.acquireControl('device', auto: true),
+        throwsA(isA<RemoteFailure>()
+            .having((e) => e.code, 'code', 'control_taken')));
+    coordinator.acquireControl('device');
+    now = now.add(const Duration(seconds: 31));
+    expect(coordinator.acquireControl('device', auto: true)['controlLeaseId'],
+        isA<String>());
+    expect(coordinator.snapshot(device: 'device')['controlOwned'], isTrue);
+  });
+
   test('approved media IDs are returned without private filesystem paths', () {
     coordinator.registerLocalMedia(r'C:\private\song.wav', 'Song');
     final state = coordinator.snapshot();
