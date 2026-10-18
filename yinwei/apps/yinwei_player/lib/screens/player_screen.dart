@@ -30,6 +30,7 @@ import 'package:yinwei_player/runtime/workspace_presentation.dart';
 import 'package:yinwei_player/state/engine_controller.dart';
 import 'package:yinwei_player/state/app_session_coordinator.dart';
 import 'package:yinwei_player/remote/remote_gateway.dart';
+import 'package:yinwei_player/remote/remote_protocol.dart';
 import 'package:yinwei_player/remote/remote_guest.dart';
 import 'package:yinwei_player/remote/remote_deployment.dart';
 import 'package:yinwei_player/remote/remote_auth.dart';
@@ -211,6 +212,8 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
         await _ctrl.setMode(mode);
       },
       liveMedia: _caps.systemMedia ? _smtc.sendCommand : null,
+      startLive: _caps.liveTransfer ? _startLiveFromRemote : null,
+      stopLive: _caps.liveTransfer ? _stopLiveHrtf : null,
     );
     if (_backend == EngineBackend.native &&
         Platform.isWindows &&
@@ -600,6 +603,32 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
       _eqOpen = false;
     }
     _onChange();
+  }
+
+  /// Remote "Start on laptop": play the music app if it is paused, wait for
+  /// Windows to report it playing (Live refuses a paused source), then start
+  /// Live Transfer exactly as the laptop button does.
+  Future<void> _startLiveFromRemote() async {
+    if (_live.running || _live.starting) return;
+    if (!_smtc.state.hasTrack) {
+      throw const RemoteFailure('no_music_app');
+    }
+    if (!_smtc.state.playing) {
+      try {
+        await _smtc.sendCommand('play');
+      } catch (_) {
+        throw const RemoteFailure('music_not_playing');
+      }
+      final deadline = DateTime.now().add(const Duration(seconds: 15));
+      while (!_smtc.state.playing && DateTime.now().isBefore(deadline)) {
+        await Future<void>.delayed(const Duration(milliseconds: 250));
+      }
+      if (!_smtc.state.playing) {
+        throw const RemoteFailure('music_not_playing');
+      }
+    }
+    await _startLiveHrtf();
+    if (!_live.running) throw const RemoteFailure('live_start_failed');
   }
 
   Future<void> _toggleLiveHrtf() async {

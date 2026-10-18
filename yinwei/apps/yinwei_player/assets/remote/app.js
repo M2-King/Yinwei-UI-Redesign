@@ -14,6 +14,8 @@ const message = (text) => {
   $("message").textContent = text;
 };
 let audioPresentation;
+// Set by "Start on laptop": begin listening once live audio is ready.
+let autoListen = false;
 const browserAudio = new BrowserAudio({
   request: (path, body) => request(path, body),
   status: (text) => {
@@ -99,9 +101,15 @@ function render(snapshot) {
     ? state.track.title
     : "Open a file on the laptop";
   $("artist").textContent = live ? state.live?.source || 'Windows source audio' : state.track.artist;
-  $("live-hint").hidden = !live && !state.capabilities.browserLiveAudio;
+  $("live-hint").hidden =
+    !live && !state.capabilities.browserLiveAudio && !state.capabilities.remoteLive;
+  const laptopMusic = state.live?.source
+    ? `${state.live.source}${state.live.title ? ` · ${state.live.title}` : ""} (${state.live.playing ? "playing" : "paused"})`
+    : "no music app open";
   $("live-hint").textContent = !live
-    ? 'For live sound, start Live Transfer on the laptop, then listen here. No imported file is needed.'
+    ? state.capabilities.remoteLive
+      ? `Laptop music: ${laptopMusic}. Tap “Start on laptop” to play it with spatial sound here.`
+      : 'For live sound, start Live Transfer on the laptop, then listen here. No imported file is needed.'
     : !liveReady
     ? 'Start Live Transfer on the laptop. Listening will become available here.'
     : state.live?.captureHealthy
@@ -127,6 +135,15 @@ function render(snapshot) {
   // Previous/Next only exist for a Live source app (no file playlist).
   $("previous").hidden = !liveMedia;
   $("next").hidden = !liveMedia;
+  // Remote start/stop of Live Transfer (owner only).
+  const remoteLive = !!state.capabilities.remoteLive;
+  $("live-start").hidden = !remoteLive || live;
+  $("live-start").disabled = !connected || pending || state.transport.busy;
+  $("live-stop").hidden = !remoteLive || !live;
+  if (autoListen && state.audioSource === "live" && !browserAudio.active) {
+    autoListen = false;
+    browserAudio.start({ source: "live" });
+  }
   if (liveMedia) {
     $("play").disabled ||= !!state.live?.playing;
     $("pause").disabled ||= !state.live?.playing;
@@ -172,8 +189,12 @@ function render(snapshot) {
   $("ownership").textContent = live
     ? liveControl
       ? lease
-        ? 'You control the music, position and mode. Live start/stop stays on the laptop.'
-        : 'Take control to change the music, position and mode. Live start/stop stays on the laptop.'
+        ? state.capabilities.remoteLive
+          ? 'You control Live, the music, position and mode.'
+          : 'You control the music, position and mode. Live start/stop stays on the laptop.'
+        : state.capabilities.remoteLive
+          ? 'Take control to change Live, the music, position and mode.'
+          : 'Take control to change the music, position and mode. Live start/stop stays on the laptop.'
       : 'Live controls are on the laptop. Listening does not require control.'
     : lease
     ? "You control this session. Local controls take priority."
@@ -227,6 +248,8 @@ async function command(type, payload = {}) {
     // (lost lease, stale state, engine failure) needs control again.
     if (error.message === "media_command_failed") {
       message("The laptop music app did not accept that command.");
+    } else if (["no_music_app", "music_not_playing", "live_start_failed"].includes(error.message)) {
+      message(liveStartFailure(error.message));
     } else {
       lease = null;
       message(
@@ -390,6 +413,31 @@ setInterval(async () => {
 }, 10000);
 connect();
 
+// One tap: unlock audio now (Safari needs the tap), take control, start the
+// music and Live Transfer on the laptop, then listen when live audio is ready.
+$("live-start").addEventListener("click", async () => {
+  browserAudio.prepare();
+  try {
+    if (!lease) {
+      lease = (await request("control/lease", {})).controlLeaseId;
+      render((await request("session")).snapshot);
+    }
+    message("Starting the music and Live Transfer on the laptop…");
+    autoListen = true;
+    await command("live.start");
+    if (!state?.liveRunning) autoListen = false;
+  } catch (e) {
+    autoListen = false;
+    message(liveStartFailure(e.message));
+  }
+});
+$("live-stop").addEventListener("click", () => command("live.stop"));
+function liveStartFailure(code) {
+  if (code === "no_music_app") return "Open your music app on the laptop first.";
+  if (code === "music_not_playing") return "The laptop music app did not start playing. Check it on the laptop.";
+  if (code === "local_busy" || code === "control_busy") return "The laptop is busy right now. Try again in a moment.";
+  return `Could not start: ${code.replaceAll("_", " ")}.`;
+}
 $("listen").addEventListener("click", () => browserAudio.start({
   source: state?.liveRunning ? 'live' : 'file',
 }));

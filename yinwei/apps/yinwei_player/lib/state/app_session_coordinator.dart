@@ -22,6 +22,8 @@ class AppSessionCoordinator {
     this.applyLiveParams,
     this.applyLiveMode,
     this.liveMedia,
+    this.startLive,
+    this.stopLive,
     DateTime Function()? now,
   }) : _now = now ?? DateTime.now;
 
@@ -41,7 +43,20 @@ class AppSessionCoordinator {
   final Future<void> Function(SpatialParams params)? applyLiveParams;
   final Future<void> Function(PlaybackMode mode)? applyLiveMode;
   bool get liveControl => applyLiveParams != null && applyLiveMode != null;
-  static const _liveCommands = {'mode', 'point.set', 'scene.commit'};
+  static const _liveCommands = {
+    'mode',
+    'point.set',
+    'scene.commit',
+    'live.start',
+    'live.stop',
+  };
+
+  /// Start/stop Live Transfer from the remote, through the same path as the
+  /// laptop's Live button (start also plays the music app if it is paused).
+  /// Throw [RemoteFailure] for reasons the page should show.
+  final Future<void> Function()? startLive;
+  final Future<void> Function()? stopLive;
+  bool get remoteLive => startLive != null && stopLive != null;
 
   /// Play/pause/next/previous for the Live source app through Windows media
   /// controls. It drives the music app only; the audio engine is untouched.
@@ -157,6 +172,7 @@ class AppSessionCoordinator {
         'browserLiveAudio': browserLiveAudioAvailable,
         'liveControl': liveControl,
         'liveMedia': liveMedia != null,
+        'remoteLive': remoteLive,
         'remoteArray': false
       },
       'track': {
@@ -248,7 +264,9 @@ class AppSessionCoordinator {
         throw const RemoteFailure('local_busy');
       }
       final media = _mediaActions[input['type']];
-      if (media != null && (!live || liveMedia == null)) {
+      // Music-app commands also work before Live starts, so the remote can
+      // get the laptop playing.
+      if (media != null && liveMedia == null) {
         throw const RemoteFailure('live_media_unavailable');
       }
       if (live && media == null && !_liveCommands.contains(input['type'])) {
@@ -287,6 +305,24 @@ class AppSessionCoordinator {
             final ms = remoteNumber(payload, 'positionMs', 0,
                 controller.track.duration.inMilliseconds);
             await controller.seek(Duration(milliseconds: ms.round()));
+          case 'live.start':
+            if (!remoteLive) {
+              throw const RemoteFailure('unsupported_command', httpStatus: 400);
+            }
+            if (!live) {
+              try {
+                await startLive!();
+              } on RemoteFailure {
+                rethrow;
+              } catch (_) {
+                throw const RemoteFailure('live_start_failed');
+              }
+            }
+          case 'live.stop':
+            if (!remoteLive) {
+              throw const RemoteFailure('unsupported_command', httpStatus: 400);
+            }
+            if (live) await stopLive!();
           case 'media.play':
           case 'media.pause':
           case 'media.next':

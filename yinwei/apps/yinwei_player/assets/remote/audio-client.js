@@ -69,6 +69,15 @@ export class BrowserAudio {
   get active() {
     return this.context != null;
   }
+  // Create and resume the AudioContext inside a tap, so a later start()
+  // (after a slow laptop command) is still allowed to play in Safari.
+  prepare() {
+    if (this.active || this.prepared ||
+        typeof globalThis.AudioContext !== 'function') return;
+    this.prepared = new AudioContext();
+    this.prepared.resume().catch(() => {});
+  }
+
   async start({ source = 'file' } = {}) {
     if (this.active) return;
     if (typeof globalThis.AudioContext !== 'function' ||
@@ -78,7 +87,8 @@ export class BrowserAudio {
     }
     const generation = ++this.generation;
     try {
-      const context = new AudioContext();
+      const context = this.prepared ?? new AudioContext();
+      this.prepared = null;
       this.context = context;
       this.status('Starting browser audio…');
       // Resume directly inside the user gesture, before asynchronous setup.

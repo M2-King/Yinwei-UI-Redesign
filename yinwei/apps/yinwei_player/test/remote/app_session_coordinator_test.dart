@@ -142,11 +142,16 @@ void main() {
     final liveParams = <SpatialParams>[];
     final liveModes = <PlaybackMode>[];
     final mediaActions = <String>[];
+    final liveCalls = <String>[];
+    Object? startFailure;
+    var commandSeq = 0;
 
     setUp(() {
       liveParams.clear();
       liveModes.clear();
       mediaActions.clear();
+      liveCalls.clear();
+      startFailure = null;
       live = true;
       liveCoordinator = AppSessionCoordinator(
           controller: controller,
@@ -159,6 +164,15 @@ void main() {
           },
           applyLiveMode: (mode) async => liveModes.add(mode),
           liveMedia: (action) async => mediaActions.add(action),
+          startLive: () async {
+            liveCalls.add('start');
+            if (startFailure != null) throw startFailure!;
+            live = true;
+          },
+          stopLive: () async {
+            liveCalls.add('stop');
+            live = false;
+          },
           now: () => now);
     });
     tearDown(() => liveCoordinator.close());
@@ -168,7 +182,7 @@ void main() {
       final lease = liveCoordinator.acquireControl('ipad');
       return {
         'protocolVersion': 1,
-        'commandId': 'live_${type.replaceAll('.', '_')}',
+        'commandId': 'live_${type.replaceAll('.', '_')}_${++commandSeq}',
         'hostSessionId': snapshot['hostSessionId'],
         'controlLeaseId': lease['controlLeaseId'],
         'expectedStateVersion': snapshot['stateVersion'],
@@ -242,13 +256,43 @@ void main() {
               .having((e) => e.code, 'code', 'media_command_failed')));
     });
 
-    test('media commands are refused when Live is not running', () async {
+    test('media commands also work before Live starts', () async {
       live = false;
+      await liveCoordinator.command('ipad', command('media.play', const {}));
+      expect(mediaActions, ['play']);
+    });
+
+    test('remote start and stop Live through the hooks', () async {
+      live = false;
+      expect((liveCoordinator.snapshot()['capabilities'] as Map)['remoteLive'],
+          isTrue);
+      final started = await liveCoordinator.command(
+          'ipad', command('live.start', const {}));
+      expect(started['status'], 'native_applied');
+      expect(liveCalls, ['start']);
+      expect(live, isTrue);
+      // Starting again while Live runs is a no-op.
+      await liveCoordinator.command('ipad', command('live.start', const {}));
+      expect(liveCalls, ['start']);
+      await liveCoordinator.command('ipad', command('live.stop', const {}));
+      expect(liveCalls, ['start', 'stop']);
+      expect(live, isFalse);
+    });
+
+    test('start failures keep their reason; others become live_start_failed',
+        () async {
+      live = false;
+      startFailure = const RemoteFailure('no_music_app');
       await expectLater(
-          liveCoordinator.command('ipad', command('media.next', const {})),
+          liveCoordinator.command('ipad', command('live.start', const {})),
           throwsA(isA<RemoteFailure>()
-              .having((e) => e.code, 'code', 'live_media_unavailable')));
-      expect(mediaActions, isEmpty);
+              .having((e) => e.code, 'code', 'no_music_app')));
+      startFailure = StateError('device lost');
+      await expectLater(
+          liveCoordinator.command('ipad', command('live.start', const {})),
+          throwsA(isA<RemoteFailure>()
+              .having((e) => e.code, 'code', 'live_start_failed')));
+      expect(live, isFalse);
     });
 
     test('keep live transport on the laptop', () async {
