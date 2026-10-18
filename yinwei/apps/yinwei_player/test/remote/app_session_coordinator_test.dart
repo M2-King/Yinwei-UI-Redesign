@@ -143,6 +143,7 @@ void main() {
     final liveModes = <PlaybackMode>[];
     final mediaActions = <String>[];
     final liveCalls = <String>[];
+    final arrayModes = <ArrayMode>[];
     Object? startFailure;
     var commandSeq = 0;
 
@@ -151,6 +152,7 @@ void main() {
       liveModes.clear();
       mediaActions.clear();
       liveCalls.clear();
+      arrayModes.clear();
       startFailure = null;
       live = true;
       liveCoordinator = AppSessionCoordinator(
@@ -172,6 +174,10 @@ void main() {
           stopLive: () async {
             liveCalls.add('stop');
             live = false;
+          },
+          applyArrayMode: (mode) async {
+            arrayModes.add(mode);
+            await controller.applyArrayMode(mode);
           },
           now: () => now);
     });
@@ -293,6 +299,66 @@ void main() {
           throwsA(isA<RemoteFailure>()
               .having((e) => e.code, 'code', 'live_start_failed')));
       expect(live, isFalse);
+    });
+
+    test('Point/2.0 switch uses the hook and updates the 3D presentation',
+        () async {
+      var snap = liveCoordinator.snapshot();
+      expect((snap['capabilities'] as Map)['remoteArray'], isTrue);
+      expect((snap['spatialMode'] as Map)['array'], 'point');
+      expect((snap['presentation'] as Map)['presentation'], 'point');
+
+      await liveCoordinator.command(
+          'ipad', command('array.mode', {'mode': 'stereo2'}));
+      expect(arrayModes, [ArrayMode.stereo2]);
+      snap = liveCoordinator.snapshot();
+      expect((snap['spatialMode'] as Map)['array'], 'stereo2');
+      expect((snap['presentation'] as Map)['presentation'], 'stereo2');
+      expect((snap['presentation'] as Map)['arraySpeakers'], hasLength(2));
+      expect((snap['capabilities'] as Map)['pointControl'], isFalse);
+
+      await liveCoordinator.command(
+          'ipad', command('array.mode', {'mode': 'point'}));
+      snap = liveCoordinator.snapshot();
+      expect((snap['spatialMode'] as Map)['array'], 'point');
+      expect((snap['presentation'] as Map)['arraySpeakers'], isEmpty);
+    });
+
+    test('Orbit switch and speed reach the live engine; not in 2.0', () async {
+      await liveCoordinator.command(
+          'ipad', command('motion.set', {'motion': 'orbit', 'orbitHz': 0.8}));
+      expect(liveParams.last.motion, MotionMode.orbit);
+      expect(liveParams.last.orbitHz, closeTo(0.8, 1e-9));
+      final mode = liveCoordinator.snapshot()['spatialMode'] as Map;
+      expect(mode['motion'], 'orbit');
+      expect(mode['orbitHz'], closeTo(0.8, 1e-9));
+
+      await liveCoordinator.command(
+          'ipad', command('motion.set', {'motion': 'fixed'}));
+      expect(liveParams.last.motion, MotionMode.fixed);
+
+      await liveCoordinator.command(
+          'ipad', command('array.mode', {'mode': 'stereo2'}));
+      await expectLater(
+          liveCoordinator.command(
+              'ipad', command('motion.set', {'motion': 'orbit'})),
+          throwsA(isA<RemoteFailure>()
+              .having((e) => e.code, 'code', 'array_active')));
+    });
+
+    test('mode and orbit payloads are validated', () async {
+      for (final bad in [
+        ('array.mode', {'mode': 'quad'}),
+        ('motion.set', {'motion': 'spin'}),
+        ('motion.set', {'motion': 'orbit', 'orbitHz': 5}),
+      ]) {
+        await expectLater(
+            liveCoordinator.command('ipad', command(bad.$1, bad.$2)),
+            throwsA(isA<RemoteFailure>()
+                .having((e) => e.code, 'code', 'invalid_payload')),
+            reason: '${bad.$1} ${bad.$2}');
+      }
+      expect(arrayModes, isEmpty);
     });
 
     test('keep live transport on the laptop', () async {

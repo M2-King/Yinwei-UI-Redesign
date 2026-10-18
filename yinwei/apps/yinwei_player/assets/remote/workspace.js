@@ -25,6 +25,8 @@ window.addEventListener("message", (event) => {
       scene: state.scene,
     });
     api.applyPlaybackTelemetry(state.telemetry);
+    if (state.presentation && typeof api.applyPresentation === "function")
+      api.applyPresentation(state.presentation);
   }
   if (event.data.yinweiRemote === "suspended") api.setHostSuspended(true);
 });

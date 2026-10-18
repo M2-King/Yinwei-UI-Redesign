@@ -175,6 +175,23 @@ function render(snapshot) {
       `${Number($(id).value).toFixed(id === "distance" ? 1 : 0)}${suffix}`;
   }
   $("apply").disabled ||= !state.capabilities.pointControl;
+  // Point / 2.0 and Orbit mirror the laptop's controls: Orbit moves the
+  // single Point source, so it is off in 2.0 (as on the laptop).
+  const spatialMode = state.spatialMode || {};
+  const stereo2 = spatialMode.array === "stereo2";
+  const orbiting = spatialMode.motion === "orbit";
+  $("layout-modes").hidden = !state.capabilities.remoteArray;
+  $("mode-point").setAttribute("aria-pressed", String(!stereo2));
+  $("mode-stereo2").setAttribute("aria-pressed", String(stereo2));
+  $("motion-fixed").setAttribute("aria-pressed", String(!orbiting));
+  $("motion-orbit").setAttribute("aria-pressed", String(orbiting));
+  $("motion-fixed").disabled ||= stereo2;
+  $("motion-orbit").disabled ||= stereo2;
+  $("orbit-hz").disabled ||= stereo2 || !orbiting;
+  if (document.activeElement !== $("orbit-hz") && !pending &&
+      typeof spatialMode.orbitHz === "number")
+    $("orbit-hz").value = spatialMode.orbitHz;
+  $("orbit-hz-value").textContent = `${Number($("orbit-hz").value).toFixed(2)} Hz`;
   const selected = $("media").value;
   $("media").replaceChildren();
   for (const item of state.media) {
@@ -344,6 +361,19 @@ $("pause").addEventListener("click", () =>
   command(liveMediaActive() ? "media.pause" : "pause"));
 $("previous").addEventListener("click", () => command("media.previous"));
 $("next").addEventListener("click", () => command("media.next"));
+$("mode-point").addEventListener("click", () =>
+  command("array.mode", { mode: "point" }));
+$("mode-stereo2").addEventListener("click", () =>
+  command("array.mode", { mode: "stereo2" }));
+$("motion-fixed").addEventListener("click", () =>
+  command("motion.set", { motion: "fixed" }));
+$("motion-orbit").addEventListener("click", () =>
+  command("motion.set", { motion: "orbit", orbitHz: Number($("orbit-hz").value) }));
+$("orbit-hz").addEventListener("input", () => {
+  $("orbit-hz-value").textContent = `${Number($("orbit-hz").value).toFixed(2)} Hz`;
+});
+$("orbit-hz").addEventListener("change", () =>
+  command("motion.set", { motion: "orbit", orbitHz: Number($("orbit-hz").value) }));
 $("original").addEventListener("click", () =>
   command("mode", { mode: "original" }),
 );

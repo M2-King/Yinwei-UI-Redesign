@@ -6,6 +6,7 @@ import 'package:yinwei_player/remote/remote_protocol.dart';
 import 'package:yinwei_player/runtime/spatial_runtime_adapter.dart';
 import 'package:yinwei_player/runtime/spatial_scene_bridge.dart';
 import 'package:yinwei_player/runtime/orbit_pose_math.dart';
+import 'package:yinwei_player/runtime/workspace_presentation.dart';
 import 'package:yinwei_player/state/engine_controller.dart';
 
 /// An adapter around the owning app's existing controllers, never a new engine
@@ -24,6 +25,7 @@ class AppSessionCoordinator {
     this.liveMedia,
     this.startLive,
     this.stopLive,
+    this.applyArrayMode,
     DateTime Function()? now,
   }) : _now = now ?? DateTime.now;
 
@@ -49,6 +51,8 @@ class AppSessionCoordinator {
     'scene.commit',
     'live.start',
     'live.stop',
+    'array.mode',
+    'motion.set',
   };
 
   /// Start/stop Live Transfer from the remote, through the same path as the
@@ -57,6 +61,10 @@ class AppSessionCoordinator {
   final Future<void> Function()? startLive;
   final Future<void> Function()? stopLive;
   bool get remoteLive => startLive != null && stopLive != null;
+
+  /// Point / Stereo 2.0, through the same steps as the laptop's mode
+  /// switch (file engine, plus Live Transfer while it runs).
+  final Future<void> Function(ArrayMode mode)? applyArrayMode;
 
   /// Play/pause/next/previous for the Live source app through Windows media
   /// controls. It drives the music app only; the audio engine is untouched.
@@ -141,7 +149,8 @@ class AppSessionCoordinator {
         controller.params.azimuthDeg,
         controller.params.elevationDeg,
         controller.params.distanceM,
-        controller.params.motion.name
+        controller.params.motion.name,
+        controller.params.orbitHz
       ],
       'array': controller.runtimeAudioDiag()['speakers'],
       'arrayMode': controller.array.mode.name,
@@ -173,7 +182,7 @@ class AppSessionCoordinator {
         'liveControl': liveControl,
         'liveMedia': liveMedia != null,
         'remoteLive': remoteLive,
-        'remoteArray': false
+        'remoteArray': applyArrayMode != null
       },
       'track': {
         'title': controller.track.title,
@@ -187,6 +196,14 @@ class AppSessionCoordinator {
         'mode': controller.mode.name,
         'busy': controller.busy
       },
+      // What the laptop's mode and Orbit controls show, plus the 3D view's
+      // presentation (Point source, or the 2.0 L/R speakers).
+      'spatialMode': {
+        'array': controller.array.enabled ? 'stereo2' : 'point',
+        'motion': controller.params.motion.name,
+        'orbitHz': controller.params.orbitHz,
+      },
+      'presentation': _presentation(),
       'pose': {
         'azimuthDeg': controller.params.azimuthDeg,
         'elevationDeg': controller.params.elevationDeg,
@@ -346,6 +363,39 @@ class AppSessionCoordinator {
             } else {
               await controller.setMode(mode);
             }
+          case 'array.mode':
+            final arrayMode = switch (payload['mode']) {
+              'point' => ArrayMode.off,
+              'stereo2' => ArrayMode.stereo2,
+              _ =>
+                throw const RemoteFailure('invalid_payload', httpStatus: 400),
+            };
+            if (applyArrayMode == null) {
+              throw const RemoteFailure('unsupported_command', httpStatus: 400);
+            }
+            await applyArrayMode!(arrayMode);
+          case 'motion.set':
+            // Orbit moves the single Point source; the laptop disables it in
+            // 2.0 too.
+            if (controller.array.enabled) {
+              throw const RemoteFailure('array_active');
+            }
+            final motion = switch (payload['motion']) {
+              'fixed' => MotionMode.fixed,
+              'orbit' => MotionMode.orbit,
+              _ =>
+                throw const RemoteFailure('invalid_payload', httpStatus: 400),
+            };
+            final next = controller.params.copy()..motion = motion;
+            if (payload.containsKey('orbitHz')) {
+              next.orbitHz =
+                  remoteNumber(payload, 'orbitHz', 0.05, 2).toDouble();
+            }
+            final adopted = spatial.adoptPointParams(next);
+            if (!adopted.shouldWriteEngine) {
+              throw const RemoteFailure('invalid_scene');
+            }
+            await _applyParams(adopted.engineParams!, live: live);
           case 'point.set':
             if (controller.array.enabled) {
               throw const RemoteFailure('array_active');
@@ -425,6 +475,25 @@ class AppSessionCoordinator {
     result.then<void>((_) => _trimHistory(),
         onError: (Object _, StackTrace __) => _trimHistory());
     return result;
+  }
+
+  Map<String, dynamic> _presentation() {
+    final kind = workspacePresentationOf(
+      playbackMode: controller.mode,
+      arrayMode: controller.array.mode,
+    );
+    final selected = controller.array.selectedIndex;
+    return {
+      'type': 'presentationState',
+      'presentation': kind.name,
+      'selectedSpeakerIndex': selected,
+      'arraySpeakers': kind == WorkspacePresentation.stereo2
+          ? arraySpeakerVisuals(
+              speakers: controller.array.speakers,
+              selectedIndex: selected,
+            ).map((s) => s.toJson()).toList()
+          : const <Map<String, dynamic>>[],
+    };
   }
 
   Future<void> _applyParams(SpatialParams params, {required bool live}) => live

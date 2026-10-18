@@ -214,6 +214,13 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
       liveMedia: _caps.systemMedia ? _smtc.sendCommand : null,
       startLive: _caps.liveTransfer ? _startLiveFromRemote : null,
       stopLive: _caps.liveTransfer ? _stopLiveHrtf : null,
+      // Same steps as _onArrayMode, minus takeLocalControl().
+      applyArrayMode: _caps.array
+          ? (mode) async {
+              await _ctrl.applyArrayMode(mode);
+              if (_live.running) _live.applyLiveArray(_ctrl.array);
+            }
+          : null,
     );
     if (_backend == EngineBackend.native &&
         Platform.isWindows &&
