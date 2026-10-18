@@ -152,6 +152,10 @@ class SystemMediaService extends ChangeNotifier {
           'Bypass',
           '-File',
           script,
+          // The daemon exits when this process is gone: Windows does not end
+          // child processes with their parent, and closed players otherwise
+          // leave a poller running forever.
+          '$pid',
         ],
         mode: ProcessStartMode.normal,
       );
@@ -605,10 +609,14 @@ function Emit-Once {
 Write-Output 'YINWEI_SMTC_READY'
 [Console]::Out.Flush()
 
+$yinweiPid = 0
+if ($args.Count -gt 0) { [void][int]::TryParse([string]$args[0], [ref]$yinweiPid) }
 while ($true) {
   try { Emit-Once } catch { Write-Output '{"status":"no_session"}' }
   [Console]::Out.Flush()
   Start-Sleep -Milliseconds 400
+  # One poll can take seconds; the parent check costs milliseconds.
+  if ($yinweiPid -gt 0 -and -not (Get-Process -Id $yinweiPid -ErrorAction SilentlyContinue)) { exit 0 }
 }
 ''';
 

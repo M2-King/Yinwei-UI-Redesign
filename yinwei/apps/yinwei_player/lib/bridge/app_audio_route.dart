@@ -1,5 +1,7 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math';
 
 import 'package:path_provider/path_provider.dart';
 import 'package:yinwei_player/bridge/wet_output_policy.dart';
@@ -32,7 +34,159 @@ class AppAudioSplit {
   final bool silentSink;
 }
 
+/// Line transport to a routing helper. [lines] closes when it ends.
+class RouteHelperConnection {
+  RouteHelperConnection({
+    required this.lines,
+    required this.send,
+    required this.close,
+  });
+
+  final Stream<String> lines;
+  final void Function(String line) send;
+  final Future<void> Function() close;
+}
+
+/// Starts the routing script in `serve` mode and connects to its loopback
+/// port with a one-time token.
+Future<RouteHelperConnection> connectRouteHelper(String scriptPath) async {
+  final random = Random.secure();
+  final token =
+      List.generate(16, (_) => random.nextInt(256).toRadixString(16)).join();
+  final proc = await Process.start('powershell.exe', [
+    '-NoProfile',
+    '-NonInteractive',
+    '-ExecutionPolicy',
+    'Bypass',
+    '-File',
+    scriptPath,
+    'serve',
+    token,
+  ]);
+  unawaited(proc.stderr.drain<void>());
+  try {
+    final portLine = await proc.stdout
+        .transform(utf8.decoder)
+        .transform(const LineSplitter())
+        .firstWhere((line) => line.startsWith('__YW_PORT__ '))
+        .timeout(const Duration(seconds: 15));
+    final port = int.parse(portLine.substring('__YW_PORT__ '.length).trim());
+    final socket = await Socket.connect(InternetAddress.loopbackIPv4, port,
+        timeout: const Duration(seconds: 5));
+    socket.encoding = utf8;
+    socket.write('$token\n');
+    return RouteHelperConnection(
+      lines: socket
+          .cast<List<int>>()
+          .transform(utf8.decoder)
+          .transform(const LineSplitter()),
+      send: (line) => socket.write('$line\n'),
+      close: () async {
+        await socket.close();
+        socket.destroy();
+      },
+    );
+  } catch (_) {
+    proc.kill();
+    rethrow;
+  }
+}
+
+/// One warm routing helper (`serve` mode of the routing script). The C#
+/// helper is compiled and WinRT loaded once, so each command costs tens to a
+/// few hundred milliseconds instead of ~2 s for a fresh PowerShell. Commands
+/// are serialized. A helper that ends is reconnected on the next command;
+/// one that times out twice is abandoned and callers fall back to one-shot
+/// runs.
+class RouteHelperClient {
+  RouteHelperClient(this._connect,
+      {this.timeout = const Duration(seconds: 20)});
+
+  final Future<RouteHelperConnection> Function() _connect;
+  final Duration timeout;
+  RouteHelperConnection? _conn;
+  Completer<int>? _pending;
+  final List<String> _lines = [];
+  Future<void> _queue = Future<void>.value();
+  int _timeouts = 0;
+
+  /// True once the helper has timed out twice; use one-shot runs instead.
+  bool get abandoned => _timeouts >= 2;
+
+  Future<({int code, List<String> lines})> run(List<String> args) {
+    final result = Completer<({int code, List<String> lines})>();
+    _queue = _queue.then((_) async {
+      try {
+        result.complete(await _runUnlocked(args));
+      } catch (error, stack) {
+        result.completeError(error, stack);
+      }
+    });
+    return result.future;
+  }
+
+  Future<({int code, List<String> lines})> _runUnlocked(
+      List<String> args) async {
+    if (abandoned) throw StateError('route helper abandoned');
+    final conn = _conn ??= await _open();
+    _lines.clear();
+    final pending = _pending = Completer<int>();
+    conn.send(jsonEncode(args));
+    try {
+      final code = await pending.future.timeout(timeout);
+      return (code: code, lines: List<String>.of(_lines));
+    } on TimeoutException {
+      ++_timeouts;
+      _drop();
+      rethrow;
+    } finally {
+      _pending = null;
+    }
+  }
+
+  Future<RouteHelperConnection> _open() async {
+    final conn = await _connect();
+    conn.lines.listen(_onLine, onDone: () {
+      if (!identical(_conn, conn)) return;
+      _conn = null;
+      final pending = _pending;
+      if (pending != null && !pending.isCompleted) {
+        pending.completeError(StateError('route helper ended'));
+      }
+    }, onError: (Object _) {});
+    return conn;
+  }
+
+  void _onLine(String line) {
+    const end = '__YW_END__ ';
+    if (line.startsWith(end)) {
+      final pending = _pending;
+      if (pending != null && !pending.isCompleted) {
+        pending.complete(int.tryParse(line.substring(end.length).trim()) ?? 9);
+      }
+    } else {
+      _lines.add(line);
+    }
+  }
+
+  void _drop() {
+    final conn = _conn;
+    _conn = null;
+    if (conn != null) unawaited(conn.close().catchError((Object _) {}));
+  }
+
+  /// Ends the helper; it also exits by itself when Yinwei exits.
+  Future<void> close() async {
+    final conn = _conn;
+    _conn = null;
+    await conn?.close();
+  }
+}
+
 class AppAudioRouter {
+  AppAudioRouter({RouteHelperClient? helper}) : _helper = helper;
+
+  RouteHelperClient? _helper;
   String? _speakersId;
   bool _unmuteSpeakersOnRestore = false;
   final List<int> _routedPids = [];
@@ -255,7 +409,40 @@ class AppAudioRouter {
     await _setDirty(false);
   }
 
+  /// Start the warm helper ahead of time so the first Live Transfer does not
+  /// pay PowerShell start-up and C# compilation.
+  Future<void> warmUp() async {
+    if (!Platform.isWindows) return;
+    try {
+      await _helperClient().run(['ping']);
+    } catch (error) {
+      // _run falls back to one-shot PowerShell when the helper is unusable.
+    }
+  }
+
+  RouteHelperClient _helperClient() => _helper ??=
+      RouteHelperClient(() async => connectRouteHelper(await _ensureScript()));
+
   Future<List<String>> _run(List<String> args) async {
+    final helper = _helperClient();
+    if (!helper.abandoned) {
+      ({int code, List<String> lines})? result;
+      try {
+        result = await helper.run(args);
+      } catch (error) {
+        // Helper unavailable or timed out: run this command one-shot below.
+      }
+      if (result != null) {
+        if (result.code != 0) {
+          throw ProcessException('powershell.exe', args, '', result.code);
+        }
+        return result.lines.where((line) => line.trim().isNotEmpty).toList();
+      }
+    }
+    return _runOnce(args);
+  }
+
+  Future<List<String>> _runOnce(List<String> args) async {
     final script = await _ensureScript();
     final proc = await Process.run(
       'powershell.exe',
@@ -502,107 +689,158 @@ function Classify([string]$name) {
   return 'other'
 }
 
-if ($Action -eq 'list') {
-  $col = Get-RenderDevices
-  $phone = $null; $spk = $null; $nah = $null
-  foreach ($d in $col) {
-    $k = Classify $d.Name
-    if ($k -eq 'headphones' -and -not $phone) { $phone = $d }
-    if ($k -eq 'nahimic' -and -not $nah) { $nah = $d }
-    if ($k -eq 'speakers') {
-      if (-not $spk) { $spk = $d }
-      elseif ($d.Name -match 'Realtek|Realtek') { $spk = $d }
+function Invoke-YinweiAction([string]$Action, [string]$Arg1, [string]$Arg2, [string]$Arg3, [string]$Arg4) {
+  if ($Action -eq 'ping') { Write-Output 'PONG'; $script:YwCode = 0; return }
+  if ($Action -eq 'list') {
+    $col = Get-RenderDevices
+    $phone = $null; $spk = $null; $nah = $null
+    foreach ($d in $col) {
+      $k = Classify $d.Name
+      if ($k -eq 'headphones' -and -not $phone) { $phone = $d }
+      if ($k -eq 'nahimic' -and -not $nah) { $nah = $d }
+      if ($k -eq 'speakers') {
+        if (-not $spk) { $spk = $d }
+        elseif ($d.Name -match 'Realtek|Realtek') { $spk = $d }
+      }
     }
+    if ($phone) { Write-Output ("headphones|" + $phone.Name + "|" + $phone.Id) }
+    if ($spk) { Write-Output ("speakers|" + $spk.Name + "|" + $spk.Id) }
+    if ($nah) { Write-Output ("nahimic|" + $nah.Name + "|" + $nah.Id) }
+    # Silent virtual outputs nobody listens to, preferred first. Never a
+    # microphone-loopback endpoint.
+    $sinks = @()
+    foreach ($d in $col) {
+      $n = $d.Name.ToLowerInvariant()
+      if ($n -match 'microphone|麦克风') { continue }
+      $rank = 0
+      if ($n -match 'steam streaming speakers') { $rank = 1 }
+      elseif ($n -match 'todesk virtual audio') { $rank = 2 }
+      elseif ($n -match 'cable input|vb-audio') { $rank = 3 }
+      if ($rank -gt 0) { $sinks += [pscustomobject]@{ Rank = $rank; Device = $d } }
+    }
+    foreach ($s in ($sinks | Sort-Object Rank)) {
+      Write-Output ("sink|" + $s.Device.Name + "|" + $s.Device.Id)
+    }
+    $script:YwCode = 0; return
   }
-  if ($phone) { Write-Output ("headphones|" + $phone.Name + "|" + $phone.Id) }
-  if ($spk) { Write-Output ("speakers|" + $spk.Name + "|" + $spk.Id) }
-  if ($nah) { Write-Output ("nahimic|" + $nah.Name + "|" + $nah.Id) }
-  # Silent virtual outputs nobody listens to, preferred first. Never a
-  # microphone-loopback endpoint.
-  $sinks = @()
-  foreach ($d in $col) {
-    $n = $d.Name.ToLowerInvariant()
-    if ($n -match 'microphone|麦克风') { continue }
-    $rank = 0
-    if ($n -match 'steam streaming speakers') { $rank = 1 }
-    elseif ($n -match 'todesk virtual audio') { $rank = 2 }
-    elseif ($n -match 'cable input|vb-audio') { $rank = 3 }
-    if ($rank -gt 0) { $sinks += [pscustomobject]@{ Rank = $rank; Device = $d } }
+
+  function Pids-ForRoot([int]$root) {
+    $rootProc = Get-CimInstance Win32_Process -Filter "ProcessId=$root" -ErrorAction SilentlyContinue
+    if (-not $rootProc) { return @($root) }
+    $exe = $rootProc.Name
+    @(Get-CimInstance Win32_Process | Where-Object { $_.Name -eq $exe } | ForEach-Object { [int]$_.ProcessId })
   }
-  foreach ($s in ($sinks | Sort-Object Rank)) {
-    Write-Output ("sink|" + $s.Device.Name + "|" + $s.Device.Id)
+
+  if ($Action -eq 'apply') {
+    $root = [int]$Arg1
+    $dev = [string]$Arg2
+    $routed = 0
+    $applied = @()
+    foreach ($p in (Pids-ForRoot $root)) {
+      $hr = [YinweiPolicy]::Set([uint32]$p, $dev)
+      if ($hr -eq 0) { Write-Output "PID $p"; $routed++; $applied += $p }
+    }
+    if ($routed -eq 0) { $script:YwCode = 2; return }
+    $hr = [YinweiPolicy]::SetMuted($dev, $true)
+    if ($hr -ne 0) {
+      foreach ($p in $applied) { [void][YinweiPolicy]::Clear([uint32]$p) }
+      $script:YwCode = 3; return
+    }
+    $script:YwCode = 0; return
   }
+
+  if ($Action -eq 'mute-state') {
+    $was = [YinweiPolicy]::GetMuted([string]$Arg1)
+    Write-Output "MUTED_WAS $was"
+    if ($was -lt 0) { $script:YwCode = 4; return }
+    $script:YwCode = 0; return
+  }
+
+  if ($Action -eq 'clear') {
+    $bad = 0
+    foreach ($textPid in $Arg1.Split(',')) {
+      $parsedPid = 0
+      if (-not [int]::TryParse($textPid, [ref]$parsedPid) -or $parsedPid -le 0) { continue }
+      $hr = [YinweiPolicy]::Clear([uint32]$parsedPid)
+      if ($hr -ne 0) { $bad++ }
+    }
+    if ($bad -gt 0) { $script:YwCode = 5; return }
+    $script:YwCode = 0; return
+  }
+
+  if ($Action -eq 'clear-all') {
+    $hr = [YinweiPolicy]::ClearAll()
+    Write-Output ("CLEAR_HR $hr")
+    if ($hr -ne 0) { $script:YwCode = 5; return }
+    $script:YwCode = 0; return
+  }
+
+  if ($Action -eq 'unmute') {
+    $hr = [YinweiPolicy]::SetMuted([string]$Arg1, $false)
+    if ($hr -ne 0) { $script:YwCode = 6; return }
+    $script:YwCode = 0; return
+  }
+
+  if ($Action -eq 'restore') {
+    [void][YinweiPolicy]::ClearAll()
+    $dev = [string]$Arg1
+    $ids = @()
+    if ($Arg2) { $ids = $Arg2.Split(',') | ForEach-Object { [int]$_ } }
+    foreach ($p in $ids) {
+      if ($p -gt 0) { [void][YinweiPolicy]::Set([uint32]$p, $dev) }
+    }
+    if ($Arg3 -eq '1' -and $Arg4) {
+      [void][YinweiPolicy]::SetMuted($Arg4, $false)
+    }
+    $script:YwCode = 0; return
+  }
+}
+
+# serve: compile the helper and load WinRT once, then answer one JSON array
+# of arguments per line. Each answer ends with "__YW_END__ <code>".
+# Commands arrive over a loopback-only socket, not stdin: PowerShell does not
+# reliably read stdin written by a Dart parent. The port is printed on stdout;
+# the client must send $Arg1 (a one-time token) first. The helper exits when
+# the connection closes (including when Yinwei exits) or if no client
+# connects within 15 s.
+if ($Action -eq 'serve') {
+  $utf8 = New-Object System.Text.UTF8Encoding($false)
+  $listener = New-Object System.Net.Sockets.TcpListener([System.Net.IPAddress]::Loopback, 0)
+  $listener.Start()
+  [Console]::Out.WriteLine('__YW_PORT__ ' + $listener.LocalEndpoint.Port)
+  [Console]::Out.Flush()
+  $accept = $listener.AcceptTcpClientAsync()
+  if (-not $accept.Wait(15000)) { $listener.Stop(); exit 7 }
+  $client = $accept.Result
+  $listener.Stop()
+  $stream = $client.GetStream()
+  $reader = New-Object System.IO.StreamReader($stream, $utf8)
+  $writer = New-Object System.IO.StreamWriter($stream, $utf8)
+  $writer.NewLine = "`n"
+  if ([string]::IsNullOrEmpty($Arg1) -or $reader.ReadLine() -ne $Arg1) { $client.Close(); exit 8 }
+  while ($true) {
+    $line = $null
+    try { $line = $reader.ReadLine() } catch { break }
+    if ($null -eq $line) { break }
+    $script:YwCode = 9
+    $replies = @()
+    try {
+      # PowerShell 5.1 emits a JSON array as one object: unroll it.
+      $req = @(($line | ConvertFrom-Json) | ForEach-Object { [string]$_ }) + @('', '', '', '', '')
+      $script:YwCode = 0
+      $replies = @(Invoke-YinweiAction ([string]$req[0]) ([string]$req[1]) ([string]$req[2]) ([string]$req[3]) ([string]$req[4]))
+    } catch { $script:YwCode = 9 }
+    try {
+      foreach ($reply in $replies) { $writer.WriteLine([string]$reply) }
+      $writer.WriteLine('__YW_END__ ' + $script:YwCode)
+      $writer.Flush()
+    } catch { break }
+  }
+  $client.Close()
   exit 0
 }
 
-function Pids-ForRoot([int]$root) {
-  $rootProc = Get-CimInstance Win32_Process -Filter "ProcessId=$root" -ErrorAction SilentlyContinue
-  if (-not $rootProc) { return @($root) }
-  $exe = $rootProc.Name
-  @(Get-CimInstance Win32_Process | Where-Object { $_.Name -eq $exe } | ForEach-Object { [int]$_.ProcessId })
-}
-
-if ($Action -eq 'apply') {
-  $root = [int]$Arg1
-  $dev = [string]$Arg2
-  $routed = 0
-  $applied = @()
-  foreach ($p in (Pids-ForRoot $root)) {
-    $hr = [YinweiPolicy]::Set([uint32]$p, $dev)
-    if ($hr -eq 0) { Write-Output "PID $p"; $routed++; $applied += $p }
-  }
-  if ($routed -eq 0) { exit 2 }
-  $hr = [YinweiPolicy]::SetMuted($dev, $true)
-  if ($hr -ne 0) {
-    foreach ($p in $applied) { [void][YinweiPolicy]::Clear([uint32]$p) }
-    exit 3
-  }
-  exit 0
-}
-
-if ($Action -eq 'mute-state') {
-  $was = [YinweiPolicy]::GetMuted([string]$Arg1)
-  Write-Output "MUTED_WAS $was"
-  if ($was -lt 0) { exit 4 }
-  exit 0
-}
-
-if ($Action -eq 'clear') {
-  $bad = 0
-  foreach ($textPid in $Arg1.Split(',')) {
-    $parsedPid = 0
-    if (-not [int]::TryParse($textPid, [ref]$parsedPid) -or $parsedPid -le 0) { continue }
-    $hr = [YinweiPolicy]::Clear([uint32]$parsedPid)
-    if ($hr -ne 0) { $bad++ }
-  }
-  if ($bad -gt 0) { exit 5 }
-  exit 0
-}
-
-if ($Action -eq 'clear-all') {
-  $hr = [YinweiPolicy]::ClearAll()
-  Write-Output ("CLEAR_HR $hr")
-  if ($hr -ne 0) { exit 5 }
-  exit 0
-}
-
-if ($Action -eq 'unmute') {
-  $hr = [YinweiPolicy]::SetMuted([string]$Arg1, $false)
-  if ($hr -ne 0) { exit 6 }
-  exit 0
-}
-
-if ($Action -eq 'restore') {
-  [void][YinweiPolicy]::ClearAll()
-  $dev = [string]$Arg1
-  $ids = @()
-  if ($Arg2) { $ids = $Arg2.Split(',') | ForEach-Object { [int]$_ } }
-  foreach ($p in $ids) {
-    if ($p -gt 0) { [void][YinweiPolicy]::Set([uint32]$p, $dev) }
-  }
-  if ($Arg3 -eq '1' -and $Arg4) {
-    [void][YinweiPolicy]::SetMuted($Arg4, $false)
-  }
-  exit 0
-}
+$script:YwCode = 0
+Invoke-YinweiAction $Action $Arg1 $Arg2 $Arg3 $Arg4
+exit $script:YwCode
 ''';

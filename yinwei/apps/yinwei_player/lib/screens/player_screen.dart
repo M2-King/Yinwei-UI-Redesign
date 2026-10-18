@@ -258,6 +258,9 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
           return false;
         },
       );
+      // Warm the routing helper now so pressing Live Transfer does not wait
+      // for PowerShell start-up (~2 s per routing step otherwise).
+      unawaited(_audioRoute.warmUp());
       _live.refreshDevices();
     }
     final smoke = Platform.environment.containsKey('FLUTTER_TEST')
