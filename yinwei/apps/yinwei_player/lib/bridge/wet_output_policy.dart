@@ -16,6 +16,8 @@ class WetOutputPlan {
     required this.pinWetToHeadphones,
     required this.nahimicSharing,
     required this.speakersAreWet,
+    this.silentSink = false,
+    this.wetIsVirtual = false,
   });
 
   /// Empty wet name → cpal `default_output_device()`.
@@ -35,6 +37,13 @@ class WetOutputPlan {
 
   /// Muting speakers would also mute wet (same endpoint as default/pick).
   final bool speakersAreWet;
+
+  /// Dry goes to a silent virtual device instead of muted real speakers.
+  final bool silentSink;
+
+  /// Wet itself resolves to a virtual device (e.g. Steam made it the
+  /// Windows default), so nothing audible plays.
+  final bool wetIsVirtual;
 }
 
 class WetOutputPolicy {
@@ -70,7 +79,9 @@ class WetOutputPolicy {
     if (x.isEmpty || y.isEmpty) return false;
     if (x == y) return true;
     const min = 8;
-    if (x.length >= min && y.length >= min && (x.contains(y) || y.contains(x))) {
+    if (x.length >= min &&
+        y.length >= min &&
+        (x.contains(y) || y.contains(x))) {
       return true;
     }
     return false;
@@ -119,6 +130,7 @@ class WetOutputPolicy {
     required bool splitDetected,
     required Iterable<String> outputDevices,
     String defaultDeviceName = '',
+    bool silentSink = false,
   }) {
     final selected = selectedOutput.trim();
     final speakers = (detectedSpeakersName ?? '').trim();
@@ -139,6 +151,22 @@ class WetOutputPolicy {
       // silencing wet.
       speakersAreWet = false;
     }
+    final wetIsVirtual = classify(wetResolved) == AudioEndpointKind.ignore;
+    if (silentSink) {
+      // Nobody hears the sink: route dry there wherever wet is, unless wet
+      // itself is that sink.
+      final sinkIsWet = sameEndpoint(wetResolved, speakers);
+      return WetOutputPlan(
+        followSystemDefault: selected.isEmpty,
+        splitRoute: splitDetected && speakers.isNotEmpty && !sinkIsWet,
+        wetDeviceName: selected,
+        pinWetToHeadphones: false,
+        nahimicSharing: nahimicSharing,
+        speakersAreWet: sinkIsWet,
+        silentSink: true,
+        wetIsVirtual: wetIsVirtual,
+      );
+    }
     final splitRoute = splitDetected &&
         speakers.isNotEmpty &&
         !speakersAreWet &&
@@ -150,6 +178,7 @@ class WetOutputPolicy {
       pinWetToHeadphones: false,
       nahimicSharing: nahimicSharing,
       speakersAreWet: speakersAreWet,
+      wetIsVirtual: wetIsVirtual,
     );
   }
 
@@ -166,6 +195,19 @@ class WetOutputPolicy {
   }
 
   static String transferNote(WetOutputPlan plan) {
+    final note = _transferNote(plan);
+    if (!plan.wetIsVirtual) return note;
+    return '$note · 注意：Windows 默认输出是虚拟设备，湿声听不到——'
+        '请在声音设置里把扬声器或耳机设为默认';
+  }
+
+  static String _transferNote(WetOutputPlan plan) {
+    if (plan.splitRoute && plan.silentSink) {
+      if (plan.followSystemDefault) {
+        return '原声→静音虚拟设备，湿声→系统默认输出（扬声器/耳机都只听到湿声）';
+      }
+      return '原声→静音虚拟设备，湿声→${plan.wetDeviceName}';
+    }
     if (plan.splitRoute) {
       if (plan.followSystemDefault) {
         return '汽水→扬声器（已静音），湿声→系统默认输出';

@@ -649,7 +649,13 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
         detectedHeadphonesName: _split?.headphonesName,
       ),
     );
-    final detected = _split ?? await _audioRoute.detectSplit();
+    final detected = _split ??
+        await _audioRoute.detectSplit(
+          wetName: WetOutputPolicy.resolvedWetName(
+            selectedOutput: _live.selectedOutput,
+            defaultDeviceName: _live.defaultOutputName,
+          ),
+        );
     final plan = WetOutputPolicy.plan(
       selectedOutput: _live.selectedOutput,
       detectedHeadphonesName: detected?.headphonesName,
@@ -657,6 +663,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
       splitDetected: detected != null,
       outputDevices: _live.outputDevices,
       defaultDeviceName: _live.defaultOutputName,
+      silentSink: detected?.silentSink ?? false,
     );
     var splitNote = WetOutputPolicy.transferNote(plan);
     final split = plan.splitRoute ? detected : null;
@@ -749,7 +756,13 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
         ),
       );
     }
-    final split = _split ?? await _audioRoute.detectSplit();
+    final split = _split ??
+        await _audioRoute.detectSplit(
+          wetName: WetOutputPolicy.resolvedWetName(
+            selectedOutput: _live.selectedOutput,
+            defaultDeviceName: _live.defaultOutputName,
+          ),
+        );
     if (gen != _routeGen) {
       return WetOutputPolicy.transferNote(
         WetOutputPolicy.plan(
@@ -777,6 +790,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
       splitDetected: true,
       outputDevices: _live.outputDevices,
       defaultDeviceName: _live.defaultOutputName,
+      silentSink: split.silentSink,
     );
     var splitNote = WetOutputPolicy.transferNote(plan);
     if (!plan.splitRoute) {

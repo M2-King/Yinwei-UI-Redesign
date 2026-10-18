@@ -2,9 +2,13 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:path_provider/path_provider.dart';
+import 'package:yinwei_player/bridge/wet_output_policy.dart';
 
 /// Windows per-app output routing (EarTrumpet / AudioPolicyConfig).
-/// Pins the music app to **muted speakers** only when those speakers are
+/// Pins the music app to a **silent virtual device** (Steam Streaming
+/// Speakers, ToDesk Virtual Audio, VB-Cable) when one exists, so only wet is
+/// heard even when the laptop speakers are the wet output. Without one, it
+/// falls back to **muted speakers** only when those speakers are
 /// not the wet destination. Wet stays on Windows default (or an explicit
 /// pick) so Sony `WH-` names do not lock the stream. Nahimic sharing of
 /// the default mix is preserved when speakers *are* the wet device.
@@ -14,12 +18,18 @@ class AppAudioSplit {
     required this.headphonesId,
     required this.speakersName,
     required this.speakersId,
+    this.silentSink = false,
   });
 
   final String headphonesName;
   final String headphonesId;
+
+  /// The dry target: the speakers to mute, or a silent virtual device.
   final String speakersName;
   final String speakersId;
+
+  /// [speakersName] is a virtual device nobody listens to, not real speakers.
+  final bool silentSink;
 }
 
 class AppAudioRouter {
@@ -41,11 +51,17 @@ class AppAudioRouter {
   }) =>
       isRouted && rootPid > 0 && rootPid == routedRootPid;
 
-  Future<AppAudioSplit?> detectSplit() async {
+  /// [wetName] is the resolved wet device; a silent sink equal to it is
+  /// skipped (muting it would silence wet).
+  Future<AppAudioSplit?> detectSplit({String wetName = ''}) async {
     if (!Platform.isWindows) return null;
-    final rows = await _run(['list']);
+    return AppAudioRouter.parseSplit(await _run(['list']), wetName: wetName);
+  }
+
+  static AppAudioSplit? parseSplit(List<String> rows, {String wetName = ''}) {
     AppAudioEndpoint? phones;
     AppAudioEndpoint? speakers;
+    AppAudioEndpoint? sink;
     for (final line in rows) {
       final p = line.split('|');
       if (p.length < 3) continue;
@@ -56,7 +72,20 @@ class AppAudioRouter {
         phones = AppAudioEndpoint(name, id);
       } else if (kind == 'speakers' && speakers == null) {
         speakers = AppAudioEndpoint(name, id);
+      } else if (kind == 'sink' &&
+          sink == null &&
+          !WetOutputPolicy.sameEndpoint(name, wetName)) {
+        sink = AppAudioEndpoint(name, id);
       }
+    }
+    if (sink != null) {
+      return AppAudioSplit(
+        headphonesName: phones?.name ?? '',
+        headphonesId: phones?.id ?? '',
+        speakersName: sink.name,
+        speakersId: sink.id,
+        silentSink: true,
+      );
     }
     if (phones == null || speakers == null) return null;
     if (phones.id == speakers.id) return null;
@@ -488,6 +517,21 @@ if ($Action -eq 'list') {
   if ($phone) { Write-Output ("headphones|" + $phone.Name + "|" + $phone.Id) }
   if ($spk) { Write-Output ("speakers|" + $spk.Name + "|" + $spk.Id) }
   if ($nah) { Write-Output ("nahimic|" + $nah.Name + "|" + $nah.Id) }
+  # Silent virtual outputs nobody listens to, preferred first. Never a
+  # microphone-loopback endpoint.
+  $sinks = @()
+  foreach ($d in $col) {
+    $n = $d.Name.ToLowerInvariant()
+    if ($n -match 'microphone|麦克风') { continue }
+    $rank = 0
+    if ($n -match 'steam streaming speakers') { $rank = 1 }
+    elseif ($n -match 'todesk virtual audio') { $rank = 2 }
+    elseif ($n -match 'cable input|vb-audio') { $rank = 3 }
+    if ($rank -gt 0) { $sinks += [pscustomobject]@{ Rank = $rank; Device = $d } }
+  }
+  foreach ($s in ($sinks | Sort-Object Rank)) {
+    Write-Output ("sink|" + $s.Device.Name + "|" + $s.Device.Id)
+  }
   exit 0
 }
 
