@@ -16,6 +16,11 @@ const message = (text) => {
 let audioPresentation;
 // Set by "Start on laptop": begin listening once live audio is ready.
 let autoListen = false;
+// Sliders the user is touching. iPad Safari does not focus range inputs, so
+// focus alone cannot stop laptop updates from snapping them back mid-drag.
+const editing = new Set();
+// Sliders currently under a finger or pointer; never released by a send.
+const held = new Set();
 const browserAudio = new BrowserAudio({
   request: (path, body) => request(path, body),
   status: (text) => {
@@ -169,7 +174,7 @@ function render(snapshot) {
     ["distance", "distanceM", " m"],
   ]) {
     $(id).disabled ||= !state.capabilities.pointControl;
-    if (document.activeElement !== $(id) && !pending)
+    if (!editing.has(id) && document.activeElement !== $(id) && !pending)
       $(id).value = state.pose[property];
     $(`${id}-value`).textContent =
       `${Number($(id).value).toFixed(id === "distance" ? 1 : 0)}${suffix}`;
@@ -188,7 +193,7 @@ function render(snapshot) {
   $("motion-fixed").disabled ||= stereo2;
   $("motion-orbit").disabled ||= stereo2;
   $("orbit-hz").disabled ||= stereo2 || !orbiting;
-  if (document.activeElement !== $("orbit-hz") && !pending &&
+  if (!editing.has("orbit-hz") && document.activeElement !== $("orbit-hz") && !pending &&
       typeof spatialMode.orbitHz === "number")
     $("orbit-hz").value = spatialMode.orbitHz;
   $("orbit-hz-value").textContent = `${Number($("orbit-hz").value).toFixed(2)} Hz`;
@@ -373,7 +378,9 @@ $("orbit-hz").addEventListener("input", () => {
   $("orbit-hz-value").textContent = `${Number($("orbit-hz").value).toFixed(2)} Hz`;
 });
 $("orbit-hz").addEventListener("change", () =>
-  command("motion.set", { motion: "orbit", orbitHz: Number($("orbit-hz").value) }));
+  commitLatest("orbit", () =>
+    command("motion.set", { motion: "orbit", orbitHz: Number($("orbit-hz").value) }),
+    ["orbit-hz"]));
 $("original").addEventListener("click", () =>
   command("mode", { mode: "original" }),
 );
@@ -386,18 +393,58 @@ $("seek").addEventListener("change", () =>
 $("open").addEventListener("click", () =>
   command("open", { mediaId: $("media").value }),
 );
-$("apply").addEventListener("click", () =>
+const sendPosition = () =>
   command("point.set", {
     azimuthDeg: Number($("az").value),
     elevationDeg: Number($("el").value),
     distanceM: Number($("distance").value),
-  }),
-);
-for (const id of ["az", "el", "distance"])
+  });
+// Send a slider's value when it is released. If any command is in flight,
+// wait for it and then send the newest values, so no change is dropped.
+const queued = new Map();
+async function commitLatest(key, send, ids) {
+  queued.set(key, { send, ids });
+  while (pending) await new Promise((resolve) => setTimeout(resolve, 100));
+  const next = queued.get(key);
+  if (!next) return; // A later call already sent the newest values.
+  queued.delete(key);
+  try {
+    await next.send();
+  } finally {
+    for (const id of next.ids) if (!held.has(id)) editing.delete(id);
+    if (state) render(state);
+  }
+}
+$("apply").addEventListener("click", () =>
+  commitLatest("position", sendPosition, ["az", "el", "distance"]));
+for (const id of ["az", "el", "distance", "orbit-hz"]) {
+  const hold = () => {
+    held.add(id);
+    editing.add(id);
+  };
+  // Released without changing: let laptop updates show again shortly.
+  const release = () => {
+    held.delete(id);
+    setTimeout(() => {
+      if (!held.has(id) && !pending && !queued.size) editing.delete(id);
+    }, 600);
+  };
+  $(id).addEventListener("pointerdown", hold);
+  $(id).addEventListener("touchstart", hold, { passive: true });
+  $(id).addEventListener("input", () => editing.add(id));
+  $(id).addEventListener("pointerup", release);
+  $(id).addEventListener("touchend", release);
+  $(id).addEventListener("touchcancel", release);
+}
+for (const id of ["az", "el", "distance"]) {
   $(id).addEventListener("input", () => {
     $(`${id}-value`).textContent =
       `${Number($(id).value).toFixed(id === "distance" ? 1 : 0)}${id === "distance" ? " m" : "°"}`;
   });
+  // Apply as soon as the slider is released; no extra button needed.
+  $(id).addEventListener("change", () =>
+    commitLatest("position", sendPosition, ["az", "el", "distance"]));
+}
 $("signout").addEventListener("click", async () => {
   await browserAudio.stop();
   try {
