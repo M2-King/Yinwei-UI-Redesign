@@ -241,11 +241,9 @@ private final class YinweiRemoteReturnPlayer {
     targetFrames = Self.initialTargetFrames
     underruns = 0
     let session = AVAudioSession.sharedInstance()
-    // ReplayKit cannot silence the source app, so its original audio would
-    // play on top of the spatial return. Ducking lowers the source app while
-    // the return plays; it does not stop it, so capture continues.
-    try session.setCategory(.playback, mode: .default,
-                            options: [.mixWithOthers, .duckOthers])
+    // No .duckOthers: on device it did not stop the source app's original
+    // audio and may lower the level ReplayKit captures for the laptop.
+    try session.setCategory(.playback, mode: .default, options: [.mixWithOthers])
     try session.setActive(true)
     guard let format = AVAudioFormat(standardFormatWithSampleRate: 48_000, channels: 2)
     else { throw YinweiReplayKitToneError.bufferAllocationFailed }

@@ -1,3 +1,4 @@
+import 'dart:collection';
 import 'dart:typed_data';
 
 /// Wire input has one fixed format. Resampling belongs at the capture edge,
@@ -96,7 +97,7 @@ abstract class RemoteTransformAdapter {
   void close() => stop();
 }
 
-/// Numeric validation and token bucket, with no retained input-media queue.
+/// Numeric validation, token bucket and a short bounded in-memory backlog.
 class RemoteTransformFlow {
   RemoteTransformFlow(this.epoch, this.adapter, {DateTime Function()? now})
       : _now = now ?? DateTime.now {
@@ -104,8 +105,17 @@ class RemoteTransformFlow {
     lastInput = _updated;
   }
 
-  static const inputCredit = 8;
-  static const outputCredit = 24;
+  // Windows must cover the internet round trip (iPad → tunnel → laptop and
+  // back). At 8 × 10 ms the uplink stalled whenever the RTT exceeded 80 ms,
+  // dropping frames and forcing output resets. 32 frames = 320 ms of audio.
+  static const inputCredit = 32;
+  static const outputCredit = 64;
+  // Laptop bundles released before the wider windows advertise these; clients
+  // still accept them so a new iPad build works with an older laptop.
+  static const legacyInputCredit = 8;
+  static const legacyOutputCredit = 24;
+  static const backlogFrames = inputCredit;
+  final _backlog = ListQueue<(RemoteInputFrame, bool)>();
   final int epoch;
   final RemoteTransformAdapter adapter;
   final DateTime Function() _now;
@@ -136,23 +146,38 @@ class RemoteTransformFlow {
     _lastSequence = frame.sequence;
     _nextFrame = frame.firstFrame + RemoteInputFrame.frames;
     lastInput = now;
-    final delivered =
-        adapter.tryPush(frame, discontinuous: _gap || frame.discontinuous);
-    final resetOutput = delivered && (_gap || frame.discontinuous);
-    _gap = !delivered;
-    if (delivered) {
+    // Network frames arrive in bursts, but the native ingress queue holds
+    // only ~43 ms and rejects input while its worker holds the lock. Keep a
+    // short ordered backlog and retry it from the 10 ms pump instead of
+    // dropping: each drop forces an output reset that flushes the listener.
+    final discontinuous = _gap || frame.discontinuous;
+    final queued = _backlog.length < backlogFrames;
+    if (queued) {
+      _backlog.add((frame, discontinuous));
+      _gap = false;
       ++accepted;
     } else {
+      _gap = true;
       ++dropped;
     }
+    drain();
     return {
       'type': 'inputAck',
       'sequence': frame.sequence,
       'epoch': epoch,
-      'accepted': delivered,
-      'resetOutput': resetOutput,
+      'accepted': queued,
+      'resetOutput': queued && discontinuous,
       'dropped': dropped
     };
+  }
+
+  /// Push backlogged frames in order until the adapter is full.
+  void drain() {
+    while (_backlog.isNotEmpty) {
+      final (frame, discontinuous) = _backlog.first;
+      if (!adapter.tryPush(frame, discontinuous: discontinuous)) return;
+      _backlog.removeFirst();
+    }
   }
 }
 

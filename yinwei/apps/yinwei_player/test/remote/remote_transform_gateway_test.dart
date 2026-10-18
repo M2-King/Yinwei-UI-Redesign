@@ -138,19 +138,21 @@ void main() {
     expect(adapter.gaps, [true]);
   });
 
-  test('client drops newest instead of retaining more than eight input chunks',
+  test('client drops newest instead of retaining more than one input window',
       () async {
     final value = await client();
-    for (var i = 0; i < 8; ++i) {
+    const credit = RemoteTransformFlow.inputCredit;
+    for (var i = 0; i < credit; ++i) {
       expect(value.trySend(syntheticInput()), true);
     }
     expect(value.trySend(syntheticInput()), false);
-    expect(value.pendingCount, 8);
+    expect(value.pendingCount, credit);
     expect(value.dropped, 1);
     await eventually(() => value.pendingCount == 0);
+    await eventually(() => adapter.pushes == credit);
     await Future<void>.delayed(const Duration(milliseconds: 100));
     expect(value.trySend(syntheticInput()), true);
-    await eventually(() => adapter.pushes == 9);
+    await eventually(() => adapter.pushes == credit + 1);
     expect(adapter.gaps.last, true);
   });
 
@@ -380,18 +382,19 @@ void main() {
       () async {
     final stream = await raw();
     var output = 0;
-    // Drain without ACKs so the gateway sends at most 24 complete packets.
+    // Drain without ACKs so the gateway sends at most one output window.
+    const credit = RemoteTransformFlow.outputCredit;
     final drain = () async {
       while (await stream.events.moveNext()) {
         if (stream.events.current is List<int>) ++output;
       }
     }();
-    for (var i = 1; i <= 40; ++i) {
+    for (var i = 1; i <= credit + 16; ++i) {
       stream.socket.add(input(stream.epoch, sequence: i, frame: (i - 1) * 480));
       await Future<void>.delayed(const Duration(milliseconds: 15));
     }
     await Future<void>.delayed(const Duration(milliseconds: 60));
-    expect(output, 24);
+    expect(output, credit);
     expect(adapter.queued, 8);
     expect(adapter.peakQueued, lessThanOrEqualTo(8));
     await stream.socket.close();

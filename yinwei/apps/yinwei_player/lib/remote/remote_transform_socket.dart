@@ -148,8 +148,11 @@ class RemoteTransformSocket {
       return;
     }
     try {
+      flow.drain();
       for (var i = 0;
-          i < 2 && _outstanding.length < RemoteTransformFlow.outputCredit;
+          // Up to 4 packets per tick: Windows timers can fire every ~15.6 ms,
+          // and the link must catch up after a network stall.
+          i < 4 && _outstanding.length < RemoteTransformFlow.outputCredit;
           ++i) {
         final Uint8List? packet = adapter.read();
         if (packet == null) break;

@@ -50,7 +50,8 @@ class RemoteTransformClient {
   int _epoch = 0, _sequence = 0, _firstFrame = 0, _generation = 0;
   bool _starting = false, _disposed = false, _gap = true;
   int dropped = 0, accepted = 0, serverDropped = 0;
-  double _tokens = RemoteTransformFlow.inputCredit.toDouble();
+  int _inputCredit = RemoteTransformFlow.legacyInputCredit;
+  double _tokens = RemoteTransformFlow.legacyInputCredit.toDouble();
   DateTime _tokenTime = DateTime.now();
   bool get connected => _socket != null && _epoch > 0;
   int get epoch => _epoch;
@@ -227,10 +228,10 @@ class RemoteTransformClient {
     final now = DateTime.now();
     _tokens = (_tokens +
             now.difference(_tokenTime).inMicroseconds.clamp(0, 1000000) / 10000)
-        .clamp(0, RemoteTransformFlow.inputCredit)
+        .clamp(0, _inputCredit)
         .toDouble();
     _tokenTime = now;
-    if (_tokens < 1 || _pending.length >= RemoteTransformFlow.inputCredit) {
+    if (_tokens < 1 || _pending.length >= _inputCredit) {
       ++dropped;
       _gap = true;
       return false;
@@ -279,11 +280,16 @@ class RemoteTransformClient {
           data['sampleRate'] == 48000 &&
           data['channels'] == 2 &&
           data['frames'] == 480 &&
-          data['inputCredit'] == 8 &&
-          data['outputCredit'] == 24) {
+          ((data['inputCredit'] == RemoteTransformFlow.inputCredit &&
+                  data['outputCredit'] == RemoteTransformFlow.outputCredit) ||
+              (data['inputCredit'] == RemoteTransformFlow.legacyInputCredit &&
+                  data['outputCredit'] ==
+                      RemoteTransformFlow.legacyOutputCredit))) {
         _epoch = data['epoch'] as int;
         _sequence = _firstFrame = dropped = accepted = serverDropped = 0;
-        _tokens = RemoteTransformFlow.inputCredit.toDouble();
+        // Never send more than the laptop's announced window.
+        _inputCredit = data['inputCredit'] as int;
+        _tokens = _inputCredit.toDouble();
         _tokenTime = DateTime.now();
         _gap = true;
         _output = RemoteOutputValidator(_epoch);

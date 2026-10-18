@@ -63,35 +63,65 @@ void main() {
     expect(adapter.gaps, [true, true]);
   });
 
-  test('rate bucket allows eight chunks then enforces 100 chunks/sec', () {
+  test('rate bucket allows one window of chunks then enforces 100/sec', () {
     var now = DateTime.utc(2026);
     final adapter = SyntheticTransformAdapter()..start(7);
     final flow = RemoteTransformFlow(7, adapter, now: () => now);
-    for (var i = 1; i <= 8; ++i) {
+    const credit = RemoteTransformFlow.inputCredit;
+    for (var i = 1; i <= credit; ++i) {
       flow.push(input(sequence: i, firstFrame: (i - 1) * 480));
     }
-    expect(() => flow.push(input(sequence: 9, firstFrame: 3840)),
+    expect(
+        () => flow.push(input(sequence: credit + 1, firstFrame: credit * 480)),
         throwsFormatException);
     now = now.add(const Duration(milliseconds: 10));
-    expect(flow.push(input(sequence: 9, firstFrame: 3840))['accepted'], false);
+    flow.push(input(sequence: credit + 1, firstFrame: credit * 480));
     expect(adapter.peakQueued, 8);
   });
 
-  test('overload drops newest chunks and marks next delivered input as a gap',
+  test('full adapter backlogs frames and drains them in order without gaps',
       () {
     var now = DateTime.utc(2026);
     final adapter = SyntheticTransformAdapter()..start(7);
     final flow = RemoteTransformFlow(7, adapter, now: () => now);
     for (var i = 1; i <= 12; ++i) {
       now = now.add(const Duration(milliseconds: 10));
+      expect(
+          flow.push(input(sequence: i, firstFrame: (i - 1) * 480))['accepted'],
+          true);
+    }
+    expect(flow.accepted, 12);
+    expect(flow.dropped, 0);
+    expect(adapter.pushes, 8);
+    for (var i = 0; i < 4; ++i) {
+      adapter.read();
+    }
+    flow.drain();
+    expect(adapter.pushes, 12);
+    expect(adapter.gaps, [true, ...List.filled(11, false)]);
+  });
+
+  test('backlog overflow drops newest and marks next queued input as a gap',
+      () {
+    var now = DateTime.utc(2026);
+    final adapter = SyntheticTransformAdapter()..start(7);
+    final flow = RemoteTransformFlow(7, adapter, now: () => now);
+    const held = 8 + RemoteTransformFlow.backlogFrames;
+    for (var i = 1; i <= held + 1; ++i) {
+      now = now.add(const Duration(milliseconds: 10));
       flow.push(input(sequence: i, firstFrame: (i - 1) * 480));
     }
-    expect(flow.accepted, 8);
-    expect(flow.dropped, 4);
-    expect(adapter.queued, 8);
-    adapter.read();
+    expect(flow.accepted, held);
+    expect(flow.dropped, 1);
+    while (adapter.queued > 0) {
+      adapter.read();
+      flow.drain();
+    }
     now = now.add(const Duration(milliseconds: 10));
-    flow.push(input(sequence: 13, firstFrame: 5760));
+    final ack =
+        flow.push(input(sequence: held + 2, firstFrame: (held + 1) * 480));
+    expect(ack['resetOutput'], true);
+    flow.drain();
     expect(adapter.gaps.last, true);
     adapter.stop();
     expect(adapter.queued, 0);
