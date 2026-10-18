@@ -520,7 +520,8 @@ setInterval(async () => {
   // (e.g. the network came back after a longer drop).
   if (!lease) return reclaimControl();
   try {
-    lease = (await request("control/lease", {})).controlLeaseId;
+    // Automatic: after a laptop takeover the laptop refuses it.
+    lease = (await request("control/lease", { auto: true })).controlLeaseId;
   } catch (_) {
     // A renewal that failed on its own (network blip, paused page) is
     // retried once instead of greying out every control.
