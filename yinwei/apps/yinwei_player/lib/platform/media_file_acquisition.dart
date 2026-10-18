@@ -12,6 +12,12 @@ abstract class MediaFileAcquisition {
 
   Future<String> prepareReadablePath(String selectedPath);
 
+  /// Imported files the user can replay, newest first.
+  Future<List<MediaLibraryEntry>> library();
+
+  /// Deletes one imported file. Paths outside the owned cache are ignored.
+  Future<void> remove(String path);
+
   factory MediaFileAcquisition.create({
     required PlatformCapabilities capabilities,
     bool? isIOS,
@@ -34,11 +40,34 @@ abstract class MediaFileAcquisition {
   }
 }
 
+/// One file in the app-owned import cache.
+class MediaLibraryEntry {
+  const MediaLibraryEntry({
+    required this.path,
+    required this.title,
+    required this.bytes,
+    required this.modified,
+  });
+
+  final String path;
+
+  /// The original file name, without the cache's collision suffix.
+  final String title;
+  final int bytes;
+  final DateTime modified;
+}
+
 class PassthroughMediaFileAcquisition implements MediaFileAcquisition {
   const PassthroughMediaFileAcquisition();
 
   @override
   Future<String> prepareReadablePath(String selectedPath) async => selectedPath;
+
+  @override
+  Future<List<MediaLibraryEntry>> library() async => const [];
+
+  @override
+  Future<void> remove(String path) async {}
 }
 
 /// Copies a selected file into an app-owned directory before engine open.
@@ -50,8 +79,8 @@ class CopyingMediaFileAcquisition implements MediaFileAcquisition {
     required this.resolveDirectory,
     Future<void> Function(String from, String to)? copy,
     DateTime Function()? now,
-    this.maxFiles = 8,
-    this.maxTotalBytes = 2 * 1024 * 1024 * 1024,
+    this.maxFiles = 32,
+    this.maxTotalBytes = 4 * 1024 * 1024 * 1024,
   })  : assert(maxFiles > 0),
         assert(maxTotalBytes > 0),
         _copy = copy ?? _copyFile,
@@ -109,6 +138,43 @@ class CopyingMediaFileAcquisition implements MediaFileAcquisition {
     }
     await _prune(dir, keepPath: dest);
     return dest;
+  }
+
+  @override
+  Future<List<MediaLibraryEntry>> library() async {
+    final dir = await resolveDirectory();
+    if (!dir.existsSync()) return const [];
+    final entries = dir
+        .listSync(followLinks: false)
+        .whereType<File>()
+        .where((file) => !file.path.endsWith('.partial'))
+        .map((file) {
+      final stat = file.statSync();
+      return MediaLibraryEntry(
+        path: file.absolute.path,
+        title: _title(file.path),
+        bytes: stat.size,
+        modified: stat.modified,
+      );
+    }).toList()
+      ..sort((a, b) => b.modified.compareTo(a.modified));
+    return entries;
+  }
+
+  @override
+  Future<void> remove(String path) async {
+    final dir = await resolveDirectory();
+    final file = File(path);
+    if (!_isInside(file, dir) || !file.existsSync()) return;
+    await file.delete();
+  }
+
+  /// `Song-1760000000000000-3.flac` → `Song.flac`.
+  static String _title(String path) {
+    final name = path.split(RegExp(r'[\\/]')).last;
+    final match = RegExp(r'^(.*)-\d+-\d+(\.[^.]*)?$').firstMatch(name);
+    if (match == null) return name;
+    return '${match.group(1)}${match.group(2) ?? ''}';
   }
 
   static bool _isInside(File file, Directory directory) {

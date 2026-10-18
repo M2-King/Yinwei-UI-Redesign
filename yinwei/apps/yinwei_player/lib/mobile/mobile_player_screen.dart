@@ -35,6 +35,7 @@ class MobilePlayerScreen extends StatefulWidget {
     this.capabilities = PlatformCapabilities.ios,
     this.loadError,
     this.onOpen,
+    this.onLibrary,
     this.onExport,
     this.onTogglePlay,
     this.onSeek,
@@ -53,6 +54,7 @@ class MobilePlayerScreen extends StatefulWidget {
   final ValueNotifier<PlaybackTelemetryV1> telemetry;
   final SceneBridgeResult Function(String raw) onSceneIntent;
   final VoidCallback? onOpen;
+  final VoidCallback? onLibrary;
   final VoidCallback? onExport;
   final VoidCallback? onTogglePlay;
   final ValueChanged<Duration>? onSeek;
@@ -196,6 +198,7 @@ class _MobilePlayerScreenState extends State<MobilePlayerScreen> {
                     controller: c,
                     onTogglePlay: widget.onTogglePlay,
                     onOpen: widget.onOpen,
+                    onLibrary: widget.onLibrary,
                     onExport: widget.onExport,
                     onSeek: widget.onSeek,
                   ),

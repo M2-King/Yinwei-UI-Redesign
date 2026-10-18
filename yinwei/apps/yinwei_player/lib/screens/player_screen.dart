@@ -46,12 +46,14 @@ import 'package:yinwei_player/widgets/island_bar.dart';
 import 'package:yinwei_player/widgets/now_playing_panel.dart';
 import 'package:yinwei_player/widgets/spatial_workspace.dart';
 import 'package:yinwei_player/widgets/position_sidebar.dart';
+import 'package:yinwei_player/mobile/mobile_library_sheet.dart';
 import 'package:yinwei_player/mobile/mobile_player_screen.dart';
 import 'package:yinwei_player/platform/android_playback_capture.dart';
 import 'package:yinwei_player/platform/audio_session_coordinator.dart';
 import 'package:yinwei_player/platform/live_activity_bridge.dart';
 import 'package:yinwei_player/platform/live_activity_coordinator.dart';
 import 'package:yinwei_player/platform/media_export_delivery.dart';
+import 'package:yinwei_player/platform/ios_inbox_import.dart';
 import 'package:yinwei_player/platform/media_file_acquisition.dart';
 import 'package:yinwei_player/platform/screen_audio_probe.dart';
 import 'package:yinwei_player/mobile/mobile_visual_pose.dart';
@@ -114,6 +116,9 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
   Future<void>? _remoteStartup;
   late final LiveActivityCoordinator _liveActivity;
   late final MediaFileAcquisition _mediaFiles;
+  IosInboxImport? _inbox;
+  AppLifecycleListener? _inboxLifecycle;
+  bool _inboxBusy = false;
   late final MediaExportDelivery _mediaExport;
   late final AudioSessionCoordinator _audioSession;
   SphericalV1? _liveActivityFrozenPose;
@@ -203,6 +208,13 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
     }
     _mediaFiles =
         widget.mediaFiles ?? MediaFileAcquisition.create(capabilities: _caps);
+    if (Platform.isIOS && _caps.mobileFileImport) {
+      _inbox = IosInboxImport(media: _mediaFiles);
+      _inboxLifecycle =
+          AppLifecycleListener(onResume: () => unawaited(_importInbox()));
+      WidgetsBinding.instance
+          .addPostFrameCallback((_) => unawaited(_importInbox()));
+    }
     _mediaExport =
         widget.mediaExport ?? MediaExportDelivery.create(capabilities: _caps);
     _audioSession = widget.audioSession ??
@@ -864,6 +876,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
   @override
   void dispose() {
     _disposing = true;
+    _inboxLifecycle?.dispose();
     if (_nativeWindow) windowManager.removeListener(this);
     _followDebounce?.cancel();
     _islandAnim?.cancel();
@@ -920,6 +933,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
         telemetry: _telemetry,
         onSceneIntent: _onSceneIntent,
         onOpen: () => unawaited(_onOpen()),
+        onLibrary: _caps.mobileFileImport ? _showLibrary : null,
         onExport: _ctrl.hasOpenedFile ? () => unawaited(_onExport()) : null,
         onTogglePlay: () => unawaited(_onIosTogglePlay()),
         onSeek: (position) => unawaited(_ctrl.seek(position)),
@@ -1476,6 +1490,42 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
       'systemTitle': _smtc.state.title,
       'systemPlaying': _smtc.state.playing,
     };
+  }
+
+  void _showLibrary() {
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: YinweiColors.panel,
+      isScrollControlled: true,
+      constraints: BoxConstraints(
+        maxHeight: MediaQuery.sizeOf(context).height * 0.7,
+        maxWidth: 640,
+      ),
+      builder: (sheet) => MobileLibrarySheet(
+        media: _mediaFiles,
+        onPlay: (path) => unawaited(_openMediaPath(path)),
+        onImport: () {
+          Navigator.of(sheet).pop();
+          unawaited(_onOpen());
+        },
+      ),
+    );
+  }
+
+  /// Files shared to Yinwei from the Files app or a share sheet.
+  Future<void> _importInbox() async {
+    final inbox = _inbox;
+    if (inbox == null || _inboxBusy) return;
+    _inboxBusy = true;
+    try {
+      final paths = await inbox.collect();
+      if (paths.isEmpty || !mounted) return;
+      await _openMediaPath(paths.last);
+    } catch (e) {
+      debugPrint('[Library] inbox import failed: $e');
+    } finally {
+      _inboxBusy = false;
+    }
   }
 
   Future<void> _onOpen() async {

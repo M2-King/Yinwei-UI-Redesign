@@ -137,7 +137,9 @@ class _IosReplayKitAudioProbePanelState
               children: [
                 Expanded(
                   child: Text(
-                    'Music App Audio — Native Test',
+                    'Experimental · Music capture',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                     style: Theme.of(context)
                         .textTheme
                         .titleSmall
@@ -180,7 +182,7 @@ class _IosReplayKitAudioProbePanelState
                       ),
                       PopupMenuItem(
                         value: _ProbeMenuAction.liveTransform,
-                        child: Text('Live Transform on laptop'),
+                        child: Text('Live Transform on laptop (experimental)'),
                       ),
                       PopupMenuItem(
                         value: _ProbeMenuAction.screenAudio,

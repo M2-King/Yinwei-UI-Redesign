@@ -1,6 +1,6 @@
 # Option A — play music inside Yinwei on the iPad
 
-Date: 2026-10-18 · Status: **plan, awaiting owner approval** · Owner decision: option A
+Date: 2026-10-18 · Status: **approved 2026-10-18; A2 items 1, 3, 4 implemented, A0 device test pending** · Owner decision: option A
 
 ## Why
 
@@ -75,6 +75,19 @@ Most likely outcomes and the planned response:
    not the main way to listen; leave it working for comparison.
 4. Optional: "Open in Yinwei" from the Files share sheet
    (`CFBundleDocumentTypes` for audio UTIs).
+
+A2 progress (2026-10-18, source + automated tests only):
+
+- Done: **Library** button on the transport opens imported files (tap to
+  play, delete); cache raised to 32 files / 4 GiB. **Open in Yinwei**: audio
+  and MP4/MOV document types with `LSSupportsOpeningDocumentsInPlace = NO`;
+  iOS copies shared files to `Documents/Inbox`, which Dart imports on launch
+  and resume (`IosInboxImport`) and then plays the newest. Capture panel and
+  the laptop Live Transform entry are labelled experimental.
+- Not started: Now Playing / lock-screen controls (wait for A0 lifecycle).
+- Verified: full Flutter suite 585 passed, 5 skipped; library/inbox/sheet
+  tests added; capture-panel golden updated (title now fits one line).
+  Not verified on device.
 
 ### A3 — signed delivery
 

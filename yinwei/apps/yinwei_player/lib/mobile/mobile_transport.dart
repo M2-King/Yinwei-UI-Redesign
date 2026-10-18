@@ -8,6 +8,7 @@ class MobileTransport extends StatefulWidget {
     required this.controller,
     this.onTogglePlay,
     this.onOpen,
+    this.onLibrary,
     this.onExport,
     this.onSeek,
   });
@@ -15,6 +16,7 @@ class MobileTransport extends StatefulWidget {
   final EngineController controller;
   final VoidCallback? onTogglePlay;
   final VoidCallback? onOpen;
+  final VoidCallback? onLibrary;
   final VoidCallback? onExport;
   final ValueChanged<Duration>? onSeek;
 
@@ -111,6 +113,19 @@ class _MobileTransportState extends State<MobileTransport> {
                 child: const Text('Open'),
               ),
             ),
+            if (widget.onLibrary != null) ...[
+              const SizedBox(width: 10),
+              SizedBox(
+                width: 48,
+                height: 48,
+                child: IconButton.outlined(
+                  key: const Key('ios-library-button'),
+                  tooltip: 'Library',
+                  onPressed: widget.onLibrary,
+                  icon: const Icon(Icons.library_music_rounded, size: 20),
+                ),
+              ),
+            ],
             const SizedBox(width: 10),
             SizedBox(
               width: 48,
