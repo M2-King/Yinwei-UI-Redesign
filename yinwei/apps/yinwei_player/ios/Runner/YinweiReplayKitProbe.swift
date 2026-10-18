@@ -213,17 +213,25 @@ private final class YinweiRemoteReturnPlayer {
   private let player = AVAudioPlayerNode()
   private var format: AVAudioFormat?
   // The return path crosses the internet twice (iPad → laptop → iPad), so
-  // packets arrive in bursts. Buffer by time, start at 160 ms, and grow the
-  // start threshold after each underrun so a jittery link settles instead of
-  // stuttering. Capacity is bounded so latency cannot grow without limit.
-  private static let initialTargetFrames = 7_680  // 160 ms at 48 kHz
+  // packets arrive in bursts. Buffer by time and grow the start threshold
+  // after each underrun so a jittery link settles instead of stuttering.
+  // Underruns also happen when the source pauses, so the threshold must come
+  // back down: after 10 s without an underrun it shrinks by 25 ms, and audio
+  // piled up well beyond it (a burst after a stall) is trimmed so the delay
+  // behind the original does not stay high.
+  private static let initialTargetFrames = 5_760  // 120 ms at 48 kHz
   private static let targetStepFrames = 2_400     // +50 ms per underrun
+  private static let decayStepFrames = 1_200      // -25 ms per stable period
+  private static let stablePeriod: TimeInterval = 10
+  private static let trimMarginFrames = 4_800     // 100 ms above target
   private static let maxTargetFrames = 19_200     // 400 ms
   private static let capacityFrames = 28_800      // 600 ms; newest dropped beyond
   private var queued = 0
   private var queuedFrames = 0
   private var targetFrames = initialTargetFrames
   private var underruns = 0
+  private var trimmed = 0
+  private var stableSince = Date()
   private var counters = YinweiReturnCounters()
   private var epoch: UInt64?
   private var prepared = false
@@ -232,7 +240,8 @@ private final class YinweiRemoteReturnPlayer {
   var status: [String: Any] {
     ["received": counters.received, "accepted": counters.accepted,
      "played": counters.played, "queued": queued, "ready": isReady,
-     "underruns": underruns, "bufferMs": targetFrames / 48]
+     "underruns": underruns, "bufferMs": targetFrames / 48,
+     "queuedMs": queuedFrames / 48, "trimmed": trimmed]
   }
 
   func prepare() throws {
@@ -240,6 +249,8 @@ private final class YinweiRemoteReturnPlayer {
     counters.begin()
     targetFrames = Self.initialTargetFrames
     underruns = 0
+    trimmed = 0
+    stableSince = Date()
     let session = AVAudioSession.sharedInstance()
     // No .duckOthers: on device it did not stop the source app's original
     // audio and may lower the level ReplayKit captures for the laptop.
@@ -283,6 +294,19 @@ private final class YinweiRemoteReturnPlayer {
     let value = u64(8)
     if let epoch, epoch != value { return false }
     self.epoch = value
+    if player.isPlaying {
+      if targetFrames > Self.initialTargetFrames,
+         Date().timeIntervalSince(stableSince) >= Self.stablePeriod {
+        targetFrames = max(Self.initialTargetFrames, targetFrames - Self.decayStepFrames)
+        stableSince = Date()
+      }
+      // Skip one ~10 ms packet while far behind; repeated arrivals bring
+      // the delay back toward the target instead of keeping it forever.
+      if queuedFrames > targetFrames + Self.trimMarginFrames {
+        trimmed += 1
+        return false
+      }
+    }
     guard let buffer = AVAudioPCMBuffer(pcmFormat: format,
       frameCapacity: AVAudioFrameCount(frames)), let pcm = buffer.floatChannelData
     else { return false }
@@ -310,6 +334,7 @@ private final class YinweiRemoteReturnPlayer {
         if self.queued == 0 && self.player.isPlaying {
           self.player.pause()
           self.underruns += 1
+          self.stableSince = Date()
           self.targetFrames = min(Self.maxTargetFrames,
                                   self.targetFrames + Self.targetStepFrames)
         }
