@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
@@ -12,6 +13,8 @@ import 'package:yinwei_player/platform/ios_laptop_listen_output.dart';
 import 'package:yinwei_player/platform/replaykit_audio_probe.dart';
 import 'package:yinwei_player/remote/laptop_listen_controller.dart';
 import 'package:yinwei_player/state/engine_controller.dart';
+
+import '../fixtures/listen_room_audio.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -51,6 +54,7 @@ void main() {
     await output.stop();
     expect(calls.map((c) => c.method), [
       'prepareRemoteReturn',
+      'setRemoteReturnVolume',
       'resetRemoteReturn',
       'writeRemoteReturn',
       'getRemoteReturnStatus',
@@ -59,8 +63,9 @@ void main() {
       'stopRemoteReturn',
     ]);
     expect(calls[0].arguments, {'listen': true});
-    expect(calls[1].arguments, {'newStream': true, 'sampleRate': 44100});
-    expect(calls[4].arguments,
+    expect(calls[1].arguments, {'volume': 1.0});
+    expect(calls[2].arguments, {'newStream': true, 'sampleRate': 44100});
+    expect(calls[5].arguments,
         {'title': 'Song', 'artist': 'Music', 'playing': true});
 
     // Swift source agrees on these names.
@@ -71,6 +76,10 @@ void main() {
       '"newStream"',
       '"sampleRate"',
       '"interrupted"',
+      'case "setRemoteReturnVolume"',
+      'guard listenMode, volume.isFinite else { return }',
+      'player.volume = listen ? listenVolume : 1',
+      'if listenMode { player.volume = listenVolume }',
       '"dev.yinwei/now_playing"',
       'case "update"',
       'case "clear"',
@@ -79,6 +88,144 @@ void main() {
       'invokeMethod("command"',
     ]) {
       expect(swift, contains(name));
+    }
+  });
+
+  test('local volume is clamped, retained, and applied before streaming',
+      () async {
+    final output = IosLaptopListenOutput();
+    await output.setVolume(0.35);
+    expect(calls, isEmpty, reason: 'stopped output must not touch capture');
+    await output.prepare();
+    expect(calls.last.arguments, {'volume': 0.35});
+    await output.setVolume(9);
+    expect(output.volume, 1);
+    await output.setVolume(-1);
+    expect(output.volume, 0);
+    final before = calls.length;
+    for (final invalid in [
+      double.nan,
+      double.infinity,
+      double.negativeInfinity
+    ]) {
+      await output.setVolume(invalid);
+    }
+    expect(calls.length, before);
+    await output.setVolume(0.6);
+    await output.newStream(44100);
+    expect(output.volume, 0.6);
+    await output.stop();
+    await output.prepare();
+    expect(calls.last.arguments, {'volume': 0.6});
+    await output.stop();
+  });
+
+  test('volume errors retain the last confirmed value and fail prepare safely',
+      () async {
+    final output = IosLaptopListenOutput();
+    await output.prepare();
+    await output.setVolume(0.4);
+    messenger.setMockMethodCallHandler(player, (call) async {
+      calls.add(call);
+      if (call.method == 'setRemoteReturnVolume') {
+        throw PlatformException(code: 'output_unavailable');
+      }
+      return null;
+    });
+    await expectLater(output.setVolume(0.7), throwsA(isA<PlatformException>()));
+    expect(output.volume, 0.4);
+    await expectLater(output.prepare(), throwsA(isA<PlatformException>()));
+    expect(calls.last.method, 'stopRemoteReturn');
+  });
+
+  testWidgets(
+      'meter samples every fourth packet, smooths and fades without audio',
+      (tester) async {
+    final output = IosLaptopListenOutput();
+    await output.prepare();
+    await output.setVolume(0);
+    final packet = listenRoomPacket([0.1, -0.75, 0.5, 0.2]);
+    final original = Uint8List.fromList(packet);
+    for (var i = 0; i < 3; ++i) {
+      expect(await output.write(packet), isTrue);
+    }
+    expect(output.level.value, 0);
+    await output.write(packet);
+    expect(output.level.value, 0.75,
+        reason: 'pre-volume peak includes right channel');
+    expect(packet, original, reason: 'meter never modifies PCM');
+    final forwarded = calls.where((c) => c.method == 'writeRemoteReturn').last;
+    expect(forwarded.arguments, original);
+    for (var i = 0; i < 4; ++i) {
+      await output.write(listenRoomPacket([0, 0]));
+    }
+    expect(output.level.value, closeTo(0.6, 0.00001));
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(output.level.value, closeTo(0.36, 0.00001));
+    await tester.pump(const Duration(seconds: 2));
+    expect(output.level.value, 0);
+    await output.stop();
+  });
+
+  testWidgets(
+      'meter rejects malformed/nonfinite PCM, clamps peaks and resets streams',
+      (tester) async {
+    final output = IosLaptopListenOutput();
+    await output.prepare();
+    for (final packet in [
+      Uint8List(64),
+      listenRoomPacket([double.nan, 0]),
+      listenRoomPacket([0, double.infinity])
+    ]) {
+      for (var i = 0; i < 4; ++i) {
+        await output.write(packet);
+      }
+      expect(output.level.value, 0);
+    }
+    for (var i = 0; i < 4; ++i) {
+      await output.write(listenRoomPacket([-2, 0]));
+    }
+    expect(output.level.value, 1);
+    await output.newStream(44100);
+    expect(output.level.value, 0);
+    for (var i = 0; i < 3; ++i) {
+      await output.write(listenRoomPacket([1, 0]));
+    }
+    expect(output.level.value, 0, reason: 'sampling counter resets too');
+    await output.write(listenRoomPacket([1, 0]));
+    expect(output.level.value, 1);
+    await output.stop();
+    await tester.pump(const Duration(seconds: 1));
+    expect(output.level.value, 0);
+  });
+
+  testWidgets(
+      'dropped packets and late replies after reset/stop cannot light the meter',
+      (tester) async {
+    final output = IosLaptopListenOutput();
+    await output.prepare();
+    messenger.setMockMethodCallHandler(
+        player, (call) async => {'accepted': false});
+    for (var i = 0; i < 4; ++i) {
+      expect(await output.write(listenRoomPacket([1, 1])), isFalse);
+    }
+    expect(output.level.value, 0);
+    for (final stop in [false, true]) {
+      final gate = Completer<void>();
+      messenger.setMockMethodCallHandler(player, (call) async {
+        if (call.method == 'writeRemoteReturn') await gate.future;
+        return {'accepted': true};
+      });
+      final writes =
+          List.generate(4, (_) => output.write(listenRoomPacket([1, 1])));
+      if (stop) {
+        await output.stop();
+      } else {
+        await output.newStream(48000);
+      }
+      gate.complete();
+      await Future.wait(writes);
+      expect(output.level.value, 0);
     }
   });
 
@@ -102,8 +249,8 @@ void main() {
   testWidgets('the screen asks for the laptop sign-in first', (tester) async {
     final session = LaptopListenController(output: IosLaptopListenOutput());
     addTearDown(session.dispose);
-    await tester.pumpWidget(MaterialApp(
-        home: IosLaptopListenScreen(session: session)));
+    await tester
+        .pumpWidget(MaterialApp(home: IosLaptopListenScreen(session: session)));
     expect(find.text('Sign in to laptop'), findsOneWidget);
     expect(find.text('Owner account'), findsOneWidget);
   });

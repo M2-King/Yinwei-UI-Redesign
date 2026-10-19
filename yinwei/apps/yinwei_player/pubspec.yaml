@@ -34,3 +34,12 @@ flutter:
     - assets/spatial_workspace/
     - assets/spatial_workspace/vendor/
     - assets/remote/
+    # iPad Listen Room page (offline; dev/ is review-only and never bundled)
+    - assets/listen_room/
+    - assets/listen_room/fonts/
+    - assets/listen_room/vendor/
+    - assets/listen_room/vendor/examples/shaders/
+    - assets/listen_room/vendor/examples/postprocessing/
+    - assets/listen_room/vendor/examples/objects/
+    - assets/listen_room/vendor/examples/geometries/
+    - assets/listen_room/vendor/examples/utils/

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:yinwei_player/mobile/ios_listen_room_screen.dart';
 import 'package:yinwei_player/platform/ios_laptop_listen_output.dart';
 import 'package:yinwei_player/remote/laptop_listen_controller.dart';
 import 'package:yinwei_player/state/engine_controller.dart';
@@ -401,7 +402,8 @@ class _IosLaptopListenScreenState extends State<IosLaptopListenScreen>
       value is Map<String, dynamic> ? value : const {};
 }
 
-/// Opens "Listen to laptop" from the iPad player.
+/// Opens "Listen to laptop" from the iPad player: the Moonlight Room
+/// ([IosListenRoomScreen]), which falls back to this classic screen when the
+/// room can't run.
 Future<void> openLaptopListen(BuildContext context, EngineController player) =>
-    Navigator.of(context).push(MaterialPageRoute<void>(
-        builder: (_) => IosLaptopListenScreen(player: player)));
+    openListenRoom(context, player);

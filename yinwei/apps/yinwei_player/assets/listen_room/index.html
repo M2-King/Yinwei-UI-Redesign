@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Yinwei Listen Room</title>
+<!-- Offline page. The app inlines every file below into one document
+     (like SpatialWorkspaceHtml); nothing is loaded from the network. -->
+<link rel="stylesheet" href="ui.css">
+</head>
+<body>
+<div class="app" id="app">
+  <div class="scene" id="scene">
+    <canvas id="gl" role="img" aria-label="Your listening room. Drag the glowing sound to move it; drag elsewhere to look around. To place the sound exactly, use Place."></canvas>
+    <div class="vignette"></div>
+    <div class="labels" id="labels" aria-hidden="true"></div>
+    <div class="veil" id="veil" aria-hidden="true"><span class="wordmark">Yinwei</span><span class="veil-note" id="veil-note"></span></div>
+    <div class="fallback" id="fallback" hidden><span>3D is off in this browser, so this is a still picture of the room. Everything else works.</span></div>
+  </div>
+
+  <header class="top" id="top">
+    <span class="wordmark">Yinwei</span>
+    <span class="divider" aria-hidden="true"></span>
+    <button class="roomname" id="room-btn" type="button" aria-haspopup="dialog" aria-expanded="false"><span class="roomname-text">Moonlight Room</span><span class="ms" aria-hidden="true">expand_more</span></button>
+    <span class="spacer"></span>
+    <div class="top-right">
+      <button class="pill blue" id="take" type="button" hidden><span class="ms" aria-hidden="true">touch_app</span>Take control</button>
+      <button class="round" id="listen-btn" type="button" aria-label="Listen on this iPad"><span class="ms" aria-hidden="true">graphic_eq</span></button>
+      <button class="round" id="view-btn" type="button" aria-label="Switch to top view"><span class="ms" aria-hidden="true">view_in_ar</span></button>
+      <button class="round" id="more" type="button" aria-label="More" aria-haspopup="menu" aria-expanded="false"><span class="ms" aria-hidden="true">more_horiz</span></button>
+    </div>
+  </header>
+
+  <div class="notice glass" id="notice" role="status" hidden></div>
+  <div class="fps glass" id="fps" aria-live="off" hidden></div>
+
+  <nav class="side glass needs-control" id="side" aria-label="Sound">
+    <button class="side-item" id="si-layout" type="button" aria-haspopup="dialog" aria-controls="pop" aria-expanded="false">
+      <span class="side-icon"><span class="ms" aria-hidden="true">speaker</span></span>
+      <span class="side-title">Layout</span>
+      <span class="side-value"><span id="sv-layout">Point</span><span class="ms" aria-hidden="true">expand_more</span></span>
+    </button>
+    <button class="side-item" id="si-motion" type="button" aria-haspopup="dialog" aria-controls="pop" aria-expanded="false">
+      <span class="side-icon"><span class="ms" aria-hidden="true">radar</span></span>
+      <span class="side-title">Motion</span>
+      <span class="side-value"><span id="sv-motion">Fixed</span><span class="ms" aria-hidden="true">expand_more</span></span>
+    </button>
+    <button class="side-item" id="si-place" type="button" aria-haspopup="dialog" aria-controls="pop" aria-expanded="false">
+      <span class="side-icon dashed"><span class="ms" aria-hidden="true">add</span></span>
+      <span class="side-title">Place</span>
+      <span class="side-value" id="sv-place">Sound</span>
+    </button>
+  </nav>
+
+  <div class="pop glass" id="pop" role="dialog" hidden></div>
+
+  <footer class="player glass" id="player">
+    <div class="now">
+      <canvas class="art" id="art" width="236" height="236" aria-hidden="true"></canvas>
+      <div class="meta">
+        <div class="title" id="title"></div>
+        <div class="artist" id="artist"></div>
+        <div class="liveline"><i id="live-dot"></i><span id="live-text"></span><canvas id="level" aria-hidden="true"></canvas></div>
+      </div>
+    </div>
+    <div class="transport needs-control">
+      <button class="round tb" id="prev" type="button" aria-label="Previous track"><span class="ms fill" aria-hidden="true">skip_previous</span></button>
+      <button class="round tb play" id="play" type="button" aria-label="Pause"><span class="ms fill" id="play-icon" aria-hidden="true">pause</span></button>
+      <button class="round tb" id="next" type="button" aria-label="Next track"><span class="ms fill" aria-hidden="true">skip_next</span></button>
+    </div>
+    <div class="right" id="right"></div>
+  </footer>
+</div>
+
+<div class="menu glass" id="menu" role="menu" hidden>
+  <div class="info-row">
+    <span>Received</span><b id="d-recv">0</b>
+    <span>Buffer</span><b id="d-buffer">–</b>
+    <span>Stream</span><b>48 kHz · stereo</b>
+  </div>
+  <hr>
+  <button role="menuitem" id="m-close" type="button"><span class="ms" aria-hidden="true">arrow_back</span>Back to the player</button>
+  <button role="menuitem" id="m-stop-listen" type="button"><span class="ms" aria-hidden="true">headphones</span>Stop listening here</button>
+  <button role="menuitem" class="danger" id="m-signout" type="button"><span class="ms" aria-hidden="true">logout</span>Sign out</button>
+</div>
+
+<div class="toast glass" id="toast" role="status" aria-live="polite"></div>
+
+<script src="vendor/three.min.js"></script>
+<script src="vendor/examples/shaders/CopyShader.js"></script>
+<script src="vendor/examples/shaders/LuminosityHighPassShader.js"></script>
+<script src="vendor/examples/shaders/GammaCorrectionShader.js"></script>
+<script src="vendor/examples/postprocessing/EffectComposer.js"></script>
+<script src="vendor/examples/postprocessing/RenderPass.js"></script>
+<script src="vendor/examples/postprocessing/ShaderPass.js"></script>
+<script src="vendor/examples/postprocessing/UnrealBloomPass.js"></script>
+<script src="vendor/examples/objects/Reflector.js"></script>
+<script src="vendor/examples/geometries/RoundedBoxGeometry.js"></script>
+<script src="vendor/examples/utils/BufferGeometryUtils.js"></script>
+<script src="room-math.js"></script>
+<script src="bridge.js"></script>
+<script src="ui.js"></script>
+<script src="room.js"></script>
+</body>
+</html>

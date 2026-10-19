@@ -2,3 +2,5 @@
 yinwei/tools/build_native_macos.sh text eol=lf
 yinwei/tools/verify_macos_bundle.sh text eol=lf
 yinwei/tools/package_macos.sh text eol=lf
+# Listen Room vendored files are pinned by SHA-256; keep their bytes identical on every checkout.
+yinwei/apps/yinwei_player/assets/listen_room/vendor/** text eol=lf

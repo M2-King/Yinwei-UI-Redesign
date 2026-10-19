@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:yinwei_player/bridge/engine_bootstrap.dart';
+import 'package:yinwei_player/mobile/ios_listen_room_screen.dart';
 import 'package:yinwei_player/platform/android_playback_capture.dart';
 import 'package:yinwei_player/platform/developer_diagnostics.dart';
 import 'package:yinwei_player/platform/screen_audio_probe.dart';
@@ -141,6 +142,16 @@ class _DeveloperDiagnosticsPageState extends State<DeveloperDiagnosticsPage> {
                   style: style?.copyWith(color: YinweiColors.success),
                 ),
               ),
+            ValueListenableBuilder<bool>(
+              valueListenable: listenRoomFpsOverlay,
+              builder: (context, on, _) => SwitchListTile(
+                key: const Key('developer-listen-room-fps'),
+                title: const Text('Listen Room FPS meter'),
+                subtitle: const Text('Shows frame rate and draw calls over the room.'),
+                value: on,
+                onChanged: (value) => listenRoomFpsOverlay.value = value,
+              ),
+            ),
             Expanded(
               child: report == null
                   ? const Center(child: CircularProgressIndicator())

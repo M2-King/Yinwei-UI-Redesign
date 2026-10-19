@@ -1,5 +1,6 @@
 import Flutter
 import AVFoundation
+import AVKit
 import MediaPlayer
 import ReplayKit
 import UIKit
@@ -90,6 +91,11 @@ final class YinweiReplayKitProbeController {
       } else { result(["accepted": false]) }
     case "getRemoteReturnStatus":
       result(remoteReturn.status)
+    case "setRemoteReturnVolume":
+      if let volume = (call.arguments as? [String: Any])?["volume"] as? Double {
+        remoteReturn.setVolume(volume)
+      }
+      result(nil)
     case "resetRemoteReturn":
       let args = call.arguments as? [String: Any]
       if args?["newStream"] as? Bool == true, let rate = args?["sampleRate"] as? Int {
@@ -251,6 +257,7 @@ private final class YinweiRemoteReturnPlayer {
   // it holds the session non-mixable, which the lock-screen controls need,
   // and rides through route changes and interruptions instead of stopping.
   private var listenMode = false
+  private var listenVolume: Float = 1
   private var interrupted = false
   var isReady: Bool { prepared && engine.isRunning }
   var status: [String: Any] {
@@ -263,6 +270,8 @@ private final class YinweiRemoteReturnPlayer {
   func prepare(listen: Bool = false) throws {
     stop()
     listenMode = listen
+    // A previous listening gain must never carry into the capture route.
+    player.volume = listen ? listenVolume : 1
     counters.begin()
     targetFrames = Self.initialTargetFrames
     underruns = 0
@@ -295,6 +304,13 @@ private final class YinweiRemoteReturnPlayer {
         if !self.listenMode { self.stop() } else if !self.interrupted { self.restart() }
       },
     ]
+  }
+
+  /// Local gain only; the capture route ignores this channel method.
+  func setVolume(_ volume: Double) {
+    guard listenMode, volume.isFinite else { return }
+    listenVolume = Float(min(1, max(0, volume)))
+    player.volume = listenVolume
   }
 
   private func interruption(_ note: Notification) {
@@ -412,6 +428,7 @@ private final class YinweiRemoteReturnPlayer {
     queued = 0; queuedFrames = 0
     guard prepared else { return }
     player.stop(); player.reset()
+    if listenMode { player.volume = listenVolume }
   }
 
   func stop() {
@@ -424,6 +441,32 @@ private final class YinweiRemoteReturnPlayer {
     format = nil; prepared = false
     try? AVAudioSession.sharedInstance().setActive(false, options: [.notifyOthersOnDeactivation])
   }
+}
+
+/// The real system picker is tapped directly above the room's WebView.
+/// Keep this in an existing Runner source file (no Xcode project edits).
+final class YinweiListenRoomRoutePickerFactory: NSObject, FlutterPlatformViewFactory {
+  static let viewType = "dev.yinwei/listen_room_airplay"
+
+  func create(withFrame frame: CGRect, viewIdentifier viewId: Int64,
+              arguments args: Any?) -> FlutterPlatformView {
+    YinweiListenRoomRoutePicker(frame: frame)
+  }
+}
+
+private final class YinweiListenRoomRoutePicker: NSObject, FlutterPlatformView {
+  private let picker: AVRoutePickerView
+
+  init(frame: CGRect) {
+    picker = AVRoutePickerView(frame: frame)
+    super.init()
+    picker.backgroundColor = .clear
+    picker.tintColor = UIColor(white: 0.85, alpha: 1)
+    picker.activeTintColor = UIColor(red: 0.65, green: 0.78, blue: 1, alpha: 1)
+    picker.prioritizesVideoDevices = false
+  }
+
+  func view() -> UIView { picker }
 }
 
 /// Lock screen and Control Center for "Listen to laptop": shows what the

@@ -17,6 +17,8 @@ import UIKit
     YinweiAudioSessionChannel.register(messenger: messenger)
     YinweiScreenAudioProbeChannel.register(messenger: messenger)
     YinweiReplayKitProbeChannel.register(messenger: messenger)
+    engineBridge.applicationRegistrar.register(
+      YinweiListenRoomRoutePickerFactory(), withId: YinweiListenRoomRoutePickerFactory.viewType)
     YinweiDeveloperDiagnosticsChannel.register(messenger: messenger)
     print("[YINWEI_IOS] native channels registered")
   }
