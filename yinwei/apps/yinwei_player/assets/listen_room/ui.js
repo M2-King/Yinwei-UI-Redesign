@@ -25,7 +25,7 @@ const cap = (t) => (t ? t[0].toUpperCase() + t.slice(1) : t); // "your laptop" a
 const S = {
   laptop: "", connection: "connected", source: "", live: false, playing: false, listening: "off",
   control: "mine", notice: "none", mode: "point", motion: "fixed", orbitHz: 0.4,
-  az: 0, el: 0, dist: 2, track: null, volume: 1, level: 0, stats: { received: 0, bufferMs: 0, underruns: 0 },
+  az: 0, el: 0, dist: 2, track: null, volume: 1, level: 0, stats: { received: 0, bufferMs: 0, underruns: 0 }, opens: null,
   screen: "room", view: "3d", panel: null,
 };
 const held = {}; // values you just set, kept until the app confirms them
@@ -92,8 +92,10 @@ const setText = (el, t) => { if (el.textContent !== t) el.textContent = t; };
 let volDragging = false;
 function render() {
   const noApp = S.notice === "noapp", isLost = lost(), locked = otherHasControl() || isLost;
+  // No music app open, but the laptop opens S.opens on Start.
+  const opens = !noApp && !S.live && S.opens ? S.opens : null;
   const t = noApp ? { title: "Nothing playing", artist: `No music app open on ${S.laptop}` }
-    : S.track && S.track.title ? S.track : { title: "Nothing playing", artist: "" };
+    : S.track && S.track.title ? S.track : { title: "Nothing playing", artist: opens ? `${opens} opens on ${S.laptop} when you start` : "" };
   $("app").classList.toggle("locked", locked);
   setText($("title"), t.title); $("title").classList.toggle("cjk", isCjk(t.title));
   // Live songs come with a title only: the music app takes the artist line.
@@ -102,7 +104,7 @@ function render() {
   once("art", [noApp, t.title], () => paintArt(ListenBridge.hueOf(t.title), noApp || !(S.track && S.track.title)));
   const sounding = S.live && S.playing && !isLost && !noApp;
   $("live-dot").classList.toggle("off", !sounding);
-  setText($("live-text"), noApp ? "Live off · waiting for a music app" : S.live ? `${S.playing ? "Live" : "Paused"} · ${S.source} on ${S.laptop}` : `Live off · ${S.source} on ${S.laptop}`);
+  setText($("live-text"), noApp ? "Live off · waiting for a music app" : S.live ? `${S.playing ? "Live" : "Paused"} · ${S.source} on ${S.laptop}` : opens ? "Live off · no music app open yet" : `Live off · ${S.source} on ${S.laptop}`);
   ["prev", "play", "next"].forEach((id) => { $(id).disabled = noApp; });
   setText($("play-icon"), S.playing ? "pause" : "play_arrow");
   $("play").setAttribute("aria-label", S.playing ? "Pause" : "Play");
@@ -131,7 +133,7 @@ function render() {
   });
 
   const right = $("right");
-  once("right", [S.listening, S.live, isLost, noApp, S.laptop, S.source], () => {
+  once("right", [S.listening, S.live, isLost, noApp, S.laptop, S.source, opens], () => {
     if (listening) {
       right.innerHTML = `<div class="vol">${ms("volume_up")}<input id="vol" type="range" min="0" max="1" step="0.01" value="${S.volume}" aria-label="Volume on this iPad"></div><button class="round" id="airplay" type="button" aria-label="Choose where this iPad plays">${ms("airplay")}</button>`;
       const vol = $("vol");
@@ -154,9 +156,9 @@ function render() {
         $("airplay").tabIndex = -1;
       }
     } else if (S.listening === "connecting") {
-      right.innerHTML = `<div class="listen-cta"><button class="cta" type="button" disabled><span class="spin"></span>${S.live ? "Connecting" : "Starting on laptop"}</button><small>${S.live ? "Opening the audio stream…" : `Playing ${esc(S.source)} on ${esc(S.laptop)}…`}</small></div>`;
+      right.innerHTML = `<div class="listen-cta"><button class="cta" type="button" disabled><span class="spin"></span>${S.live ? "Connecting" : "Starting on laptop"}</button><small>${S.live ? "Opening the audio stream…" : opens ? `Opening ${esc(opens)} on ${esc(S.laptop)}…` : `Playing ${esc(S.source)} on ${esc(S.laptop)}…`}</small></div>`;
     } else {
-      right.innerHTML = `<div class="listen-cta"><button class="cta" id="go" type="button" ${isLost || noApp ? "disabled" : ""}>${ms("headphones")}${S.live || noApp ? "Listen here" : "Start on laptop and listen"}</button><small>${noApp ? `Waiting for a music app on ${esc(S.laptop)}` : isLost ? `Waiting for ${esc(S.laptop)}` : S.live ? `${esc(cap(S.laptop))} is playing with spatial sound` : `${esc(S.source)} is paused on the laptop`}</small></div>`;
+      right.innerHTML = `<div class="listen-cta"><button class="cta" id="go" type="button" ${isLost || noApp ? "disabled" : ""}>${ms("headphones")}${S.live || noApp ? "Listen here" : "Start on laptop and listen"}</button><small>${noApp ? `Waiting for a music app on ${esc(S.laptop)}` : isLost ? `Waiting for ${esc(S.laptop)}` : S.live ? `${esc(cap(S.laptop))} is playing with spatial sound` : opens ? `Opens ${esc(opens)} on ${esc(S.laptop)}` : `${esc(S.source)} is paused on the laptop`}</small></div>`;
       $("go").onclick = startListening;
     }
     reportRects();

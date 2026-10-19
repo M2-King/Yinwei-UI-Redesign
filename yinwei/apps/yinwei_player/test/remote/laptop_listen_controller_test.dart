@@ -8,6 +8,7 @@ import 'package:yinwei_player/remote/laptop_listen_controller.dart';
 import 'package:yinwei_player/remote/remote_auth.dart';
 import 'package:yinwei_player/remote/remote_gateway.dart';
 import 'package:yinwei_player/remote/remote_owner_client.dart';
+import 'package:yinwei_player/remote/remote_protocol.dart';
 import 'package:yinwei_player/runtime/spatial_runtime_adapter.dart';
 import 'package:yinwei_player/state/app_session_coordinator.dart';
 import 'package:yinwei_player/state/engine_controller.dart';
@@ -72,8 +73,10 @@ void main() {
   var live = false, livePlaying = true, liveSource = 'Music';
   final media = <String>[];
   final liveCalls = <String>[];
+  RemoteFailure? startFailure;
 
   setUp(() async {
+    startFailure = null;
     live = false;
     livePlaying = true;
     liveSource = 'Music';
@@ -101,6 +104,7 @@ void main() {
       liveMedia: (action) async => media.add(action),
       startLive: () async {
         liveCalls.add('start');
+        if (startFailure != null) throw startFailure!;
         live = true;
       },
       stopLive: () async {
@@ -229,6 +233,19 @@ void main() {
     expect(listen.hasControl, isFalse);
     expect(listen.notice, contains('took control'));
     expect(await listen.takeControl(), isTrue);
+  });
+
+  test('the laptop could not open its music app: control is kept', () async {
+    liveSource = '';
+    await signIn();
+    expect(await listen.takeControl(), isTrue);
+    for (final code in ['music_app_no_song', 'music_app_open_failed']) {
+      startFailure = RemoteFailure(code);
+      expect(await listen.command('live.start'), isFalse);
+      expect(listen.hasControl, isTrue, reason: code);
+      expect(listen.notice, LaptopListenController.failureText(code));
+      expect(listen.notice, isNot(contains('_')), reason: 'explained, not a code');
+    }
   });
 
   test('a laptop song change does not cost control or a command', () async {

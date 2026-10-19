@@ -116,7 +116,9 @@ function render(snapshot) {
     : "no music app open";
   $("live-hint").textContent = !live
     ? state.capabilities.remoteLive
-      ? `Laptop music: ${laptopMusic}. Tap “Start on laptop” to play it with spatial sound here.`
+      ? !state.live?.source && state.live?.openApp
+        ? `Laptop music: ${laptopMusic}. Tap “Start on laptop” to open ${state.live.openApp} and play it with spatial sound here.`
+        : `Laptop music: ${laptopMusic}. Tap “Start on laptop” to play it with spatial sound here.`
       : 'For live sound, start Live Transfer on the laptop, then listen here. No imported file is needed.'
     : !liveReady
     ? 'Start Live Transfer on the laptop. Listening will become available here.'
@@ -287,7 +289,8 @@ async function command(type, payload = {}, retried = false) {
     // (lost lease, stale state, engine failure) needs control again.
     if (error.message === "media_command_failed") {
       message("The laptop music app did not accept that command.");
-    } else if (["no_music_app", "music_not_playing", "live_start_failed"].includes(error.message)) {
+    } else if (["no_music_app", "music_not_playing", "live_start_failed", "music_app_open_failed",
+        "music_app_no_song"].includes(error.message)) {
       message(liveStartFailure(error.message));
     } else {
       lease = null;
@@ -555,6 +558,8 @@ $("live-stop").addEventListener("click", () => command("live.stop"));
 function liveStartFailure(code) {
   if (code === "no_music_app") return "Open your music app on the laptop first.";
   if (code === "music_not_playing") return "The laptop music app did not start playing. Check it on the laptop.";
+  if (code === "music_app_open_failed") return "The laptop could not open its music app. Open it on the laptop.";
+  if (code === "music_app_no_song") return "The music app opened on the laptop but has no song ready. Choose a song there once.";
   if (code === "local_busy" || code === "control_busy") return "The laptop is busy right now. Try again in a moment.";
   return `Could not start: ${code.replaceAll("_", " ")}.`;
 }

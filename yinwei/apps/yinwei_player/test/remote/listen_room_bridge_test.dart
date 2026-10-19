@@ -86,6 +86,7 @@ Map<String, dynamic> snapshot({
   bool pointControl = true,
   bool controlHeld = false,
   bool hasFile = false,
+  String openApp = '',
 }) =>
     {
       'liveRunning': liveRunning,
@@ -96,7 +97,12 @@ Map<String, dynamic> snapshot({
         'remoteArray': remoteArray,
         'pointControl': pointControl,
       },
-      'live': {'source': source, 'title': '晴天', 'playing': true},
+      'live': {
+        'source': source,
+        'title': '晴天',
+        'playing': true,
+        'openApp': openApp,
+      },
       'track': {'title': 'Demo.wav', 'artist': 'Yinwei', 'hasFile': hasFile},
       'transport': {'playing': false},
       'spatialMode': {'array': 'point', 'motion': 'orbit', 'orbitHz': 0.4},
@@ -326,10 +332,13 @@ void main() {
     test('notices: no music app, phone call, Safari listening', () {
       session.snapshot = snapshot(liveRunning: false, source: '');
       expect(bridge.state()['notice'], 'noapp');
-      session
-        ..snapshot = snapshot()
-        ..notice = LaptopListenController.failureText('no_music_app');
+      session.notice = LaptopListenController.failureText('no_music_app');
       expect(bridge.state()['notice'], 'noapp');
+      session.snapshot = snapshot(liveRunning: false);
+      expect(bridge.state()['notice'], 'none',
+          reason: 'a music app opened on the laptop: Start works again');
+      session.snapshot = snapshot();
+      expect(bridge.state()['notice'], 'none');
       session
         ..notice = null
         ..interrupted = true;
@@ -340,6 +349,29 @@ void main() {
         ..status =
             'Another device is listening (Safari?) · stop it there. Retrying…';
       expect(bridge.state()['notice'], 'busy');
+    });
+
+    test('no music app open: the app the laptop opens on Start', () {
+      session.snapshot =
+          snapshot(liveRunning: false, source: '', openApp: '汽水音乐');
+      expect(bridge.state()['opens'], '汽水音乐');
+      expect(bridge.state()['notice'], 'none', reason: 'Start can open it');
+      session.notice = LaptopListenController.failureText('no_music_app');
+      expect(bridge.state()['notice'], 'noapp',
+          reason: 'the laptop could not open it after all');
+      session.notice = null;
+      session.snapshot =
+          snapshot(liveRunning: false, source: '汽水音乐', openApp: '汽水音乐');
+      expect(bridge.state()['opens'], isNull, reason: 'a music app is open');
+      session.snapshot = snapshot(source: '', openApp: '汽水音乐');
+      expect(bridge.state()['opens'], isNull, reason: 'Live is running');
+      session.snapshot = snapshot(
+          liveRunning: false, source: '', openApp: '汽水音乐', remoteLive: false);
+      expect(bridge.state()['opens'], isNull,
+          reason: 'this laptop cannot start Live remotely');
+      session.snapshot = snapshot(liveRunning: false, source: '');
+      expect(bridge.state()['opens'], isNull, reason: 'an older laptop');
+      expect(bridge.state()['notice'], 'noapp');
     });
 
     test('positions are clamped to the engine ranges', () {

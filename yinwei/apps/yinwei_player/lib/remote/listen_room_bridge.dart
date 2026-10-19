@@ -118,6 +118,10 @@ class ListenRoomBridge {
     final pose = _map(snap['pose']);
     final liveRunning = snap['liveRunning'] == true;
     final source = _text(live['source']);
+    // No music app open: the one the laptop opens on "Start on laptop".
+    final opens = !liveRunning && source.isEmpty && caps['remoteLive'] == true
+        ? _text(live['openApp'])
+        : '';
     final title = liveRunning ? _text(live['title']) : _text(track['title']);
     final playing =
         liveRunning ? live['playing'] == true : transport['playing'] == true;
@@ -145,7 +149,7 @@ class ListenRoomBridge {
               ? 'interrupted'
               : s.listening && s.status.startsWith(_audioBusyStatus)
                   ? 'busy'
-                  : _noMusicApp(snap, caps, liveRunning, source)
+                  : _noMusicApp(snap, caps, liveRunning, source, opens)
                       ? 'noapp'
                       : 'none',
       'mode': mode['array'] == 'stereo2' ? 'stereo2' : 'point',
@@ -162,6 +166,7 @@ class ListenRoomBridge {
             },
       'volume': volume,
       'level': level,
+      'opens': opens.isEmpty ? null : opens,
       'stats': {
         'received': s.received,
         'bufferMs': s.bufferMs,
@@ -177,13 +182,17 @@ class ListenRoomBridge {
       session.notice == LaptopListenController.failureText('control_taken') ||
       session.notice == LaptopListenController.failureText('control_busy');
 
+  /// Only while the laptop reports no music app: once one opens there, a
+  /// failed start's note no longer blocks the button.
   bool _noMusicApp(Map<String, dynamic> snap, Map<String, dynamic> caps,
-          bool liveRunning, String source) =>
-      session.notice == LaptopListenController.failureText('no_music_app') ||
-      (!liveRunning &&
-          source.isEmpty &&
-          caps['remoteLive'] == true &&
-          _map(snap['track'])['hasFile'] != true);
+          bool liveRunning, String source, String opens) =>
+      !liveRunning &&
+      source.isEmpty &&
+      (session.notice ==
+              LaptopListenController.failureText('no_music_app') ||
+          (opens.isEmpty &&
+              caps['remoteLive'] == true &&
+              _map(snap['track'])['hasFile'] != true));
 
   void _changed() => schedule();
 

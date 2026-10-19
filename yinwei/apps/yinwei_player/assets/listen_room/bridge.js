@@ -14,7 +14,7 @@
 const ListenBridge = (() => {
   const VERSION = 1, HOLD_MS = 2500;
   const FIELDS = ["laptop", "connection", "source", "live", "playing", "listening", "control", "notice",
-    "mode", "motion", "orbitHz", "az", "el", "dist", "track", "volume", "level", "stats"];
+    "mode", "motion", "orbitHz", "az", "el", "dist", "track", "volume", "level", "stats", "opens"];
   const wrap = (a) => { a = ((a + 180) % 360 + 360) % 360 - 180; return a === -180 ? 180 : a; };
   // Values the app may send, so a bad message can't put the page in a state it can't draw.
   const ENUMS = {
@@ -27,6 +27,8 @@ const ListenBridge = (() => {
     if (RANGES[k]) { const n = Number(v); return Number.isFinite(n) ? Math.min(RANGES[k][1], Math.max(RANGES[k][0], n)) : undefined; }
     if (k === "live" || k === "playing") return typeof v === "boolean" ? v : undefined;
     if (k === "laptop" || k === "source") return typeof v === "string" ? v.slice(0, 80) : undefined;
+    // The music app the laptop opens on Start when none is open; null when it can't.
+    if (k === "opens") return typeof v === "string" && v ? v.slice(0, 80) : null;
     if (k === "track") return v && typeof v === "object" ? { title: String(v.title || "").slice(0, 200), artist: String(v.artist || "").slice(0, 200) } : null;
     if (k === "stats") return v && typeof v === "object" ? { received: Number(v.received) || 0, bufferMs: Number(v.bufferMs) || 0, underruns: Number(v.underruns) || 0 } : undefined;
     return undefined;

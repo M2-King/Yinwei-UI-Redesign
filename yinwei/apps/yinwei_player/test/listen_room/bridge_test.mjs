@@ -102,3 +102,15 @@ test('track text is cut to a safe length and the cover tint is stable', () => {
   assert.equal(B.hueOf('晴天'), B.hueOf('晴天'));
   for (const title of ['晴天', '富士山下', 'Vienna', '']) assert.ok(B.hueOf(title) >= 205 && B.hueOf(title) <= 240, title);
 });
+
+test('opens: the music app the laptop opens on Start, or null', () => {
+  const S = base();
+  B.merge(S, {v: 1, opens: '汽水音乐'}, {}, 0);
+  assert.equal(S.opens, '汽水音乐');
+  B.merge(S, {v: 1, opens: ''}, {}, 1);
+  assert.equal(S.opens, null, 'empty means it cannot open one');
+  B.merge(S, {v: 1, opens: 'x'.repeat(300)}, {}, 2);
+  assert.equal(S.opens.length, 80);
+  B.merge(S, {v: 1, opens: {path: 'C:\evil.exe'}}, {}, 3);
+  assert.equal(S.opens, null, 'only a name, never an object');
+});

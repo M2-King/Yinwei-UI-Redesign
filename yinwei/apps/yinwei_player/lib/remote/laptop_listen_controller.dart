@@ -369,6 +369,8 @@ class LaptopListenController extends ChangeNotifier {
         'media_command_failed',
         'no_music_app',
         'music_not_playing',
+        'music_app_open_failed',
+        'music_app_no_song',
         'live_start_failed',
         'array_active',
         'invalid_payload',
@@ -390,6 +392,10 @@ class LaptopListenController extends ChangeNotifier {
         'no_music_app' => 'Open your music app on the laptop first.',
         'music_not_playing' =>
           'The laptop music app did not start playing. Check it on the laptop.',
+        'music_app_open_failed' =>
+          'The laptop could not open its music app. Open it on the laptop.',
+        'music_app_no_song' =>
+          'The music app opened on the laptop but has no song ready. Choose a song there once.',
         'live_start_failed' =>
           'Live Transfer did not start on the laptop. Check the laptop.',
         'media_command_failed' =>

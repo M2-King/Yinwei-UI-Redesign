@@ -262,6 +262,9 @@ class AppSessionCoordinator {
         'title': liveInfo['title'] is String ? liveInfo['title'] : '',
         'captureHealthy': liveInfo['captureHealthy'] == true,
         'playing': liveInfo['playing'] == true,
+        // The music app a remote "Start on laptop" opens when none is open
+        // (the laptop picks it); '' when it can't open one.
+        'openApp': liveInfo['openApp'] is String ? liveInfo['openApp'] : '',
         'remoteControls': false,
       },
     };

@@ -32,6 +32,7 @@ import 'package:yinwei_player/state/app_session_coordinator.dart';
 import 'package:yinwei_player/remote/remote_gateway.dart';
 import 'package:yinwei_player/remote/remote_protocol.dart';
 import 'package:yinwei_player/remote/remote_guest.dart';
+import 'package:yinwei_player/remote/remote_music_app.dart';
 import 'package:yinwei_player/remote/remote_deployment.dart';
 import 'package:yinwei_player/remote/remote_auth.dart';
 import 'package:yinwei_player/remote/native_output_tap.dart';
@@ -127,6 +128,8 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
   var _audioSessionArmed = false;
   late final WindowModeController _window;
   late final SystemMediaService _smtc;
+  // Opened by a remote "Start on laptop" when no music app is open.
+  RemoteMusicApp? _musicApp;
   late final LiveTransferController _live;
   late final EngineBackend _backend;
   late final Listenable _transportTicks;
@@ -200,6 +203,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
         'title': _smtc.state.title,
         'captureHealthy': _live.captureHealthy,
         'playing': _smtc.state.playing,
+        'openApp': _musicApp?.name ?? '',
       },
       // Same effect as the local controls, minus takeLocalControl(): a
       // remote change must not revoke the remote's own lease.
@@ -261,6 +265,15 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
     _smtc.addListener(_onSmtcChange);
     _live.addListener(_onChange);
     if (_caps.systemMedia) unawaited(_smtc.start());
+    // Off with YINWEI_REMOTE_OPEN_MUSIC_APP=0: the remote start then needs
+    // the music app open, as before.
+    if (Platform.isWindows &&
+        _caps.liveTransfer &&
+        _caps.systemMedia &&
+        Platform.environment['YINWEI_REMOTE_OPEN_MUSIC_APP'] != '0' &&
+        !Platform.environment.containsKey('FLUTTER_TEST')) {
+      unawaited(_loadMusicApp());
+    }
     if (_caps.liveTransfer) {
       _routeRecovery =
           _audioRoute.recoverIfDirty().then((_) => true).catchError(
@@ -528,6 +541,8 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
   }
 
   void _onSmtcChange() {
+    final musicApp = _musicApp;
+    if (musicApp != null) unawaited(musicApp.observe(_smtc.state));
     _onChange();
     _scheduleLiveFollow();
   }
@@ -612,13 +627,27 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
     _onChange();
   }
 
-  /// Remote "Start on laptop": play the music app if it is paused, wait for
+  Future<void> _loadMusicApp() async {
+    final dir = await getApplicationSupportDirectory();
+    final musicApp = RemoteMusicApp(
+        file: File('${dir.path}${Platform.pathSeparator}remote_music_app.json'));
+    await musicApp.load();
+    if (!mounted) return;
+    _musicApp = musicApp;
+    unawaited(musicApp.observe(_smtc.state));
+  }
+
+  /// Remote "Start on laptop": open the music app if none is open (see
+  /// [RemoteMusicApp]), play it if it is paused, wait for
   /// Windows to report it playing (Live refuses a paused source), then start
   /// Live Transfer exactly as the laptop button does.
   Future<void> _startLiveFromRemote() async {
     if (_live.running || _live.starting) return;
     if (!_smtc.state.hasTrack) {
-      throw const RemoteFailure('no_music_app');
+      // No song on the laptop: open the music app it last saw playing.
+      final musicApp = _musicApp;
+      if (musicApp == null) throw const RemoteFailure('no_music_app');
+      await musicApp.open(() => _smtc.state.hasTrack);
     }
     if (!_smtc.state.playing) {
       try {
