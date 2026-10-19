@@ -55,6 +55,21 @@ instead of playing.
 Tests: `flutter test` 696 passed, 6 skipped; Node 22/22; `flutter analyze` unchanged (117). Live and
 read-only on the laptop: w15's own code finds `汽水音乐.lnk` (→ `SodaMusicLauncher.exe`).
 
+## w16: a closed app's old song no longer counts (2026-10-19)
+
+Your first w15 test (汽水 quit, then Start) ended with "The laptop music app did not start playing".
+Cause: the laptop's media reader keeps the last song when Windows reports "no session" (on purpose, so a
+short blip doesn't stop Live). After 汽水 was quit, w15 still saw its paused song, skipped opening 汽水 and
+asked Windows to press play on a session that no longer existed. Fix: remote start counts a song only
+if Windows reported it in the last 6 s (the reader's existing `sessionFresh`); otherwise it opens the
+app and presses play. The reader itself is unchanged.
+
+Known leftover: the room's label can still say "汽水音乐 is paused on the laptop" after 汽水 is closed (the
+same stale report); the button works either way.
+
+**w16** (`outputs/w16/windows`, next to w15): only `data/app.so` differs (`28aafdfd…`); exe and engine
+byte-identical (`a2de3030…`, `eb764148…`). `flutter test` 696 passed, 6 skipped; analyze unchanged.
+
 ## 1. What you get
 
 On the iPad (Moonlight Room) and the laptop's web page, **Start on laptop** now also works when no

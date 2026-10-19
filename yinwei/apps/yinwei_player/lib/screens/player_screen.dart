@@ -651,11 +651,14 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
   /// Live Transfer exactly as the laptop button does.
   Future<void> _startLiveFromRemote() async {
     if (_live.running || _live.starting) return;
-    if (!_smtc.state.hasTrack) {
-      // No song on the laptop: open the music app it last saw playing.
+    // The media state keeps the last song after its app is closed (a
+    // no_session report never clears it), so only a recent report counts.
+    bool song() => _smtc.state.hasTrack && _smtc.sessionFresh;
+    if (!song()) {
+      // No song on the laptop: open the music app and press play.
       final musicApp = _musicApp;
       if (musicApp == null) throw const RemoteFailure('no_music_app');
-      await musicApp.open(() => _smtc.state.hasTrack);
+      await musicApp.open(song);
     }
     if (!_smtc.state.playing) {
       try {
