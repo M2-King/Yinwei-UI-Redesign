@@ -1,7 +1,14 @@
 # Remote start: the laptop opens your music app — implementation plan
 
-Status (2026-10-19): **chosen by you (option B); built and tested locally, nothing live.** The laptop
-build (w14) and the IPA wait for your OK. Nothing has been switched, pushed or installed.
+Status (2026-10-19): **live on the laptop (w14); IPA built; iPad test pending.** With your OK:
+commit `e9b388d` pushed and built (IPA SHA-256 `71d5c81e…6589ec`, all workflow steps passed); the laptop
+was switched from w13 to w14 (w13 closed normally, saved as `deployment.w13-before-w14.json`, started
+by the launcher, backend online). Rollback: restore that file, close w14, run the launcher.
+
+**Seen on the laptop after the switch:** 汽水音乐 was open but Windows listed no media session at all.
+Electron apps like 汽水 may only report to Windows once a song plays. If so, opening it is not enough
+and the iPad says "no song ready"; the fix would be a w15 that presses the keyboard Play key after
+opening it (not built; your test decides).
 
 Results: `flutter test` 684 passed, 6 skipped; Node page tests 22/22; web page tests pass;
 `flutter analyze` unchanged (117, no new issues). The room's new state was rendered and checked in a
@@ -12,6 +19,36 @@ browser (Opens 汽水音乐 on the laptop), and the no-music-app state is unchan
 (`0d150def…`, from `windows/runner`) was replaced. Changed: `data/app.so` (`964c76f9…`), the web page's
 `app.js`, the asset list, the icon font, plus the new Listen Room files. Full list and hashes:
 `outputs/w14/w14-report.json`, `windows-manifest.json`.
+
+## w15: press play in the app (2026-10-19, your choice: "open by path, then Space")
+
+Your iPad test on w14 showed the gap: a freshly opened 汽水 is silent and not in Windows media controls,
+so the laptop could open it but not start it. Checked on the laptop:
+- the keyboard media Play key: 汽水 ignores it;
+- 汽水's accessibility tree: no buttons exposed;
+- Space sent to 汽水's window: **works, but only while 汽水 is in front**.
+
+w15 therefore, when Start finds no song:
+1. finds the music app (remembered, or now also an open-but-silent one found by its process, so no
+   "play once first" step);
+2. opens it by its `.exe` path if it isn't running (or again if it is hidden in the tray, which brings
+   its window back);
+3. brings its window to the front for about 2 s, sends Space **to that window only**, then puts the
+   previous window back in front. Nothing is sent unless the app is confirmed in front;
+4. presses at most 3 times, 8 s apart (Space toggles), until Windows reports a song, within 30 s.
+   Then the existing steps play it if paused and start Live Transfer.
+
+Checked live on the laptop through w15's own code: 汽水 went from paused to playing in about 2 s, and the
+previous window came back in front (paused again after the check). Not yet checked live: a cold start
+(汽水 not running at all) and a window hidden in the tray; both are covered by unit tests.
+
+**Trade-off:** for about 2 s the laptop's screen shows 汽水 in front. If someone is typing on the laptop
+at that moment, their keys go to 汽水 instead. If 汽水's search box has focus, Space types a space
+instead of playing.
+
+**w15** (`outputs/w15/windows`, built next to w14): only `data/app.so` differs from w14
+(`2919e4a8…`); `yinwei_player.exe` and `spatial_core.dll` are byte-identical (`a2de3030…`, `eb764148…`).
+Tests: `flutter test` 690 passed, 6 skipped; Node 22/22; `flutter analyze` unchanged (117).
 
 ## 1. What you get
 

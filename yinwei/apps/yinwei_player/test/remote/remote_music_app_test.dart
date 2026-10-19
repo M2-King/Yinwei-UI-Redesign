@@ -28,6 +28,12 @@ void main() {
   late List<int> asked;
   late List<String> launched;
   late Set<String> onDisk;
+  late List<RunningMusicApp> running;
+  late List<List<int>> pressed;
+  // What a press does: true = the player starts a song.
+  late bool Function() pressWorks;
+  late bool windowShown;
+  var song = false;
   Object? launchError;
 
   RemoteMusicApp app({Duration timeout = const Duration(milliseconds: 200)}) =>
@@ -37,13 +43,25 @@ void main() {
           asked.add(pid);
           return paths[pid];
         },
+        runningApps: () async => List.of(running),
         launch: (path) async {
           if (launchError != null) throw launchError!;
           launched.add(path);
+          windowShown = true;
+          if (running.every((r) => r.path != path)) {
+            running.add((pid: 77, path: path, process: 'SodaMusic'));
+          }
+        },
+        pressPlay: (pids) async {
+          if (!windowShown) return false;
+          pressed.add(pids);
+          if (pressWorks()) song = true;
+          return true;
         },
         exists: onDisk.contains,
         readyTimeout: timeout,
-        poll: const Duration(milliseconds: 10),
+        pressEvery: const Duration(milliseconds: 60),
+        poll: const Duration(milliseconds: 5),
       );
 
   setUp(() {
@@ -54,6 +72,11 @@ void main() {
     launched = [];
     onDisk = {soda};
     launchError = null;
+    running = [];
+    pressed = [];
+    pressWorks = () => true;
+    windowShown = true;
+    song = false;
   });
   tearDown(() => dir.deleteSync(recursive: true));
 
@@ -106,8 +129,7 @@ void main() {
     final first = app();
     await first.observe(media());
     expect(first.name, '汽水音乐');
-    expect(jsonDecode(file.readAsStringSync()),
-        {'path': soda, 'name': '汽水音乐'});
+    expect(jsonDecode(file.readAsStringSync()), {'path': soda, 'name': '汽水音乐'});
     await first.observe(media());
     expect(asked, [4242], reason: 'the same process is looked up once');
 
@@ -137,26 +159,70 @@ void main() {
     expect(a.name, isNull);
   });
 
-  test('open: nothing remembered is no_music_app; nothing launched',
-      () async {
-    await expectLater(app().open(() => false),
-        throwsA(isA<RemoteFailure>().having((f) => f.code, 'code', 'no_music_app')));
+  test('open: nothing remembered is no_music_app; nothing launched', () async {
+    await expectLater(
+        app().open(() => false),
+        throwsA(isA<RemoteFailure>()
+            .having((f) => f.code, 'code', 'no_music_app')));
     expect(launched, isEmpty);
   });
 
-  test('open: launches the remembered app and waits for its song', () async {
+  test('open: not running → opened by path, Space pressed, song', () async {
     final a = app(timeout: const Duration(seconds: 2));
     await a.observe(media());
-    var polls = 0;
-    await a.open(() => ++polls > 3);
+    windowShown = false;
+    await a.open(() => song);
     expect(launched, [soda]);
+    expect(
+        pressed,
+        [
+          [77]
+        ],
+        reason: 'one press, in the opened app only');
+  });
+
+  test('open: already running → no second copy, Space pressed', () async {
+    running = [(pid: 4242, path: soda, process: 'SodaMusic')];
+    final a = app(timeout: const Duration(seconds: 2));
+    await a.observe(media());
+    await a.open(() => song);
+    expect(launched, isEmpty);
+    expect(pressed, [
+      [4242]
+    ]);
+  });
+
+  test('open: running but hidden in the tray → opened again to show it',
+      () async {
+    running = [(pid: 4242, path: soda, process: 'SodaMusic')];
+    windowShown = false;
+    final a = app(timeout: const Duration(seconds: 5));
+    await a.observe(media());
+    await a.open(() => song);
+    expect(launched, [soda]);
+    expect(pressed.length, 1);
+  });
+
+  test('open: a press that does nothing is repeated, at most 3 times',
+      () async {
+    running = [(pid: 4242, path: soda, process: 'SodaMusic')];
+    pressWorks = () => false;
+    final a = app(timeout: const Duration(seconds: 2));
+    await a.observe(media());
+    await expectLater(
+        a.open(() => song),
+        throwsA(isA<RemoteFailure>()
+            .having((f) => f.code, 'code', 'music_app_no_song')));
+    expect(pressed.length, 3, reason: 'Space toggles: never pressed endlessly');
   });
 
   test('open: no song in time is music_app_no_song', () async {
-    final a = app();
+    running = [(pid: 4242, path: soda, process: 'SodaMusic')];
+    pressWorks = () => false;
+    final a = app(timeout: const Duration(milliseconds: 100));
     await a.observe(media());
     await expectLater(
-        a.open(() => false),
+        a.open(() => song),
         throwsA(isA<RemoteFailure>()
             .having((f) => f.code, 'code', 'music_app_no_song')));
   });
@@ -166,9 +232,10 @@ void main() {
     await a.observe(media());
     launchError = const FileSystemException('denied');
     await expectLater(
-        a.open(() => true),
+        a.open(() => song),
         throwsA(isA<RemoteFailure>()
             .having((f) => f.code, 'code', 'music_app_open_failed')));
+    expect(pressed, isEmpty);
   });
 
   test('open: an .exe removed since is forgotten', () async {
@@ -181,5 +248,39 @@ void main() {
             .having((f) => f.code, 'code', 'no_music_app')));
     expect(a.name, isNull);
     expect(launched, isEmpty);
+  });
+
+  test('discover: an open but silent player is found by its process', () async {
+    running = [
+      (
+        pid: 9,
+        path: r'C:\Program Files\Microsoft\Edge\msedge.exe',
+        process: 'msedge'
+      ),
+      (pid: 4242, path: soda, process: 'SodaMusic'),
+    ];
+    final a = app();
+    await a.discover();
+    expect(a.name, '汽水音乐');
+    expect(jsonDecode(file.readAsStringSync()), {'path': soda, 'name': '汽水音乐'});
+  });
+
+  test('discover: never replaces a remembered app; nothing found is fine',
+      () async {
+    final a = app();
+    await a.discover();
+    expect(a.name, isNull);
+    paths[6] = r'C:\Spotify\Spotify.exe';
+    await a.observe(media(source: 'Spotify.exe', process: 'Spotify', pid: 6));
+    expect(a.name, 'Spotify');
+    running = [(pid: 4242, path: soda, process: 'SodaMusic')];
+    await a.discover();
+    expect(a.name, 'Spotify', reason: 'the app seen playing stays');
+  });
+
+  test('display names for players found by process', () {
+    expect(RemoteMusicApp.processDisplayName('SodaMusic'), '汽水音乐');
+    expect(RemoteMusicApp.processDisplayName('cloudmusic'), '网易云音乐');
+    expect(RemoteMusicApp.processDisplayName('Spotify'), 'Spotify');
   });
 }

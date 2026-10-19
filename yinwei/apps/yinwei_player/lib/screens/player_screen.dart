@@ -130,6 +130,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
   late final SystemMediaService _smtc;
   // Opened by a remote "Start on laptop" when no music app is open.
   RemoteMusicApp? _musicApp;
+  Timer? _musicAppScan;
   late final LiveTransferController _live;
   late final EngineBackend _backend;
   late final Listenable _transportTicks;
@@ -632,13 +633,20 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
     final musicApp = RemoteMusicApp(
         file: File('${dir.path}${Platform.pathSeparator}remote_music_app.json'));
     await musicApp.load();
+    await musicApp.discover();
     if (!mounted) return;
     _musicApp = musicApp;
     unawaited(musicApp.observe(_smtc.state));
+    // An open but silent player is not in Windows media controls: look for
+    // its process until one is known.
+    _musicAppScan = Timer.periodic(const Duration(seconds: 60), (_) {
+      if (musicApp.name == null) unawaited(musicApp.discover());
+    });
   }
 
-  /// Remote "Start on laptop": open the music app if none is open (see
-  /// [RemoteMusicApp]), play it if it is paused, wait for
+  /// Remote "Start on laptop": if no music app has a song, open the known
+  /// one and press its play key (see [RemoteMusicApp]); play it if it is
+  /// paused, wait for
   /// Windows to report it playing (Live refuses a paused source), then start
   /// Live Transfer exactly as the laptop button does.
   Future<void> _startLiveFromRemote() async {
@@ -975,6 +983,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
     if (_nativeWindow) windowManager.removeListener(this);
     _followDebounce?.cancel();
     _islandAnim?.cancel();
+    _musicAppScan?.cancel();
     _ctrl.removeListener(_onChange);
     _window.removeListener(_onWindowMode);
     _smtc.removeListener(_onSmtcChange);
