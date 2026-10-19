@@ -5,6 +5,7 @@ import 'package:yinwei_player/contracts/coordinate_frame_v1.dart';
 import 'package:yinwei_player/mobile/android_playback_capture_panel.dart';
 import 'package:yinwei_player/mobile/ios_laptop_listen_screen.dart';
 import 'package:yinwei_player/mobile/ios_runtime_status.dart';
+import 'package:yinwei_player/mobile/ios_update_notice.dart';
 import 'package:yinwei_player/mobile/ios_replaykit_audio_probe_panel.dart';
 import 'package:yinwei_player/mobile/mobile_now_playing_header.dart';
 import 'package:yinwei_player/mobile/mobile_point_inspector.dart';
@@ -46,6 +47,7 @@ class MobilePlayerScreen extends StatefulWidget {
     this.screenAudioProbe,
     this.replayKitAudioProbe,
     this.androidPlaybackCapture,
+    this.updateNotice,
   });
 
   final EngineController controller;
@@ -65,6 +67,9 @@ class MobilePlayerScreen extends StatefulWidget {
   final ScreenAudioProbe? screenAudioProbe;
   final ReplayKitAudioProbe? replayKitAudioProbe;
   final AndroidPlaybackCapture? androidPlaybackCapture;
+
+  /// iPad: offers a newer published build (defaults to the update channel).
+  final IosUpdateNotice? updateNotice;
 
   @override
   State<MobilePlayerScreen> createState() => _MobilePlayerScreenState();
@@ -86,6 +91,17 @@ class _MobilePlayerScreenState extends State<MobilePlayerScreen> {
           !widget.capabilities.threeJsWebView,
       'MobilePlayerScreen must not require Windows-only services',
     );
+    // iPad: a newer published build is offered once a session.
+    final notice = widget.updateNotice ??
+        (defaultTargetPlatform == TargetPlatform.iOS
+            ? IosUpdateNotice()
+            : null);
+    if (notice != null && notice.enabled) {
+      WidgetsBinding.instance.addPostFrameCallback((_) async {
+        final release = await notice.check();
+        if (release != null && mounted) notice.showBanner(context, release);
+      });
+    }
   }
 
   @override

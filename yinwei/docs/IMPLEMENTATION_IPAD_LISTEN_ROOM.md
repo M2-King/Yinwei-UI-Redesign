@@ -515,6 +515,24 @@ The existing verification already checks that the app and its ReplayKit extensio
 
 **Pass:** the iPad checks in section 7.
 
+### 11.1b iPad update channel (option A, chosen 2026-10-19)
+
+Your signing app is AllInSign; no public documentation of an AllInSign update source was found, so the
+channel works with any signer:
+- **CI** stamps each IPA with its run number (`--build-number`, `--dart-define=YINWEI_IOS_BUILD`). The app
+  is then `<app version>-dev.<run>` on the developer channel (`InstalledApp.currentIos`). A local build is
+  the plain version and never looks for developer builds.
+- **The iPad app** (`IosUpdateNotice`, on the iPad's main screen) asks your existing update server
+  (`https://49.235.107.48/yinwei/updates`, `/v1/ios-arm64/manifest.json`) once a session. If a newer
+  build is published it shows a banner: *Yinwei build N is ready* → **Download** opens the package in
+  Safari (native `openUpdatePackage`, https `.ipa` under `/packages/ios-arm64/` only) → AllInSign signs and
+  installs it. Errors and an unreachable server stay quiet.
+- **Publishing** (`yinwei/tools/publish_ios_update.py IPA --notes …`, `--dry-run` first): checks the IPA,
+  reads its version from the app, copies it over SSH (`root@49.235.107.48`, the key already on this
+  laptop) and runs the channel's own `channel.py publish` there; the service re-reads its catalog on each
+  request. Each publish needs your OK. The download link is public (the IPA holds no passwords).
+- The first IPA with the update notice is installed by hand; later ones arrive through the banner.
+
 ### 11.2 Mac: DMG
 
 **Today (exists):** `.github/workflows/macos-test-build.yml` with `tools/package_macos.sh` builds the Mac

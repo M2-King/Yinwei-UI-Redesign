@@ -113,7 +113,8 @@ jobs:
         run: |
           set -euo pipefail
           python3 "$YINWEI_ROOT/tools/patch_ios_file_picker_no_dkcamera.py" "$PLAYER"
-          flutter build ios --config-only --release --no-codesign
+          flutter build ios --config-only --release --no-codesign \
+            --build-number="$GITHUB_RUN_NUMBER" --dart-define=YINWEI_IOS_BUILD="$GITHUB_RUN_NUMBER"
           python3 "$YINWEI_ROOT/tools/patch_ios_file_picker_no_dkcamera.py" "$PLAYER/ios"
           if [[ -f ios/Podfile ]]; then
             (cd ios && pod install)
@@ -123,7 +124,10 @@ jobs:
         working-directory: yinwei/apps/yinwei_player
         run: |
           set -euo pipefail
-          flutter build ios --release --no-codesign 2>&1 | tee "$LOG_DIR/flutter-build-ios.log"
+          # The run number makes each IPA a newer build for the iPad update check.
+          flutter build ios --release --no-codesign \
+            --build-number="$GITHUB_RUN_NUMBER" --dart-define=YINWEI_IOS_BUILD="$GITHUB_RUN_NUMBER" \
+            2>&1 | tee "$LOG_DIR/flutter-build-ios.log"
 
       - name: Verify device binaries and native audio linkage
         run: |
@@ -153,12 +157,13 @@ jobs:
           {
             echo "Yinwei unsigned device IPA — sign before installation"
             echo "Commit: $GITHUB_SHA"
+            echo "iPad build: $GITHUB_RUN_NUMBER (update channel version <app version>-dev.$GITHUB_RUN_NUMBER)"
             echo "Run: https://github.com/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
             echo "Runner: macos-latest ($(uname -m))"
             xcodebuild -version
             flutter --version
             rustc --version
-            echo 'Build command: flutter build ios --release --no-codesign'
+            echo 'Build command: flutter build ios --release --no-codesign --build-number=<run> --dart-define=YINWEI_IOS_BUILD=<run>'
             cat "$LOG_DIR/swift-capture-tests.log"
             grep -E '^# (tests|pass|fail)' "$LOG_DIR/listen-room-node-tests.log"
             grep 'test result:' "$LOG_DIR/cargo-test.log"

@@ -68,9 +68,26 @@ class InstalledApp {
       platform: kWindowsX64Platform,
     );
   }
+
+  /// This iPad build. CI passes its run number as YINWEI_IOS_BUILD, so each
+  /// IPA is `<app version>-dev.<run>` on the developer channel. A local build
+  /// (no run number) is the plain app version and is never offered a
+  /// developer build.
+  static InstalledApp currentIos({int build = kYinweiIosBuild}) {
+    return InstalledApp(
+      version: AppVersion.parse(
+          build > 0 ? '$kYinweiAppVersion-dev.$build' : kYinweiAppVersion),
+      channel: UpdateChannel.developer,
+      platform: kIosArm64Platform,
+    );
+  }
 }
 
 const String kWindowsX64Platform = 'windows-x64';
+const String kIosArm64Platform = 'ios-arm64';
+
+/// The CI run that built this iPad app (0 for a local build).
+const int kYinweiIosBuild = int.fromEnvironment('YINWEI_IOS_BUILD');
 const int kReleaseManifestSchema = 1;
 
 /// Local/test (or hosted) catalog of latest builds per channel.

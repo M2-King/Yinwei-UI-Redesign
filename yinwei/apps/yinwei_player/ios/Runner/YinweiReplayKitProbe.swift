@@ -106,6 +106,15 @@ final class YinweiReplayKitProbeController {
       result(["ok": true])
     case "stopRemoteReturn":
       remoteReturn.stop(); result(["ok": true])
+    case "openUpdatePackage":
+      // The iPad update notice's Download: opens a published iPad package in
+      // Safari, which hands it to the signing app. Nothing else is opened.
+      guard let text = (call.arguments as? [String: Any])?["url"] as? String,
+            let url = URL(string: text), url.scheme == "https",
+            url.path.contains("/packages/ios-arm64/"), url.pathExtension == "ipa" else {
+        result(false); return
+      }
+      UIApplication.shared.open(url) { opened in result(opened) }
     default:
       result(FlutterMethodNotImplemented)
     }
