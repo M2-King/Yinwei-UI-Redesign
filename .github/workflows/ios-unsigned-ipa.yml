@@ -52,6 +52,18 @@ jobs:
             echo "Git SHA: $GITHUB_SHA"
           } | tee "$LOG_DIR/environment.txt"
 
+      - name: Install Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Listen Room page tests
+        working-directory: yinwei/apps/yinwei_player
+        run: |
+          set -euo pipefail
+          node --test --test-reporter=tap test/listen_room/room_math_test.mjs test/listen_room/bridge_test.mjs \
+            test/listen_room/offline_contract_test.mjs 2>&1 | tee "$LOG_DIR/listen-room-node-tests.log"
+
       - name: Swift capture tests including unsorted five-group profile
         run: |
           set -euo pipefail
@@ -148,6 +160,7 @@ jobs:
             rustc --version
             echo 'Build command: flutter build ios --release --no-codesign'
             cat "$LOG_DIR/swift-capture-tests.log"
+            grep -E '^# (tests|pass|fail)' "$LOG_DIR/listen-room-node-tests.log"
             grep 'test result:' "$LOG_DIR/cargo-test.log"
             tail -n 3 "$LOG_DIR/flutter-test.log"
             cat "$GITHUB_WORKSPACE/Yinwei-ipa-verification.json"

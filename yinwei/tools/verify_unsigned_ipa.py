@@ -4,6 +4,7 @@ import argparse
 import hashlib
 import json
 import plistlib
+import re
 import struct
 from pathlib import Path
 from zipfile import ZipFile
@@ -39,6 +40,36 @@ def device_binary(data, label):
     return "arm64 / iOS device"
 
 
+LISTEN_ROOM = "Frameworks/App.framework/flutter_assets/assets/listen_room/"
+
+
+def listen_room(archive, names, app):
+    """The iPad Listen Room page ships whole: the page, every file it and its
+    stylesheet reference, and never the review-only dev/ folder."""
+    room = app + LISTEN_ROOM
+    files = {n[len(room):] for n in names if n.startswith(room) and not n.endswith("/")}
+    require("index.html" in files and "ui.css" in files,
+            f"Listen Room page is missing from {room}")
+    require(not any(n.startswith("dev/") for n in files),
+            "Listen Room review stand-in (dev/) is bundled")
+    page = archive.read(room + "index.html").decode("utf-8")
+    style = archive.read(room + "ui.css").decode("utf-8")
+    refs = set(re.findall(r'<(?:script|link)\b[^>]*?\b(?:src|href)="([^"]+)"', page))
+    refs |= set(re.findall(r"url\(\s*['\"]?([^'\")]+)['\"]?\s*\)", style))
+    require({"ui.css", "vendor/three.min.js", "room.js"} <= refs,
+            "Listen Room page does not load its stylesheet, three.js and room")
+    missing = sorted(r for r in refs if r not in files)
+    require(not missing, "Listen Room files missing: " + ", ".join(missing))
+    for ref in refs:
+        require(archive.getinfo(room + ref).file_size > 0, f"Listen Room file is empty: {ref}")
+    return {
+        "path": room.rstrip("/"),
+        "files": len(files),
+        "referenced": len(refs),
+        "three_sha256": hashlib.sha256(archive.read(room + "vendor/three.min.js")).hexdigest(),
+    }
+
+
 def verify(path):
     app = "Payload/Runner.app/"
     extension = app + "PlugIns/YinweiBroadcastUpload.appex/"
@@ -64,6 +95,7 @@ def verify(path):
                     "Invalid executable name")
             label = prefix + executable
             binaries[label] = device_binary(archive.read(label), label)
+        room = listen_room(archive, names, app)
     return {
         "ipa": path.name,
         "bytes": path.stat().st_size,
@@ -72,6 +104,7 @@ def verify(path):
         "RPBroadcastProcessMode": process_mode,
         "UIBackgroundModes": modes,
         "device_binaries": binaries,
+        "listen_room": room,
         "provisioning_profiles": 0,
         "installation": "Unsigned; signing required before installation",
     }
