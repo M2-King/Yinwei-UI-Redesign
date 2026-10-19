@@ -31,8 +31,12 @@ so the laptop could open it but not start it. Checked on the laptop:
 w15 therefore, when Start finds no song:
 1. finds the music app (remembered, or now also an open-but-silent one found by its process, so no
    "play once first" step);
-2. opens it by its `.exe` path if it isn't running (or again if it is hidden in the tray, which brings
-   its window back);
+2. if no copy of it runs, opens it through its **Start Menu shortcut** (your suggestion: it survives
+   汽水 updates, unlike `D:\soda music.1.2\…`), else by its `.exe` path. Only a shortcut in your or
+   all users' Start Menu Programs folder, with no arguments, pointing at an allow-listed player or its
+   launcher. Any running copy of the same player counts (your laptop has two 汽水 installs: 3.1.2 on
+   D:, 3.5.1 behind the shortcut), so no second copy is started. A copy hidden in the tray is opened
+   again from its own path, which brings its window back;
 3. brings its window to the front for about 2 s, sends Space **to that window only**, then puts the
    previous window back in front. Nothing is sent unless the app is confirmed in front;
 4. presses at most 3 times, 8 s apart (Space toggles), until Windows reports a song, within 30 s.
@@ -47,8 +51,9 @@ at that moment, their keys go to 汽水 instead. If 汽水's search box has focu
 instead of playing.
 
 **w15** (`outputs/w15/windows`, built next to w14): only `data/app.so` differs from w14
-(`2919e4a8…`); `yinwei_player.exe` and `spatial_core.dll` are byte-identical (`a2de3030…`, `eb764148…`).
-Tests: `flutter test` 690 passed, 6 skipped; Node 22/22; `flutter analyze` unchanged (117).
+(`cfe98ffb…`); `yinwei_player.exe` and `spatial_core.dll` are byte-identical (`a2de3030…`, `eb764148…`).
+Tests: `flutter test` 696 passed, 6 skipped; Node 22/22; `flutter analyze` unchanged (117). Live and
+read-only on the laptop: w15's own code finds `汽水音乐.lnk` (→ `SodaMusicLauncher.exe`).
 
 ## 1. What you get
 

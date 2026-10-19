@@ -7,6 +7,13 @@ import 'package:yinwei_player/remote/remote_music_app.dart';
 import 'package:yinwei_player/remote/remote_protocol.dart';
 
 const soda = r'C:\Users\me\AppData\Local\SodaMusic\SodaMusic.exe';
+// A second, newer install, opened through its Start Menu shortcut.
+const startMenuLnk =
+    r'C:\Users\me\AppData\Roaming\Microsoft\Windows\Start Menu\Programs\汽水音乐.lnk';
+const sodaLauncher =
+    r'C:\Users\me\AppData\Local\Programs\Soda Music\SodaMusicLauncher.exe';
+const sodaNewer =
+    r'C:\Users\me\AppData\Local\Programs\Soda Music\3.5.1\SodaMusic.exe';
 
 SystemMediaState media({
   String title = '晴天',
@@ -29,6 +36,7 @@ void main() {
   late List<String> launched;
   late Set<String> onDisk;
   late List<RunningMusicApp> running;
+  late List<MusicShortcut> shortcuts;
   late List<List<int>> pressed;
   // What a press does: true = the player starts a song.
   late bool Function() pressWorks;
@@ -44,10 +52,13 @@ void main() {
           return paths[pid];
         },
         runningApps: () async => List.of(running),
-        launch: (path) async {
+        shortcuts: () async => List.of(shortcuts),
+        launch: (target) async {
           if (launchError != null) throw launchError!;
-          launched.add(path);
+          launched.add(target);
           windowShown = true;
+          // The shortcut starts the newer install; an .exe starts itself.
+          final path = target.endsWith('.lnk') ? sodaNewer : target;
           if (running.every((r) => r.path != path)) {
             running.add((pid: 77, path: path, process: 'SodaMusic'));
           }
@@ -73,6 +84,7 @@ void main() {
     onDisk = {soda};
     launchError = null;
     running = [];
+    shortcuts = [];
     pressed = [];
     pressWorks = () => true;
     windowShown = true;
@@ -282,5 +294,105 @@ void main() {
     expect(RemoteMusicApp.processDisplayName('SodaMusic'), '汽水音乐');
     expect(RemoteMusicApp.processDisplayName('cloudmusic'), '网易云音乐');
     expect(RemoteMusicApp.processDisplayName('Spotify'), 'Spotify');
+  });
+
+  group('Start Menu shortcut', () {
+    void validShortcut() {
+      shortcuts = [(lnk: startMenuLnk, target: sodaLauncher, args: '')];
+      onDisk.addAll([startMenuLnk, sodaLauncher]);
+    }
+
+    test(
+        'not running: opened through the shortcut, Space in the copy it starts',
+        () async {
+      validShortcut();
+      windowShown = false;
+      final a = app(timeout: const Duration(seconds: 2));
+      await a.observe(media());
+      await a.open(() => song);
+      expect(launched, [startMenuLnk], reason: 'not the versioned .exe');
+      expect(
+          pressed,
+          [
+            [77]
+          ],
+          reason: 'the newer install counts as the same player');
+    });
+
+    test('a copy already running from another install is used, not reopened',
+        () async {
+      validShortcut();
+      running = [(pid: 5151, path: sodaNewer, process: 'SodaMusic')];
+      final a = app(timeout: const Duration(seconds: 2));
+      await a.observe(media());
+      await a.open(() => song);
+      expect(launched, isEmpty, reason: 'never a second copy');
+      expect(pressed, [
+        [5151]
+      ]);
+    });
+
+    test('hidden in the tray: the running copy itself is opened again',
+        () async {
+      validShortcut();
+      running = [(pid: 4242, path: soda, process: 'SodaMusic')];
+      windowShown = false;
+      final a = app(timeout: const Duration(seconds: 5));
+      await a.observe(media());
+      await a.open(() => song);
+      expect(launched, [soda],
+          reason: 'the shortcut could start the other install');
+    });
+
+    test('ignored: outside the Start Menu, with arguments, other apps, missing',
+        () async {
+      const elsewhere = r'C:\Users\me\Desktop\汽水音乐.lnk';
+      const other =
+          r'C:\Users\me\AppData\Roaming\Microsoft\Windows\Start Menu\Programs\Edge.lnk';
+      shortcuts = [
+        (lnk: elsewhere, target: sodaLauncher, args: ''),
+        (lnk: startMenuLnk, target: sodaLauncher, args: '--run evil'),
+        (lnk: other, target: r'C:\Program Files\Edge\msedge.exe', args: ''),
+        (lnk: startMenuLnk, target: sodaLauncher, args: ''), // not on disk
+      ];
+      onDisk.addAll([elsewhere, other, r'C:\Program Files\Edge\msedge.exe']);
+      final a = app(timeout: const Duration(seconds: 2));
+      await a.observe(media());
+      await a.open(() => song);
+      expect(launched, [soda]);
+    });
+
+    test('an .exe removed by an update: still opened through the shortcut',
+        () async {
+      validShortcut();
+      file.writeAsStringSync(jsonEncode({'path': soda, 'name': '汽水音乐'}));
+      onDisk.remove(soda);
+      final a = app(timeout: const Duration(seconds: 2));
+      await a.load();
+      expect(a.name, '汽水音乐', reason: 'kept: the shortcut still opens it');
+      await a.open(() => song);
+      expect(launched, [startMenuLnk]);
+
+      shortcuts = [];
+      final b = app();
+      await b.load();
+      expect(b.name, isNull, reason: 'no .exe and no shortcut');
+    });
+
+    test('names', () {
+      expect(RemoteMusicApp.musicFamily('SodaMusicLauncher'), 'sodamusic');
+      expect(RemoteMusicApp.musicFamily('SodaMusic'), 'sodamusic');
+      expect(RemoteMusicApp.musicFamily('msedge'), isNull);
+      expect(RemoteMusicApp.startMenuShortcut(startMenuLnk), isTrue);
+      expect(
+          RemoteMusicApp.startMenuShortcut(
+              r'C:\ProgramData\Microsoft\Windows\Start Menu\Programs\x.lnk'),
+          isTrue);
+      expect(RemoteMusicApp.startMenuShortcut(r'C:\Users\me\Desktop\x.lnk'),
+          isFalse);
+      expect(
+          RemoteMusicApp.startMenuShortcut(r'C:\x\Start Menu\Programs\a.exe'),
+          isFalse);
+    });
   });
 }

@@ -8,25 +8,31 @@ import 'package:yinwei_player/remote/remote_protocol.dart';
 /// A running music player process (its main process, not a helper).
 typedef RunningMusicApp = ({int pid, String path, String process});
 
+/// A Start Menu shortcut: the `.lnk` file, its target and its arguments.
+typedef MusicShortcut = ({String lnk, String target, String args});
+
 /// Remote "Start on laptop" when no music app has a song on the laptop: opens
-/// the music app the laptop knows (by its `.exe` path) if it isn't running,
-/// then presses its play/pause key (Space) in the app's own window until
-/// Windows reports a song. The existing remote start then starts Live.
+/// the music app the laptop knows if no copy of it is running (through its
+/// Start Menu shortcut, which survives app updates, or else its `.exe`), then
+/// presses its play/pause key (Space) in the app's own window until Windows
+/// reports a song. The existing remote start then starts Live.
 ///
 /// Many players (汽水音乐 among them) only appear in Windows media controls
 /// once a song plays, so Windows can't be asked to press play on a freshly
-/// opened app. Space is sent to that app's window only (a window message, no
-/// focus change), so nothing else on the laptop receives it.
+/// opened app, and they ignore keys while in the background: the window is
+/// brought to the front for the key press (see [_postSpace]).
 ///
 /// The laptop decides what opens, never the remote: only an allow-listed music
-/// player, with its `.exe` path read from the laptop's own process table. The
-/// remote command carries no path or name.
+/// player, by an `.exe` path read from the laptop's own process table or a
+/// shortcut in the Start Menu that points at one. The remote command carries
+/// no path or name.
 class RemoteMusicApp {
   RemoteMusicApp({
     required this.file,
     Future<String?> Function(int pid)? executablePath,
     Future<List<RunningMusicApp>> Function()? runningApps,
-    Future<void> Function(String path)? launch,
+    Future<List<MusicShortcut>> Function()? shortcuts,
+    Future<void> Function(String target)? launch,
     Future<bool> Function(List<int> pids)? pressPlay,
     bool Function(String path)? exists,
     this.readyTimeout = const Duration(seconds: 30),
@@ -35,7 +41,8 @@ class RemoteMusicApp {
     this.poll = const Duration(milliseconds: 250),
   })  : _executablePath = executablePath ?? _processPath,
         _runningApps = runningApps ?? _listRunning,
-        _launch = launch ?? _start,
+        _shortcuts = shortcuts ?? _listShortcuts,
+        _launch = launch ?? _open,
         _pressPlay = pressPlay ?? _postSpace,
         _exists = exists ?? ((path) => File(path).existsSync());
 
@@ -50,7 +57,8 @@ class RemoteMusicApp {
   final Duration poll;
   final Future<String?> Function(int pid) _executablePath;
   final Future<List<RunningMusicApp>> Function() _runningApps;
-  final Future<void> Function(String path) _launch;
+  final Future<List<MusicShortcut>> Function() _shortcuts;
+  final Future<void> Function(String target) _launch;
   final Future<bool> Function(List<int> pids) _pressPlay;
   final bool Function(String path) _exists;
 
@@ -66,7 +74,12 @@ class RemoteMusicApp {
       if (data is! Map) return;
       final path = data['path'], name = data['name'];
       if (path is String && name is String && name.isNotEmpty) {
-        if (launchable(path) && _exists(path)) _app = (path: path, name: name);
+        if (!launchable(path)) return;
+        // After an update the versioned .exe may be gone, but the Start Menu
+        // shortcut still opens the app.
+        if (_exists(path) || await _shortcutFor(path) != null) {
+          _app = (path: path, name: name);
+        }
       }
     } catch (_) {
       // Nothing remembered yet, or an unreadable file: start empty.
@@ -119,45 +132,51 @@ class RemoteMusicApp {
     }
   }
 
-  /// Opens the app if needed and presses play until [hasTrack]. Throws
+  /// Opens the app if no copy runs and presses play until [hasTrack]. Throws
   /// [RemoteFailure] with a code the iPad and the web page explain.
   Future<void> open(bool Function() hasTrack) async {
     final app = _app;
     if (app == null) throw const RemoteFailure('no_music_app');
-    if (!_exists(app.path)) {
-      _app = null;
-      throw const RemoteFailure('no_music_app');
-    }
-    var launched = false;
-    Future<void> launch() async {
-      launched = true;
+    var opened = false;
+    Future<void> start(String target) async {
+      opened = true;
       try {
-        await _launch(app.path);
+        await _launch(target);
       } catch (_) {
         throw const RemoteFailure('music_app_open_failed');
       }
     }
 
-    if ((await _pids(app.path)).isEmpty) await launch();
+    if ((await _copies(app.path)).isEmpty) {
+      // Not running: the Start Menu shortcut, else the remembered .exe.
+      final target =
+          await _shortcutFor(app.path) ?? (_exists(app.path) ? app.path : null);
+      if (target == null) {
+        _app = null;
+        throw const RemoteFailure('no_music_app');
+      }
+      await start(target);
+    }
     final deadline = DateTime.now().add(readyTimeout);
     var presses = 0;
     var next = DateTime.now();
     while (!hasTrack() && DateTime.now().isBefore(deadline)) {
       if (presses < maxPresses && !DateTime.now().isBefore(next)) {
-        final pids = await _pids(app.path);
+        final copies = await _copies(app.path);
         var pressed = false;
         try {
-          pressed = pids.isNotEmpty && await _pressPlay(pids);
+          pressed = copies.isNotEmpty &&
+              await _pressPlay([for (final c in copies) c.pid]);
         } catch (_) {
           // Treated as no window yet.
         }
         if (pressed) {
           presses++;
           next = DateTime.now().add(pressEvery);
-        } else if (!launched) {
+        } else if (!opened && copies.isNotEmpty) {
           // Running without a window to press in (hidden in the tray):
-          // opening it again brings its window back.
-          await launch();
+          // opening that same copy again brings its window back.
+          await start(copies.first.path);
           next = DateTime.now().add(const Duration(seconds: 2));
         } else {
           // Still starting: no window to press in yet.
@@ -169,16 +188,65 @@ class RemoteMusicApp {
     if (!hasTrack()) throw const RemoteFailure('music_app_no_song');
   }
 
-  Future<List<int>> _pids(String path) async {
+  /// Running copies of the same player, from any install or version.
+  Future<List<RunningMusicApp>> _copies(String path) async {
+    final family = musicFamily(_baseName(path));
+    if (family == null) return const [];
     try {
-      final lower = path.toLowerCase();
       return [
         for (final app in await _runningApps())
-          if (app.path.toLowerCase() == lower) app.pid,
+          if (launchable(app.path) && musicFamily(app.process) == family) app,
       ];
     } catch (_) {
       return const [];
     }
+  }
+
+  /// A Start Menu shortcut, without arguments, to the same player (or its
+  /// launcher), or null.
+  Future<String?> _shortcutFor(String path) async {
+    final family = musicFamily(_baseName(path));
+    if (family == null) return null;
+    try {
+      for (final s in await _shortcuts()) {
+        if (startMenuShortcut(s.lnk) &&
+            s.args.trim().isEmpty &&
+            launchable(s.target) &&
+            isMusicProcess(_baseName(s.target)) &&
+            musicFamily(_baseName(s.target)) == family &&
+            _exists(s.lnk) &&
+            _exists(s.target)) {
+          return s.lnk;
+        }
+      }
+    } catch (_) {
+      // No shortcut list: the .exe is used.
+    }
+    return null;
+  }
+
+  static String _baseName(String path) {
+    final name = path.split(RegExp(r'[\\/]')).last;
+    return name.toLowerCase().endsWith('.exe')
+        ? name.substring(0, name.length - 4)
+        : name;
+  }
+
+  /// Which allow-listed player a process or file name belongs to
+  /// (SodaMusic and SodaMusicLauncher are both "sodamusic").
+  static String? musicFamily(String name) {
+    final n = name.toLowerCase();
+    for (final p in SmtcLoopbackPicker.musicProcessPatterns) {
+      if (n.contains(p.toLowerCase())) return p.toLowerCase();
+    }
+    return null;
+  }
+
+  /// Only shortcuts in a Start Menu Programs folder (yours or all users').
+  static bool startMenuShortcut(String lnk) {
+    final lower = lnk.toLowerCase();
+    return lower.endsWith('.lnk') &&
+        lower.contains(r'\microsoft\windows\start menu\programs\');
   }
 
   /// The allow list Live Transfer already uses; never a browser or Yinwei.
@@ -237,7 +305,8 @@ class RemoteMusicApp {
 
   /// Runs [script] passed as -EncodedCommand (UTF-16LE base64), so no quote
   /// in it can be split by command-line parsing.
-  static Future<ProcessResult> _powershell(String script) {
+  static Future<ProcessResult> _powershell(String script,
+      {Map<String, String>? environment}) {
     final full =
         '[Console]::OutputEncoding=[Text.UTF8Encoding]::new(\$false)\n$script';
     final utf16 = <int>[
@@ -251,8 +320,51 @@ class RemoteMusicApp {
         '-EncodedCommand',
         base64.encode(utf16)
       ],
+      environment: environment,
+      includeParentEnvironment: environment == null,
       stdoutEncoding: utf8,
     );
+  }
+
+  /// Shortcuts in your and all users' Start Menu Programs folders.
+  static Future<List<MusicShortcut>> _listShortcuts() async {
+    final result = await _powershell(r'''
+$shell = New-Object -ComObject WScript.Shell
+$rows = @(foreach ($dir in @([Environment]::GetFolderPath('Programs'), [Environment]::GetFolderPath('CommonPrograms'))) {
+  if ($dir -and (Test-Path -LiteralPath $dir)) {
+    Get-ChildItem -LiteralPath $dir -Recurse -Filter *.lnk -ErrorAction SilentlyContinue | ForEach-Object {
+      $s = $shell.CreateShortcut($_.FullName)
+      @{ lnk = $_.FullName; target = [string]$s.TargetPath; args = [string]$s.Arguments }
+    }
+  }
+})
+ConvertTo-Json -InputObject $rows -Compress''');
+    if (result.exitCode != 0) return const [];
+    final text = '${result.stdout}'.trim();
+    final data = jsonDecode(text.isEmpty ? '[]' : text);
+    return [
+      for (final row in (data is List ? data : const []))
+        if (row is Map &&
+            row['lnk'] is String &&
+            row['target'] is String &&
+            row['args'] is String)
+          (
+            lnk: row['lnk'] as String,
+            target: row['target'] as String,
+            args: row['args'] as String
+          ),
+    ];
+  }
+
+  /// A shortcut opens the way a Start Menu click does; an `.exe` directly.
+  static Future<void> _open(String target) async {
+    if (!target.toLowerCase().endsWith('.lnk')) return _start(target);
+    final quoted = "'${target.replaceAll("'", "''")}'";
+    final result = await _powershell('Start-Process -FilePath $quoted',
+        environment: launchEnvironment(Platform.environment));
+    if (result.exitCode != 0) {
+      throw ProcessException('Start-Process', [target], '', result.exitCode);
+    }
   }
 
   static Future<String?> _processPath(int pid) async {
