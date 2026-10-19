@@ -17,7 +17,7 @@
     v: 1, laptop: "TIM-LAPTOP", connection: "connected", source: "汽水音乐", live: true, playing: true,
     listening: "on", control: "mine", notice: "none", mode: "point", motion: "fixed", orbitHz: 0.4,
     az: 35, el: 20, dist: 3.2, track: { ...tracks[0] }, volume: 0.72, level: 0,
-    stats: { received: 18240, bufferMs: 160, underruns: 0 }, opens: null,
+    stats: { received: 18240, bufferMs: 160, underruns: 0 }, opens: null, pending: false, progress: null,
   };
   const later = (ms, f) => setTimeout(f, ms);
   const say = (t) => YinweiListen.toast(t);
@@ -29,7 +29,14 @@
     switch (i.t) {
       case "listen":
         M.listening = "connecting";
-        later(i.startLive ? 1800 : 900, () => { Object.assign(M, { live: true, playing: true, listening: "on", source: "汽水音乐", track: M.track || { ...tracks[ti] }, opens: null }); say(i.startLive ? `Playing ${M.track.title} from ${M.laptop}` : "Listening on this iPad"); });
+        if (i.startLive) { // the laptop's steps, as the app reports them
+          const steps = M.opens ? ["asking", "opening", "pressing", "starting", "audio"] : ["asking", "pressing", "starting", "audio"];
+          M.pending = true;
+          steps.forEach((s, n) => later(n * 1400, () => { M.progress = s; if (s === "audio") M.pending = false; }));
+          later(steps.length * 1400, () => { Object.assign(M, { live: true, playing: true, listening: "on", source: "汽水音乐", track: M.track || { ...tracks[ti] }, opens: null, progress: null }); say(`Playing ${M.track.title} from ${M.laptop}`); });
+          break;
+        }
+        later(900, () => { Object.assign(M, { live: true, playing: true, listening: "on", source: "汽水音乐", track: M.track || { ...tracks[ti] }, opens: null }); say(i.startLive ? `Playing ${M.track.title} from ${M.laptop}` : "Listening on this iPad"); });
         break;
       case "stopListening": later(150, () => { M.listening = "off"; say("Stopped listening · the laptop keeps playing"); }); break;
       case "take": later(150, () => { M.control = "mine"; if (M.notice === "taken") M.notice = "none"; say("You're in control"); }); break;
@@ -85,6 +92,7 @@
     ${group("This iPad", "listening", [["on", "Listening"], ["off", "Not listening"]])}
     ${group("Control", "control", [["mine", "I have control"], ["other", "Laptop took control"]])}
     ${group("Situation", "notice", [["none", "All good"], ["busy", "Safari is listening"], ["interrupted", "Phone call"], ["lost", "Connection lost"], ["noapp", "No music app"], ["opens", "Laptop opens app"]])}
+    ${group("Start progress", "progress", [["none", "Idle"], ["asking", "Asking"], ["opening", "Opening app"], ["pressing", "Pressing play"], ["starting", "Starting"], ["audio", "Audio"]])}
     ${group("Room quality", "quality", [["auto", "Auto"], ["full", "Full"], ["light", "Light"]])}
     ${group("Developer overlay", "fps", [["off", "Off"], ["on", "FPS meter"]])}
     <div class="grp"><span>Intents the page sent (newest first)</span><pre id="dev-log">–</pre></div>
@@ -93,7 +101,7 @@
   const local = { quality: "auto", fps: "off" };
   function renderLog() { const el = document.getElementById("dev-log"); if (el) el.textContent = log.join("\n") || "–"; }
   function sync() {
-    const vals = { live: M.live ? "on" : "off", listening: M.listening === "off" ? "off" : "on", control: M.control, notice: M.opens ? "opens" : M.notice, ...local };
+    const vals = { live: M.live ? "on" : "off", listening: M.listening === "off" ? "off" : "on", control: M.control, notice: M.opens ? "opens" : M.notice, progress: M.progress || "none", ...local };
     panel.querySelectorAll(".opts").forEach((g) => g.querySelectorAll("button").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.v === vals[g.dataset.key]))));
   }
   panel.querySelectorAll(".opts").forEach((g) => g.addEventListener("click", (e) => {
@@ -110,6 +118,7 @@
         : { source: "汽水音乐", track: M.track || { ...tracks[ti] }, opens: null });
       if (v === "noapp") Object.assign(M, { live: false, playing: false, listening: "off" });
     }
+    if (k === "progress") { M.progress = v === "none" ? null : v; if (M.progress) Object.assign(M, { live: false, playing: false, listening: "connecting" }); }
     if (k === "quality") { local.quality = v; YinweiListen.setQuality(v); }
     if (k === "fps") { local.fps = v; YinweiListen.devOverlay(v === "on"); }
     sync();

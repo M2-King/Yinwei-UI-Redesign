@@ -134,7 +134,9 @@ class RemoteMusicApp {
 
   /// Opens the app if no copy runs and presses play until [hasTrack]. Throws
   /// [RemoteFailure] with a code the iPad and the web page explain.
-  Future<void> open(bool Function() hasTrack) async {
+  /// [onPress] runs before the first key press (for the iPad's progress).
+  Future<void> open(bool Function() hasTrack,
+      {void Function()? onPress}) async {
     final app = _app;
     if (app == null) throw const RemoteFailure('no_music_app');
     var opened = false;
@@ -163,6 +165,7 @@ class RemoteMusicApp {
     while (!hasTrack() && DateTime.now().isBefore(deadline)) {
       if (presses < maxPresses && !DateTime.now().isBefore(next)) {
         final copies = await _copies(app.path);
+        if (presses == 0 && copies.isNotEmpty) onPress?.call();
         var pressed = false;
         try {
           pressed = copies.isNotEmpty &&

@@ -57,7 +57,9 @@ void main() {
                   'source': 'Synthetic Windows source',
                   'title': 'Live test',
                   'captureHealthy': true,
-                  'openApp': '汽水音乐'
+                  'openApp': '汽水音乐',
+                  'azimuthDeg': 42.5,
+                  'startStage': 'pressing'
                 }),
         loadAsset: (_) async => Uint8List.fromList(
             utf8.encode('<meta content="LOGIN_CSRF_TOKEN">')));
@@ -143,6 +145,9 @@ void main() {
     expect((snapshot['live'] as Map)['remoteControls'], false);
     expect((snapshot['live'] as Map)['openApp'], '汽水音乐',
         reason: 'the app a remote start opens, named by the laptop');
+    expect((snapshot['live'] as Map)['azimuthDeg'], 42.5,
+        reason: 'where the sound is now, for the orbit');
+    expect((snapshot['live'] as Map)['startStage'], 'pressing');
     expect(
         (await request('/remote/api/control/lease', body: {}, csrfToken: csrf))
             .status,

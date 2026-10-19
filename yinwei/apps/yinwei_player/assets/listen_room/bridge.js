@@ -14,18 +14,22 @@
 const ListenBridge = (() => {
   const VERSION = 1, HOLD_MS = 2500;
   const FIELDS = ["laptop", "connection", "source", "live", "playing", "listening", "control", "notice",
-    "mode", "motion", "orbitHz", "az", "el", "dist", "track", "volume", "level", "stats", "opens"];
+    "mode", "motion", "orbitHz", "az", "el", "dist", "track", "volume", "level", "stats", "opens",
+    "pending", "progress"];
   const wrap = (a) => { a = ((a + 180) % 360 + 360) % 360 - 180; return a === -180 ? 180 : a; };
   // Values the app may send, so a bad message can't put the page in a state it can't draw.
   const ENUMS = {
     connection: ["connected", "reconnecting"], listening: ["off", "connecting", "on"], control: ["mine", "other"],
     notice: ["none", "busy", "interrupted", "lost", "taken", "noapp"], mode: ["point", "stereo2"], motion: ["fixed", "orbit"],
   };
+  const PROGRESS = ["asking", "opening", "pressing", "starting", "audio"];
   const RANGES = { orbitHz: [0.05, 2], az: [-180, 180], el: [-90, 90], dist: [0.5, 10], volume: [0, 1], level: [0, 1] };
   function clean(k, v) {
     if (ENUMS[k]) return ENUMS[k].includes(v) ? v : undefined;
     if (RANGES[k]) { const n = Number(v); return Number.isFinite(n) ? Math.min(RANGES[k][1], Math.max(RANGES[k][0], n)) : undefined; }
-    if (k === "live" || k === "playing") return typeof v === "boolean" ? v : undefined;
+    if (k === "live" || k === "playing" || k === "pending") return typeof v === "boolean" ? v : undefined;
+    // Start progress: asking (this iPad), opening / pressing / starting (the laptop), audio; null when idle.
+    if (k === "progress") return PROGRESS.includes(v) ? v : null;
     if (k === "laptop" || k === "source") return typeof v === "string" ? v.slice(0, 80) : undefined;
     // The music app the laptop opens on Start when none is open; null when it can't.
     if (k === "opens") return typeof v === "string" && v ? v.slice(0, 80) : null;
@@ -61,5 +65,5 @@ const ListenBridge = (() => {
   // A soft per-song tint for the generated cover (the laptop sends no artwork),
   // within the night blues of the approved prototype (205–240).
   function hueOf(title) { let h = 0; for (const ch of String(title || "")) h = (h * 31 + ch.codePointAt(0)) >>> 0; return 205 + (h % 36); }
-  return { VERSION, HOLD_MS, FIELDS, merge, hold, same, clean, hueOf };
+  return { VERSION, HOLD_MS, FIELDS, PROGRESS, merge, hold, same, clean, hueOf };
 })();

@@ -26,6 +26,7 @@ const S = {
   laptop: "", connection: "connected", source: "", live: false, playing: false, listening: "off",
   control: "mine", notice: "none", mode: "point", motion: "fixed", orbitHz: 0.4,
   az: 0, el: 0, dist: 2, track: null, volume: 1, level: 0, stats: { received: 0, bufferMs: 0, underruns: 0 }, opens: null,
+  pending: false, progress: null,
   screen: "room", view: "3d", panel: null,
 };
 const held = {}; // values you just set, kept until the app confirms them
@@ -39,11 +40,19 @@ function send(intent) {
   window.dispatchEvent(new CustomEvent("yinwei-intent", { detail: JSON.parse(msg) }));
 }
 function apply(next) {
-  const changed = ListenBridge.merge(S, next, held, performance.now(), {
+  if (typeof next === "string") { try { next = JSON.parse(next); } catch (e) { return; } }
+  const now = performance.now(), heldBefore = Object.keys(held).join();
+  // What you tapped stays while its command is on its way to the laptop (a
+  // Start or a cold music app can take many seconds); once answered, the
+  // laptop has HOLD_MS to show it, as before.
+  if (S.pending || (next && next.pending === true)) {
+    for (const k in held) held[k].until = Math.max(held[k].until, now + ListenBridge.HOLD_MS);
+  }
+  const changed = ListenBridge.merge(S, next, held, now, {
     placing: typeof dragging !== "undefined" && dragging === "source",
     orbiting: S.mode === "point" && S.motion === "orbit",
   });
-  if (changed.length) render();
+  if (changed.length || Object.keys(held).join() !== heldBefore) render();
 }
 
 const isCjk = (t) => /[㐀-鿿]/.test(t);
@@ -107,6 +116,7 @@ function render() {
   setText($("live-text"), noApp ? "Live off · waiting for a music app" : S.live ? `${S.playing ? "Live" : "Paused"} · ${S.source} on ${S.laptop}` : opens ? "Live off · no music app open yet" : `Live off · ${S.source} on ${S.laptop}`);
   ["prev", "play", "next"].forEach((id) => { $(id).disabled = noApp; });
   setText($("play-icon"), S.playing ? "pause" : "play_arrow");
+  $("play").classList.toggle("waiting", !!held.playing); // a ring until the laptop confirms
   $("play").setAttribute("aria-label", S.playing ? "Pause" : "Play");
 
   const listening = S.listening === "on";
@@ -133,8 +143,11 @@ function render() {
   });
 
   const right = $("right");
-  once("right", [S.listening, S.live, isLost, noApp, S.laptop, S.source, opens], () => {
-    if (listening) {
+  const progress = S.progress && !isLost ? S.progress : null;
+  once("right", [S.listening, S.live, isLost, noApp, S.laptop, S.source, opens, progress], () => {
+    if (progress) {
+      right.innerHTML = progressHtml(progress);
+    } else if (listening) {
       right.innerHTML = `<div class="vol">${ms("volume_up")}<input id="vol" type="range" min="0" max="1" step="0.01" value="${S.volume}" aria-label="Volume on this iPad"></div><button class="round" id="airplay" type="button" aria-label="Choose where this iPad plays">${ms("airplay")}</button>`;
       const vol = $("vol");
       const paint = () => vol.style.setProperty("--p", `${vol.value * 100}%`);
@@ -305,6 +318,23 @@ function commitPlace() {
   setLocal({ az, el: S.el, dist: S.dist });
   if (snapAnim) S.az = snapAnim.from; // the snap animation finishes the move on screen
   send({ t: "place", az, el: S.el, dist: S.dist });
+}
+
+// Start progress: one line for the current step, and a dot per laptop step.
+const STEPS = ["opening", "pressing", "starting", "audio"];
+function progressHtml(step) {
+  const known = S.source && !/^(the Yinwei player|your music app)$/.test(S.source) ? S.source : "";
+  const app = esc(S.opens || known || "your music app");
+  const text = {
+    asking: `Asking ${esc(S.laptop)}…`,
+    opening: `Opening ${app} on ${esc(S.laptop)}…`,
+    pressing: `Pressing play in ${app}…`,
+    starting: "Starting spatial sound…",
+    audio: "Connecting audio…",
+  }[step];
+  const at = STEPS.indexOf(step);
+  const dots = STEPS.map((s, i) => `<i class="${i < at ? "done" : i === at ? "now" : ""}"></i>`).join("");
+  return `<div class="listen-cta"><div class="progress glass" role="status" aria-live="polite"><span class="spin" aria-hidden="true"></span><span>${text}</span></div><div class="steps" aria-hidden="true">${dots}</div></div>`;
 }
 
 // ---------------------------------------------------------------- actions (intents)

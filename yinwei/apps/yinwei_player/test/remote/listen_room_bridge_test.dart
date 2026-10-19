@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/services.dart';
@@ -38,6 +39,8 @@ class FakeSession extends LaptopListenController {
 
   bool control = false, signed = true, takeWorks = true, commandWorks = true;
   final calls = <String>[];
+  // A start that is still on its way to the laptop.
+  Future<void>? startGate;
 
   @override
   bool get hasControl => control;
@@ -64,8 +67,11 @@ class FakeSession extends LaptopListenController {
   }
 
   @override
-  Future<void> startListening({bool startLive = false}) async =>
-      calls.add('listen startLive=$startLive');
+  Future<void> startListening({bool startLive = false}) async {
+    calls.add('listen startLive=$startLive');
+    await startGate;
+  }
+
   @override
   Future<void> stopListening({String? message}) async => calls.add('stop');
   @override
@@ -87,6 +93,8 @@ Map<String, dynamic> snapshot({
   bool controlHeld = false,
   bool hasFile = false,
   String openApp = '',
+  double? liveAz,
+  String startStage = '',
 }) =>
     {
       'liveRunning': liveRunning,
@@ -102,6 +110,8 @@ Map<String, dynamic> snapshot({
         'title': '晴天',
         'playing': true,
         'openApp': openApp,
+        'azimuthDeg': liveAz,
+        'startStage': startStage,
       },
       'track': {'title': 'Demo.wav', 'artist': 'Yinwei', 'hasFile': hasFile},
       'transport': {'playing': false},
@@ -372,6 +382,63 @@ void main() {
       session.snapshot = snapshot(liveRunning: false, source: '');
       expect(bridge.state()['opens'], isNull, reason: 'an older laptop');
       expect(bridge.state()['notice'], 'noapp');
+    });
+
+    test('orbit: the light follows where the sound is now', () {
+      session.snapshot = snapshot(liveAz: 200);
+      expect(bridge.state()['az'], -160.0,
+          reason: "the Live engine's heading, wrapped to ±180");
+      session.snapshot = snapshot(liveAz: 200)
+        ..['spatialMode'] = {
+          'array': 'point',
+          'motion': 'fixed',
+          'orbitHz': 0.4
+        };
+      expect(bridge.state()['az'], 35.0, reason: 'Fixed: the set direction');
+      session.snapshot = snapshot(liveAz: 200)
+        ..['spatialMode'] = {
+          'array': 'stereo2',
+          'motion': 'orbit',
+          'orbitHz': 0.4
+        };
+      expect(bridge.state()['az'], 35.0, reason: 'no orbit in 2.0');
+      session.snapshot = snapshot(liveRunning: false)
+        ..['transport'] = {'playing': true}
+        ..['telemetry'] = {'azimuthDeg': 120.0};
+      expect(bridge.state()['az'], 120.0, reason: "the file player's heading");
+      session.snapshot = snapshot();
+      expect(bridge.state()['az'], 35.0, reason: 'an older laptop sends none');
+    });
+
+    test('start progress: asking, the laptop step, then audio', () async {
+      session.snapshot = snapshot(liveRunning: false, startStage: 'opening');
+      expect(bridge.state()['progress'], 'opening');
+      session.snapshot = snapshot(liveRunning: false);
+      expect(bridge.state()['progress'], isNull);
+      final gate = Completer<void>();
+      session.startGate = gate.future;
+      final handling = bridge.handle('{"t":"listen","startLive":true}');
+      await Future<void>.delayed(Duration.zero);
+      expect(bridge.state()['progress'], 'asking',
+          reason: 'before the laptop reports a step');
+      session.snapshot = snapshot(liveRunning: false, startStage: 'pressing');
+      expect(bridge.state()['progress'], 'pressing');
+      gate.complete();
+      await handling;
+      session.snapshot = snapshot();
+      expect(bridge.state()['progress'], isNull);
+      session.set((s) => s
+        ..listening = true
+        ..audioConnected = false);
+      expect(bridge.state()['progress'], 'audio');
+      session.set((s) => s.audioConnected = true);
+      expect(bridge.state()['progress'], isNull);
+    });
+
+    test('pending: a command on its way keeps what you tapped', () {
+      expect(bridge.state()['pending'], isFalse);
+      session.pending = true;
+      expect(bridge.state()['pending'], isTrue);
     });
 
     test('positions are clamped to the engine ranges', () {

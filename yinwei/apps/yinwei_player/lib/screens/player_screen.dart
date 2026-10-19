@@ -32,6 +32,7 @@ import 'package:yinwei_player/state/app_session_coordinator.dart';
 import 'package:yinwei_player/remote/remote_gateway.dart';
 import 'package:yinwei_player/remote/remote_protocol.dart';
 import 'package:yinwei_player/remote/remote_guest.dart';
+import 'package:yinwei_player/remote/remote_media_keys.dart';
 import 'package:yinwei_player/remote/remote_music_app.dart';
 import 'package:yinwei_player/remote/remote_deployment.dart';
 import 'package:yinwei_player/remote/remote_auth.dart';
@@ -131,6 +132,10 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
   // Opened by a remote "Start on laptop" when no music app is open.
   RemoteMusicApp? _musicApp;
   Timer? _musicAppScan;
+  // Play/pause/next for the Live source app, through one ready PowerShell.
+  RemoteMediaKeys? _mediaKeys;
+  // Which step a remote "Start on laptop" is on, for the iPad's progress.
+  String _remoteStartStage = '';
   late final LiveTransferController _live;
   late final EngineBackend _backend;
   late final Listenable _transportTicks;
@@ -205,6 +210,11 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
         'captureHealthy': _live.captureHealthy,
         'playing': _smtc.state.playing,
         'openApp': _musicApp?.name ?? '',
+        // Where the sound is now (Orbit moves it), read from the Live engine
+        // as the laptop's own screen does; null while Live is off.
+        'azimuthDeg': _live.running ? _live.azimuthDeg() : null,
+        // Remote start progress: opening / pressing / starting, or ''.
+        'startStage': _remoteStartStage,
       },
       // Same effect as the local controls, minus takeLocalControl(): a
       // remote change must not revoke the remote's own lease.
@@ -216,7 +226,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
         if (_live.running) _live.applyLiveMode(mode);
         await _ctrl.setMode(mode);
       },
-      liveMedia: _caps.systemMedia ? _smtc.sendCommand : null,
+      liveMedia: _caps.systemMedia ? _remoteMediaKey : null,
       startLive: _caps.liveTransfer ? _startLiveFromRemote : null,
       stopLive: _caps.liveTransfer ? _stopLiveHrtf : null,
       // Same steps as _onArrayMode, minus takeLocalControl().
@@ -268,6 +278,12 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
     if (_caps.systemMedia) unawaited(_smtc.start());
     // Off with YINWEI_REMOTE_OPEN_MUSIC_APP=0: the remote start then needs
     // the music app open, as before.
+    if (Platform.isWindows &&
+        _caps.systemMedia &&
+        !Platform.environment.containsKey('FLUTTER_TEST')) {
+      _mediaKeys = RemoteMediaKeys(fallback: _smtc.sendCommand);
+      unawaited(_mediaKeys!.warmUp());
+    }
     if (Platform.isWindows &&
         _caps.liveTransfer &&
         _caps.systemMedia &&
@@ -631,7 +647,8 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
   Future<void> _loadMusicApp() async {
     final dir = await getApplicationSupportDirectory();
     final musicApp = RemoteMusicApp(
-        file: File('${dir.path}${Platform.pathSeparator}remote_music_app.json'));
+        file:
+            File('${dir.path}${Platform.pathSeparator}remote_music_app.json'));
     await musicApp.load();
     await musicApp.discover();
     if (!mounted) return;
@@ -651,32 +668,45 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
   /// Live Transfer exactly as the laptop button does.
   Future<void> _startLiveFromRemote() async {
     if (_live.running || _live.starting) return;
-    // The media state keeps the last song after its app is closed (a
-    // no_session report never clears it), so only a recent report counts.
-    bool song() => _smtc.state.hasTrack && _smtc.sessionFresh;
-    if (!song()) {
-      // No song on the laptop: open the music app and press play.
-      final musicApp = _musicApp;
-      if (musicApp == null) throw const RemoteFailure('no_music_app');
-      await musicApp.open(song);
-    }
-    if (!_smtc.state.playing) {
-      try {
-        await _smtc.sendCommand('play');
-      } catch (_) {
-        throw const RemoteFailure('music_not_playing');
-      }
-      final deadline = DateTime.now().add(const Duration(seconds: 15));
-      while (!_smtc.state.playing && DateTime.now().isBefore(deadline)) {
-        await Future<void>.delayed(const Duration(milliseconds: 250));
+    try {
+      // The media state keeps the last song after its app is closed (a
+      // no_session report never clears it), so only a recent report counts.
+      bool song() => _smtc.state.hasTrack && _smtc.sessionFresh;
+      if (!song()) {
+        // No song on the laptop: open the music app and press play.
+        final musicApp = _musicApp;
+        if (musicApp == null) throw const RemoteFailure('no_music_app');
+        _remoteStartStage = 'opening';
+        await musicApp.open(song,
+            onPress: () => _remoteStartStage = 'pressing');
       }
       if (!_smtc.state.playing) {
-        throw const RemoteFailure('music_not_playing');
+        _remoteStartStage = 'pressing';
+        try {
+          await _remoteMediaKey('play');
+        } catch (_) {
+          throw const RemoteFailure('music_not_playing');
+        }
+        final deadline = DateTime.now().add(const Duration(seconds: 15));
+        while (!_smtc.state.playing && DateTime.now().isBefore(deadline)) {
+          await Future<void>.delayed(const Duration(milliseconds: 250));
+        }
+        if (!_smtc.state.playing) {
+          throw const RemoteFailure('music_not_playing');
+        }
       }
+      _remoteStartStage = 'starting';
+      await _startLiveHrtf();
+      if (!_live.running) throw const RemoteFailure('live_start_failed');
+    } finally {
+      _remoteStartStage = '';
     }
-    await _startLiveHrtf();
-    if (!_live.running) throw const RemoteFailure('live_start_failed');
   }
+
+  /// A remote play/pause/next/previous: the ready PowerShell, else the
+  /// one-off command the laptop's own controls use.
+  Future<void> _remoteMediaKey(String action) =>
+      _mediaKeys?.send(action) ?? _smtc.sendCommand(action);
 
   Future<void> _toggleLiveHrtf() async {
     if (_live.running || _live.starting) {
@@ -987,6 +1017,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
     _followDebounce?.cancel();
     _islandAnim?.cancel();
     _musicAppScan?.cancel();
+    _mediaKeys?.close();
     _ctrl.removeListener(_onChange);
     _window.removeListener(_onWindowMode);
     _smtc.removeListener(_onSmtcChange);

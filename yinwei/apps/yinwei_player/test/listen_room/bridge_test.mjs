@@ -114,3 +114,16 @@ test('opens: the music app the laptop opens on Start, or null', () => {
   B.merge(S, {v: 1, opens: {path: 'C:\evil.exe'}}, {}, 3);
   assert.equal(S.opens, null, 'only a name, never an object');
 });
+
+test('progress and pending: known steps only, booleans only', () => {
+  const S = base();
+  B.merge(S, {v: 1, progress: 'opening', pending: true}, {}, 0);
+  assert.equal(S.progress, 'opening');
+  assert.equal(S.pending, true);
+  B.merge(S, {v: 1, progress: 'format C:', pending: 'yes'}, {}, 1);
+  assert.equal(S.progress, null, 'an unknown step clears the progress');
+  assert.equal(S.pending, true, 'a non-boolean is ignored');
+  B.merge(S, {v: 1, progress: null, pending: false}, {}, 2);
+  assert.equal(S.progress, null);
+  assert.equal(S.pending, false);
+});

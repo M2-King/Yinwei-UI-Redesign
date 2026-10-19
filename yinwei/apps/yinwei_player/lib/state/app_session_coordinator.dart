@@ -265,6 +265,16 @@ class AppSessionCoordinator {
         // The music app a remote "Start on laptop" opens when none is open
         // (the laptop picks it); '' when it can't open one.
         'openApp': liveInfo['openApp'] is String ? liveInfo['openApp'] : '',
+        // Where the sound is now (Orbit moves it); null while Live is off.
+        'azimuthDeg': liveInfo['azimuthDeg'] is num &&
+                (liveInfo['azimuthDeg'] as num).isFinite
+            ? liveInfo['azimuthDeg']
+            : null,
+        // Remote start progress: opening / pressing / starting, or ''.
+        'startStage': const {'opening', 'pressing', 'starting'}
+                .contains(liveInfo['startStage'])
+            ? liveInfo['startStage']
+            : '',
         'remoteControls': false,
       },
     };

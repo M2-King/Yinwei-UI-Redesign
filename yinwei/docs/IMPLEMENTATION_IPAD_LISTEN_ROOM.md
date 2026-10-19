@@ -432,6 +432,24 @@ SHA-256 as today.
 
 ---
 
+## 9b. Fixes after the first iPad tests (2026-10-19, laptop w17 + new IPA)
+
+1. **Orbit light stuck.** The laptop sent only the start direction (`pose`), and the page, which animates
+   the orbit itself, was pulled back to it 4 times a second. The laptop now also sends where the sound is
+   now: `live.azimuthDeg`, read from the Live engine as the laptop's own screen does (no engine change);
+   during file playback the existing `telemetry.azimuthDeg`. While orbiting, the bridge sends that heading
+   as `az`; the page eases its own animation toward it.
+2. **Slow taps.** Measured: each play/pause/next started a new PowerShell (about 1.5 s). The laptop now
+   keeps one ready (`RemoteMediaKeys`, PowerShell command mode; started with the player): first tap
+   about 1.4 s, then 2–8 ms (live on the laptop). The one-off command stays the fallback. The page keeps
+   what you tapped while the command is on its way (`pending`) instead of flipping back after 2.5 s, with
+   a ring turning around Play. Not changed: the laptop's media poll (0.5–1.5 s to notice a change) and
+   the audio buffer (160–400 ms).
+3. **No progress while starting.** The laptop reports its step (`live.startStage`: opening / pressing /
+   starting); the bridge adds this iPad's own (`asking`, `audio`). The room shows a glass pill with a
+   spinner and the step ("Opening 汽水音乐 on your laptop…", "Pressing play…", "Starting spatial sound…",
+   "Connecting audio…") and four step marks. Previewed in the review stand-in ("Start progress").
+
 ## 10. Order of work and approvals
 
 Your order (2026-10-19): **iPad and mobile first, then Windows, Mac last.** Each stage ends with a

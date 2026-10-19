@@ -78,6 +78,9 @@ class ListenRoomBridge {
   }
 
   bool _ready = false, _disposed = false, _seenConnected = false;
+  // This iPad asked the laptop to start (music + Live): shown as progress
+  // until the laptop reports its own step.
+  bool _startingLive = false;
   Timer? _timer;
   DateTime _lastPush = DateTime.fromMillisecondsSinceEpoch(0);
   String? _lastJson;
@@ -123,6 +126,26 @@ class ListenRoomBridge {
         ? _text(live['openApp'])
         : '';
     final title = liveRunning ? _text(live['title']) : _text(track['title']);
+    // Orbit: where the sound is now (the laptop's Live engine, or the file
+    // player's heading), so the room's light follows the sound instead of
+    // being pulled back to the start direction.
+    final orbiting = mode['array'] != 'stereo2' && mode['motion'] == 'orbit';
+    final heading = !orbiting
+        ? null
+        : liveRunning
+            ? _num(live['azimuthDeg'])
+            : transport['playing'] == true
+                ? _num(_map(snap['telemetry'])['azimuthDeg'])
+                : null;
+    // Start progress: the laptop's step while it starts, else this iPad's.
+    final stage = _text(live['startStage']);
+    final progress = stage.isNotEmpty
+        ? stage
+        : _startingLive && !liveRunning
+            ? 'asking'
+            : s.listening && !s.audioConnected
+                ? 'audio'
+                : null;
     final playing =
         liveRunning ? live['playing'] == true : transport['playing'] == true;
     if (s.connected) _seenConnected = true;
@@ -155,7 +178,9 @@ class ListenRoomBridge {
       'mode': mode['array'] == 'stereo2' ? 'stereo2' : 'point',
       'motion': mode['motion'] == 'orbit' ? 'orbit' : 'fixed',
       'orbitHz': _num(mode['orbitHz'])?.clamp(0.05, 2.0) ?? 0.4,
-      'az': _num(pose['azimuthDeg'])?.clamp(-180.0, 180.0) ?? 0,
+      'az': heading != null
+          ? _wrapDeg(heading)
+          : _num(pose['azimuthDeg'])?.clamp(-180.0, 180.0) ?? 0,
       'el': _num(pose['elevationDeg'])?.clamp(-90.0, 90.0) ?? 0,
       'dist': _num(pose['distanceM'])?.clamp(0.5, 10.0) ?? 2,
       'track': title.isEmpty
@@ -167,6 +192,9 @@ class ListenRoomBridge {
       'volume': volume,
       'level': level,
       'opens': opens.isEmpty ? null : opens,
+      // A command is on its way: the page keeps what you tapped until then.
+      'pending': s.pending,
+      'progress': progress,
       'stats': {
         'received': s.received,
         'bufferMs': s.bufferMs,
@@ -188,8 +216,7 @@ class ListenRoomBridge {
           bool liveRunning, String source, String opens) =>
       !liveRunning &&
       source.isEmpty &&
-      (session.notice ==
-              LaptopListenController.failureText('no_music_app') ||
+      (session.notice == LaptopListenController.failureText('no_music_app') ||
           (opens.isEmpty &&
               caps['remoteLive'] == true &&
               _map(snap['track'])['hasFile'] != true));
@@ -273,10 +300,15 @@ class ListenRoomBridge {
           await push(force: true);
           return;
         }
-        await session.startListening(
-            startLive: m['startLive'] == true &&
-                caps['remoteLive'] == true &&
-                snap['liveRunning'] != true);
+        final startLive = m['startLive'] == true &&
+            caps['remoteLive'] == true &&
+            snap['liveRunning'] != true;
+        try {
+          if (startLive) _starting(true);
+          await session.startListening(startLive: startLive);
+        } finally {
+          if (startLive) _starting(false);
+        }
         final notice = session.notice;
         if (notice != null) await toast(_toastText(notice));
       case 'stopListening':
@@ -305,7 +337,12 @@ class ListenRoomBridge {
           await push(force: true);
           return;
         }
-        await _command(type);
+        try {
+          if (type == 'live.start') _starting(true);
+          await _command(type);
+        } finally {
+          if (type == 'live.start') _starting(false);
+        }
       case 'liveStop':
         await _command('live.stop');
       case 'layout':
@@ -367,6 +404,16 @@ class ListenRoomBridge {
   }
 
   // Toasts are short lines without a final full stop.
+  void _starting(bool value) {
+    _startingLive = value;
+    schedule();
+  }
+
+  static double _wrapDeg(double a) {
+    final w = ((a + 180) % 360 + 360) % 360 - 180;
+    return w == -180 ? 180 : w;
+  }
+
   static String _toastText(String text) =>
       text.endsWith('.') ? text.substring(0, text.length - 1) : text;
 
