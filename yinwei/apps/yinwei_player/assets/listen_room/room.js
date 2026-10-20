@@ -265,6 +265,7 @@ function speedReport() {
     `Speed test: ${perf.bench || "not run (YinweiListen.speedTest())"}`,
     `Shaders and drawing setups prepared up front: ${perf.compiled ? Math.round(perf.compiled) + " ms" : "not yet"}`,
     `Per frame: ${perf.draws} draw calls · ${(perf.tris / 1000).toFixed(0)}k triangles · ${perf.meshes[1]} meshes (${perf.meshes[0]} before merging) · glow buffers ${perf.hdr ? "half-float" : "8-bit"}`,
+    `Speakers: ${S.speakers.length} · fixed pool ${three ? three.speakerFx.length : 0} · cabinet shadow casters limited to L/R · GPU geometries ${three ? three.renderer.info.memory.geometries : 0}`,
   ].join("\n");
 }
 
@@ -1037,15 +1038,26 @@ function buildScene() {
     ring.rotation.x = -Math.PI / 2; ring.position.y = 0.015; guides.add(ring);
   }
 
-  // 2.0: studio monitors on two-pillar stands, aimed at you
+  // Fixed pool: clone one cabinet/stand template; all geometry and materials
+  // are shared. No mesh creation on state ticks or gestures. Only L/R cast shadows.
   const speakers = new T.Group(); scene.add(speakers);
   const speakerFx = [];
-  for (const az of RoomMath.STEREO_AZ) {
-    const [x, , z] = RoomMath.toRoom(az, 0, RoomMath.STEREO_DIST);
-    add(rbox(0.32, 0.025, 0.32, 0.01, 2), M.blackMetal, [x, 0.0125, z], null, { to: speakers });
-    for (const dx of [-0.06, 0.06]) limb([x + dx, 0.025, z], [x + dx, EAR - 0.235, z], 0.018, M.blackMetal, speakers);
-    add(rbox(0.22, 0.02, 0.26, 0.008, 2), M.blackMetal, [x, EAR - 0.225, z], null, { to: speakers });
-    const cab = new T.Group(); cab.position.set(x, EAR, z); speakers.add(cab);
+  for (let i = 0; i < 8; i++) {
+    if (i > 0) {
+      const group = speakerFx[0].group.clone(true); speakers.add(group);
+      const cab = group.getObjectByName("cabinet"), stand = group.getObjectByName("stand");
+      cab.userData.speakerIndex = i;
+      if (i >= 2) group.traverse(o => { o.castShadow = false; });
+      speakerFx.push({ group, cab, stand, selected: group.getObjectByName("selection"), x: 0, y: EAR, z: 0,
+        rings: makeRings(3), glow: floorGlow() });
+      continue;
+    }
+    const x = 0, z = 0, group = new T.Group(), stand = new T.Group();
+    stand.name = "stand"; group.add(stand); speakers.add(group);
+    add(rbox(0.32, 0.025, 0.32, 0.01, 2), M.blackMetal, [x, 0.0125, z], null, { to: stand });
+    for (const dx of [-0.06, 0.06]) limb([x + dx, 0.025, z], [x + dx, EAR - 0.235, z], 0.018, M.blackMetal, stand);
+    add(rbox(0.22, 0.02, 0.26, 0.008, 2), M.blackMetal, [x, EAR - 0.225, z], null, { to: stand });
+    const cab = new T.Group(); cab.position.set(x, EAR, z); cab.name = "cabinet"; cab.userData.speakerIndex = i; group.add(cab);
     add(rbox(0.26, 0.42, 0.32, 0.028, 4), M.satin, [0, 0, 0], null, { to: cab });
     const wz = 0.161, wy = -0.065;
     add(new T.TorusGeometry(0.09, 0.006, 10, 64), M.alu, [0, wy, wz], null, { to: cab });
@@ -1057,10 +1069,12 @@ function buildScene() {
     add(new T.TorusGeometry(0.093, 0.0045, 8, 64), glow("#7c9dff", 1.6), [0, wy, wz + 0.006], null, { to: cab, cast: false });
     add(new T.CircleGeometry(0.018, 24), M.rubber, [0, -0.17, wz + 0.001], null, { to: cab, cast: false });
     cab.lookAt(0, EAR, 0);
-    add(new T.PlaneGeometry(0.62, 0.62), new T.MeshBasicMaterial({ map: softTex("rgba(0,0,0,0.9)", "rgba(0,0,0,0)"), transparent: true, opacity: 0.5, depthWrite: false }), [x, 0.008, z], [-Math.PI / 2, 0, 0], { cast: false, receive: false, to: speakers });
-    speakerFx.push({ x, z, rings: makeRings(3), glow: floorGlow() });
+    add(new T.PlaneGeometry(0.62, 0.62), new T.MeshBasicMaterial({ map: softTex("rgba(0,0,0,0.9)", "rgba(0,0,0,0)"), transparent: true, opacity: 0.5, depthWrite: false }), [x, 0.008, z], [-Math.PI / 2, 0, 0], { cast: false, receive: false, to: group });
+    const selected = add(new T.RingGeometry(0.23, 0.247, 48), new T.MeshBasicMaterial({ color: col("#d8e4f4"), transparent: true, opacity: 0.7, depthWrite: false }), [0, 0.016, 0], [-Math.PI / 2, 0, 0], { to: group, cast: false });
+    selected.name = "selection";
+    speakerFx.push({ group, cab, stand, selected, x, y: EAR, z, rings: makeRings(3), glow: floorGlow() });
   }
-  const speakerMid = new T.Vector3((speakerFx[0].x + speakerFx[1].x) / 2, EAR, (speakerFx[0].z + speakerFx[1].z) / 2);
+  const speakerMid = new T.Vector3(0, EAR, 0);
 
   // ---------------------------------------------------------------- merge the fixed room
   // Everything that never moves is merged by material into a few meshes, so
@@ -1389,6 +1403,24 @@ function frame(now) {
     orbit.visible = point && S.motion === "orbit";
     guides.visible = point && (S.panel === "place" || dragging === "source");
     speakers.visible = !point;
+    speakerMid.set(0, 0, 0);
+    let shownSpeakers = 0;
+    speakerFx.forEach((sp, i) => {
+      const pose = speakerPose(i);
+      sp.group.visible = !!pose;
+      sp.enabled = !!pose;
+      if (!pose) return;
+      const p = RoomMath.toRoom(pose.az, pose.el, pose.dist);
+      if (i < 2 && (sp.x !== p[0] || sp.y !== p[1] || sp.z !== p[2])) three.renderer.shadowMap.needsUpdate = true;
+      [sp.x, sp.y, sp.z] = p;
+      sp.group.position.set(p[0], 0, p[2]);
+      sp.cab.position.y = p[1]; sp.cab.lookAt(0, EAR, 0);
+      sp.stand.visible = p[1] > 0.24;
+      sp.stand.scale.y = Math.max(0.03, (p[1] - 0.235) / (EAR - 0.235));
+      sp.selected.visible = S.panel === "place" && i === (speakerDraft ? speakerDraft.index : S.selectedSpeakerIndex);
+      speakerMid.x += p[0]; speakerMid.y += p[1]; speakerMid.z += p[2]; shownSpeakers++;
+    });
+    if (shownSpeakers) speakerMid.multiplyScalar(1 / shownSpeakers);
     if (lastMode !== S.mode) { lastMode = S.mode; three.renderer.shadowMap.needsUpdate = true; } // the 2.0 speakers cast shadows
     const P = sourcePos(v);
     source.position.copy(P);
@@ -1415,9 +1447,9 @@ function frame(now) {
     });
     ripple(sourceRings, P.x, P.y - 0.01, P.z, point && hearing, 0, 0.75);
     speakerFx.forEach((s, k) => {
-      ripple(s.rings, s.x, EAR, s.z, !point && hearing, k * 0.17, 0.6);
+      ripple(s.rings, s.x, s.y, s.z, !point && s.enabled && hearing, k * 0.17, 0.6);
       footGlow(s.glow, s.x, s.z, 1.3, sounding ? 0.3 + level * 0.2 : 0.08);
-      s.glow.visible = !point;
+      s.glow.visible = !point && s.enabled;
     });
 
     if (three.grade) three.grade.uniforms.time.value = (now / 1000) % 100;
@@ -1494,7 +1526,8 @@ function applyInput(now) {
   if (dragging === "pinch" && pointers.size === 2) {
     const [a, b] = [...pointers.values()];
     cam.tZoom = clamp((pinch.z * pinch.d) / Math.max(20, Math.hypot(a[0] - b[0], a[1] - b[1])), 0.82, 1.25);
-  } else if (dragging === "source") moveSourceTo(input.x + grab[0], input.y + grab[1], 0);
+  } else if (dragging === "speaker") moveSpeakerTo(input.x + grab[0], input.y + grab[1]);
+  else if (dragging === "source") moveSourceTo(input.x + grab[0], input.y + grab[1], 0);
   else if (dragging === "look" && downAt && moved > 4 && cam.tK === 0) {
     cam.tYaw = band(startCam.yaw - (input.x - downAt[0]) * 0.0042, YAW_LIM[0], YAW_LIM[1], 0.12);
     cam.tLift = band(startCam.lift + (input.y - downAt[1]) * 0.0026, LIFT_LIM[0], LIFT_LIM[1], 0.07);
@@ -1516,6 +1549,19 @@ function moveSourceTo(x, y, planeY) {
   renderPlace();
   return true;
 }
+// Use the same floor-projected drag as Point. Elevation is preserved. Near
+// vertical poles use sliders: the existing inverse floors cos(el) at 0.2.
+function moveSpeakerTo(x, y) {
+  if (!speakerDraft || Math.abs(Math.cos(speakerDraft.el * DEG)) < 0.2) return false;
+  const { T, raycaster, camera } = three;
+  raycaster.setFromCamera(ndc(x, y), camera);
+  const p = new T.Vector3();
+  if (!raycaster.ray.intersectPlane(new T.Plane(new T.Vector3(0, 1, 0), 0), p)) return false;
+  const at = RoomMath.fromRoomPoint(p.x, p.z, speakerDraft.el);
+  if (!at) return false;
+  speakerDraft.az = at.az; speakerDraft.dist = at.d;
+  renderSpeakerPlace(); return true;
+}
 function bindInput() {
   const gl = $("gl");
   gl.addEventListener("pointerdown", (e) => {
@@ -1524,10 +1570,24 @@ function bindInput() {
     glRect = gl.getBoundingClientRect(); // measured once per touch, not on every move
     const [x, y] = local(e);
     pointers.set(e.pointerId, [x, y]);
-    if (pointers.size === 2) { const [a, b] = [...pointers.values()]; pinch = { d: Math.hypot(a[0] - b[0], a[1] - b[1]), z: cam.tZoom }; dragging = "pinch"; return; }
+    if (pointers.size === 2) { speakerDraft = null; const [a, b] = [...pointers.values()]; pinch = { d: Math.hypot(a[0] - b[0], a[1] - b[1]), z: cam.tZoom }; dragging = "pinch"; return; }
     downAt = [x, y]; moved = 0; startCam = { yaw: cam.tYaw, lift: cam.tLift }; vel = null; fling = null;
     dragging = "look";
     if (canMove()) { three.raycaster.setFromCamera(ndc(x, y), three.camera); if (three.raycaster.intersectObject(three.hit).length) dragging = "source"; }
+    if (canEditSpeakers() && S.screen === "room") {
+      three.raycaster.setFromCamera(ndc(x, y), three.camera);
+      const hit = three.raycaster.intersectObjects(three.speakerFx.filter(s => s.enabled).map(s => s.cab), true)[0];
+      if (hit) {
+        let obj = hit.object;
+        while (obj && obj.userData.speakerIndex === undefined) obj = obj.parent;
+        if (obj && beginSpeaker(obj.userData.speakerIndex)) {
+          dragging = "speaker";
+          const p = RoomMath.toRoom(speakerDraft.az, speakerDraft.el, speakerDraft.dist);
+          const foot = new three.T.Vector3(p[0], 0, p[2]).project(three.camera), [fx, fy] = screenOf(foot);
+          grab = [fx - x, fy - y]; renderSpeakerPlace();
+        }
+      }
+    }
     if (dragging === "source") {
       // Drag by the sound's floor point (the foot of its dotted line), kept at the
       // same offset from the finger. The floor is always below the camera, so the
@@ -1553,7 +1613,12 @@ function bindInput() {
     const [x, y] = local(e);
     applyInput(performance.now()); // a move that arrived after the last frame still counts
     if (dragging === "look") { cam.tYaw = clamp(cam.tYaw, YAW_LIM[0], YAW_LIM[1]); cam.tLift = clamp(cam.tLift, LIFT_LIM[0], LIFT_LIM[1]); } // spring back inside the limits
-    if (dragging === "source") { snapDirection(); commitPlace(); }
+    if (dragging === "speaker") {
+      if (e.type === "pointercancel" || !speakerDraft) { speakerDraft = null; renderSpeakerPlace(); }
+      else if (moved < 5) { const index = speakerDraft.index; speakerDraft = null; speakerIntent("speakerSelect", { index }); }
+      else commitSpeaker();
+    }
+    else if (dragging === "source") { snapDirection(); commitPlace(); }
     else if (moved < 5 && canMove() && S.panel === "place" && moveSourceTo(x, y, 0)) { snapDirection(); commitPlace(); }
     else if (dragging === "look") {
       if (moved < 5) {

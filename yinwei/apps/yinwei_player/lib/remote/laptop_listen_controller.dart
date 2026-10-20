@@ -534,6 +534,10 @@ class LaptopListenController extends ChangeNotifier {
         'live_start_failed',
         'array_active',
         'invalid_payload',
+        'stale_array',
+        'speaker_limit',
+        'speaker_protected',
+        'array_inactive',
       }.contains(error.code)) {
         _lease = null;
       }
@@ -549,6 +553,10 @@ class LaptopListenController extends ChangeNotifier {
   }
 
   static String failureText(String code) => switch (code) {
+        'stale_array' => 'The speakers changed. Select the speaker again.',
+        'speaker_limit' => 'The room supports up to 8 speakers.',
+        'speaker_protected' => 'The left and right speakers stay in the room.',
+        'array_inactive' => 'Choose the 2.0 layout to place speakers.',
         'no_music_app' => 'Open your music app on the laptop first.',
         'music_not_playing' =>
           'The laptop music app did not start playing. Check it on the laptop.',

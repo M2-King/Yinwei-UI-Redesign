@@ -55,4 +55,8 @@ abstract class EngineApi {
   }) async {}
 
   Future<void> setSpeakerCount(int n) async {}
+
+  /// Additive strict commit boundary for remote edits. Existing UI setters
+  /// retain their compatibility and throttling behavior.
+  Future<void> setArrayAcknowledged(ArrayLayout layout);
 }

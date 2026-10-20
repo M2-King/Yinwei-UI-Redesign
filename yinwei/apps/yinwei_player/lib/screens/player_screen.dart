@@ -247,6 +247,16 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
               if (_live.running) _live.applyLiveArray(_ctrl.array);
             }
           : null,
+      liveArraySpeakersAvailable: () =>
+          YinweiBindings.tryLoad()?.hasLiveArraySpeakers == true,
+      applyArrayLayout: _caps.array
+          ? (layout) async {
+              if (_live.running && !_live.applyLiveArray(layout)) {
+                throw StateError(_live.lastError ?? 'Live array write failed');
+              }
+              await _ctrl.setArrayAcknowledged(layout);
+            }
+          : null,
     );
     if (_backend == EngineBackend.native &&
         Platform.isWindows &&

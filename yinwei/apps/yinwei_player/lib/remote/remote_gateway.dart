@@ -26,9 +26,16 @@ class RemoteGateway {
       this.allowOriginRotation = false,
       this.audioTap,
       this.liveAudioTap,
+      bool? allowArrayFileAudio,
       this.transformAdapter,
       this.createOpusEncoder,
-      this.guests});
+      this.guests})
+      : allowArrayFileAudio = allowArrayFileAudio ??
+            Platform.environment['YINWEI_ARRAY_FILE_AUDIO_VERIFIED'] == '1';
+
+  /// Isolated opt-in: the pinned DLL's file tap must first be checked using
+  /// tool/remote/check_array_file_tap.py. Default keeps the existing safety gate.
+  final bool allowArrayFileAudio;
 
   /// The Listen stream's Opus encoder; null keeps every stream uncompressed.
   final ListenOpusEncoder? Function()? createOpusEncoder;
@@ -75,7 +82,9 @@ class RemoteGateway {
           ? null
           : coordinator.liveRunning()
               ? (coordinator.liveReady ? liveAudioTap : null)
-              : (coordinator.controller.array.enabled ? null : audioTap);
+              : (coordinator.controller.array.enabled && !allowArrayFileAudio
+                  ? null
+                  : audioTap);
   Timer? _audioTimer;
   final _requests = <String, List<DateTime>>{};
   final _captureProbeReports = <String, List<Map<String, dynamic>>>{};

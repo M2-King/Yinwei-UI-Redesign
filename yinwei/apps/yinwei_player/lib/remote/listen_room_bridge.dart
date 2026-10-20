@@ -142,6 +142,43 @@ class ListenRoomBridge {
     final track = _map(snap['track']);
     final transport = _map(snap['transport']);
     final mode = _map(snap['spatialMode']);
+    final array = _map(snap['arrayState']);
+    // Older hosts can still draw their existing array, but cannot edit it.
+    final visuals = _map(snap['presentation'])['arraySpeakers'];
+    final speakers = array['speakers'] is List
+        ? array['speakers'] as List
+        : visuals is List && visuals.isNotEmpty
+            ? [
+                for (final raw in visuals)
+                  if (raw is Map<String, dynamic>)
+                    {
+                      'index': raw['index'],
+                      'label': raw['label'],
+                      'az': raw['azimuthDeg'],
+                      'el': raw['elevationDeg'],
+                      'dist': raw['distanceM'],
+                      'gainDb': raw['gainDb'] ?? 0,
+                      'mute': raw['mute'] == true,
+                      'feed': raw['index'] == 0
+                          ? 'left'
+                          : raw['index'] == 1
+                              ? 'right'
+                              : 'mid',
+                    }
+              ]
+            : [
+                for (var i = 0; i < 2; i++)
+                  {
+                    'index': i,
+                    'label': i == 0 ? 'L' : 'R',
+                    'az': i == 0 ? -30 : 30,
+                    'el': 0,
+                    'dist': 1.8,
+                    'gainDb': 0,
+                    'mute': false,
+                    'feed': i == 0 ? 'left' : 'right',
+                  }
+              ];
     final pose = _map(snap['pose']);
     final liveRunning = snap['liveRunning'] == true;
     final source = _text(live['source']);
@@ -213,6 +250,12 @@ class ListenRoomBridge {
                       ? 'noapp'
                       : 'none',
       'mode': mode['array'] == 'stereo2' ? 'stereo2' : 'point',
+      'speakers': speakers,
+      'selectedSpeakerIndex': array['selectedIndex'] ?? 0,
+      'arrayRevision': array['revision'] ?? 0,
+      'maxSpeakers': array['maxSpeakers'] ?? 8,
+      'speakerControl': caps['remoteSpeakers'] == true,
+      'matrixLinked': array['matrixLinked'] == true,
       'motion': mode['motion'] == 'orbit' ? 'orbit' : 'fixed',
       'orbitHz': _num(mode['orbitHz'])?.clamp(0.05, 2.0) ?? 0.4,
       'az': heading != null
@@ -444,6 +487,43 @@ class ListenRoomBridge {
           'elevationDeg': el.clamp(-90.0, 90.0),
           'distanceM': dist.clamp(0.5, 10.0),
         });
+      case 'speakerAdd':
+      case 'speakerRemove':
+      case 'speakerSelect':
+      case 'speakerPlace':
+        final revision = m['arrayRevision'];
+        final index = m['index'];
+        if (caps['remoteSpeakers'] != true ||
+            revision is! int ||
+            revision < 0) {
+          await push(force: true);
+          return;
+        }
+        final type = switch (m['t']) {
+          'speakerAdd' => 'array.speaker.add',
+          'speakerRemove' => 'array.speaker.remove',
+          'speakerSelect' => 'array.speaker.select',
+          _ => 'array.speaker.set',
+        };
+        if (m['t'] != 'speakerAdd' &&
+            (index is! int || index < 0 || index >= 8)) {
+          return;
+        }
+        final payload = <String, dynamic>{
+          'arrayRevision': revision,
+          if (m['t'] != 'speakerAdd') 'index': index,
+        };
+        if (m['t'] == 'speakerPlace') {
+          final az = _num(m['az']), el = _num(m['el']), dist = _num(m['dist']);
+          if (az == null || el == null || dist == null) return;
+          payload.addAll({
+            'az': az.clamp(-180.0, 180.0),
+            'el': el.clamp(-90.0, 90.0),
+            'dist': dist.clamp(0.5, 10.0)
+          });
+        }
+        // Keep the page's original revision through lease renewal/retry.
+        await _command(type, payload);
       case 'signOut':
         await session.signOut();
       default:

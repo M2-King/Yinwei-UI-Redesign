@@ -1,0 +1,2 @@
+Counts: {'error': 0, 'warning': 6, 'info': 111}
+Diagnostics overlapping added lines: 0

@@ -1,0 +1,2 @@
+{"dll": "C:\\Users\\Tim-King.Kings-laptop\\Documents\\yinwei-repo\\outputs\\w19\\windows\\spatial_core.dll", "sha256": "eb764148534b6f0df3d0de60c7b6f184fcbf5164ed7298d53a3de95bb6e8c036", "pinnedMatch": true}
+Inspection only. Audio remains unverified. See --help for the explicit audible probe.

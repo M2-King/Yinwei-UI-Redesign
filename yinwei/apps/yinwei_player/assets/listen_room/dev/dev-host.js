@@ -19,7 +19,16 @@
     az: 35, el: 20, dist: 3.2, track: { ...tracks[0] }, volume: 0.72, level: 0,
     stats: { received: 18240, bufferMs: 160, underruns: 0 }, opens: null, pending: false, progress: null,
     pos: 42, dur: 245, seekable: true, quality: "high", stream: "high", opus: true,
+    speakers: [], selectedSpeakerIndex: 0, arrayRevision: 1, maxSpeakers: 8, speakerControl: true, matrixLinked: false,
   };
+  function seedSpeakers(count) {
+    M.speakers = Array.from({ length: count }, (_, index) => ({ index,
+      label: index === 0 ? "L" : index === 1 ? "R" : String(index + 1),
+      az: [-30, 30, -70, 70, -110, 110, -150, 150][index], el: 0, dist: 1.8,
+      gainDb: 0, mute: false, feed: index === 0 ? "left" : index === 1 ? "right" : "mid" }));
+    M.selectedSpeakerIndex = count > 2 ? 2 : 0; M.arrayRevision++;
+  }
+  seedSpeakers(2);
   const later = (ms, f) => setTimeout(f, ms);
   const say = (t) => YinweiListen.toast(t);
   const applied = () => say("Applied on the laptop");
@@ -51,6 +60,27 @@
       case "layout": later(200, () => { M.mode = i.mode; if (i.mode === "stereo2") M.motion = "fixed"; applied(); }); break;
       case "motion": later(200, () => { M.motion = i.motion; M.orbitHz = i.orbitHz; applied(); }); break;
       case "place": later(200, () => { Object.assign(M, { az: i.az, el: i.el, dist: i.dist }); applied(); }); break;
+      case "speakerAdd":
+      case "speakerRemove":
+      case "speakerSelect":
+      case "speakerPlace":
+        M.pending = true;
+        later(200, () => {
+          M.pending = false;
+          if (i.arrayRevision !== M.arrayRevision) { say("The speakers changed. Select the speaker again."); return; }
+          if (i.t === "speakerAdd" && M.speakers.length < 8) {
+            const index = M.speakers.length;
+            M.speakers.push({ index, label: String(index + 1), az: 0, el: 0, dist: 1.8, gainDb: 0, mute: false, feed: "mid" });
+            M.selectedSpeakerIndex = index;
+          } else if (i.t === "speakerRemove" && i.index >= 2 && M.speakers[i.index]) {
+            M.speakers.splice(i.index, 1); M.speakers.forEach((s, index) => s.index = index);
+            M.selectedSpeakerIndex = Math.min(i.index, M.speakers.length - 1);
+          } else if (M.speakers[i.index]) {
+            M.selectedSpeakerIndex = i.index;
+            if (i.t === "speakerPlace") Object.assign(M.speakers[i.index], { az: i.az, el: i.el, dist: i.dist });
+          }
+          M.arrayRevision++; applied();
+        }); break;
       case "volume": M.volume = i.v; break;
       case "seek": later(400, () => { M.pos = Math.min(M.dur, Math.max(0, i.sec)); }); break;
       case "signOut": say("The app goes back to its own sign-in screen"); break;
@@ -100,6 +130,7 @@
     ${group("Start progress", "progress", [["none", "Idle"], ["asking", "Asking"], ["opening", "Opening app"], ["pressing", "Pressing play"], ["starting", "Starting"], ["audio", "Audio"]])}
     ${group("Room quality", "quality", [["auto", "Auto"], ["full", "Full"], ["light", "Light"]])}
     ${group("Developer overlay", "fps", [["off", "Off"], ["on", "FPS meter"]])}
+    ${group("2.0 speakers", "speakers", [["2", "2 speakers"], ["3", "3 speakers"], ["8", "8 speakers"]])}
     <div class="grp"><span>Intents the page sent (newest first)</span><pre id="dev-log">–</pre></div>
     <div class="grp"><button class="cta report" id="dev-replay" type="button">Replay opening (with sound)</button></div>
     <div class="grp"><button class="cta report" id="dev-bench" type="button">Run speed test (8 s)</button><button class="cta report" id="dev-copy" type="button">Copy speed report</button><textarea id="dev-report" aria-label="Speed report" readonly hidden></textarea></div>`;
@@ -108,7 +139,7 @@
   const local = { quality: "auto", fps: "off" };
   function renderLog() { const el = document.getElementById("dev-log"); if (el) el.textContent = log.join("\n") || "–"; }
   function sync() {
-    const vals = { live: M.live ? "on" : "off", listening: M.listening === "off" ? "off" : "on", control: M.control, notice: M.opens ? "opens" : M.notice, progress: M.progress || "none", ...local };
+    const vals = { live: M.live ? "on" : "off", listening: M.listening === "off" ? "off" : "on", control: M.control, notice: M.opens ? "opens" : M.notice, progress: M.progress || "none", speakers: String(M.speakers.length), ...local };
     panel.querySelectorAll(".opts").forEach((g) => g.querySelectorAll("button").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.v === vals[g.dataset.key]))));
   }
   panel.querySelectorAll(".opts").forEach((g) => g.addEventListener("click", (e) => {
@@ -118,6 +149,7 @@
     if (k === "live") { M.live = v === "on"; M.playing = M.live; if (!M.live) M.listening = "off"; else if (M.notice === "noapp") M.notice = "none"; }
     if (k === "listening") { M.listening = v; if (v === "on") { M.live = true; M.playing = true; } }
     if (k === "control") M.control = v;
+    if (k === "speakers") { seedSpeakers(Number(v)); M.mode = "stereo2"; M.motion = "fixed"; }
     if (k === "notice") {
       // "Laptop opens app": no music app open, but the laptop opens 汽水音乐 on Start.
       M.notice = v === "opens" ? "none" : v;

@@ -61,7 +61,7 @@ class EngineController extends ChangeNotifier {
   Future<void> openPath(String path) async {
     _liveRebuild?.cancel();
     await _run(() async {
-      track =       await _engine.open(path);
+      track = await _engine.open(path);
       hasOpenedFile = true;
       position = Duration.zero;
       playing = false;
@@ -108,6 +108,28 @@ class EngineController extends ChangeNotifier {
         if (gen != _arrayGen) return;
       }());
     });
+  }
+
+  /// Remote commits only. Local sliders keep their existing 32 ms throttle.
+  /// Cancel a pending slider write so it cannot overwrite this commit later.
+  Future<void> setArrayAcknowledged(ArrayLayout next) async {
+    _arrayThrottle?.cancel();
+    _arrayThrottle = null;
+    _pendingArray = null;
+    ++_arrayGen;
+    final previous = array;
+    final applied = next.copy();
+    array = applied;
+    notifyListeners();
+    try {
+      await _engine.setArrayAcknowledged(applied);
+    } catch (_) {
+      if (identical(array, applied)) {
+        array = previous;
+        notifyListeners();
+      }
+      rethrow;
+    }
   }
 
   /// Explicit completion for serialized commands. Unlike slider throttling,

@@ -24,22 +24,24 @@ class YinweiBindings {
             _lib.lookupFunction<_ErrNative, _ErrDart>('yinwei_track_album'),
         yinweiTrackPath =
             _lib.lookupFunction<_ErrNative, _ErrDart>('yinwei_track_path'),
-        yinweiTrackDurationMs =
-            _lib.lookupFunction<_U64Native, _U64Dart>('yinwei_track_duration_ms'),
-        yinweiTrackSampleRate =
-            _lib.lookupFunction<_U32Native, _U32Dart>('yinwei_track_sample_rate'),
-        yinweiSetParams = _lib
-            .lookupFunction<_SetParamsNative, _SetParamsDart>('yinwei_set_params'),
-        yinweiGetParams = _lib
-            .lookupFunction<_GetParamsNative, _GetParamsDart>('yinwei_get_params'),
-        yinweiApplyPreset = _lib.lookupFunction<_ApplyPresetNative, _ApplyPresetDart>(
-            'yinwei_apply_preset'),
+        yinweiTrackDurationMs = _lib
+            .lookupFunction<_U64Native, _U64Dart>('yinwei_track_duration_ms'),
+        yinweiTrackSampleRate = _lib
+            .lookupFunction<_U32Native, _U32Dart>('yinwei_track_sample_rate'),
+        yinweiSetParams = _lib.lookupFunction<_SetParamsNative, _SetParamsDart>(
+            'yinwei_set_params'),
+        yinweiGetParams = _lib.lookupFunction<_GetParamsNative, _GetParamsDart>(
+            'yinwei_get_params'),
+        yinweiApplyPreset =
+            _lib.lookupFunction<_ApplyPresetNative, _ApplyPresetDart>(
+                'yinwei_apply_preset'),
         yinweiSetMode =
             _lib.lookupFunction<_I32InNative, _I32InDart>('yinwei_set_mode'),
-        yinweiRebuildPreview =
-            _lib.lookupFunction<_VoidNative, _VoidDart>('yinwei_rebuild_preview'),
+        yinweiRebuildPreview = _lib
+            .lookupFunction<_VoidNative, _VoidDart>('yinwei_rebuild_preview'),
         yinweiPlay = _lib.lookupFunction<_VoidNative, _VoidDart>('yinwei_play'),
-        yinweiPause = _lib.lookupFunction<_VoidNative, _VoidDart>('yinwei_pause'),
+        yinweiPause =
+            _lib.lookupFunction<_VoidNative, _VoidDart>('yinwei_pause'),
         yinweiSeekMs =
             _lib.lookupFunction<_SeekNative, _SeekDart>('yinwei_seek_ms'),
         yinweiPositionMs =
@@ -48,14 +50,14 @@ class YinweiBindings {
             _lib.lookupFunction<_VoidNative, _VoidDart>('yinwei_is_playing'),
         yinweiCurrentAzimuthDeg = _lib
             .lookupFunction<_F32Native, _F32Dart>('yinwei_current_azimuth_deg'),
-        yinweiCurrentElevationDeg = _lib
-            .lookupFunction<_F32Native, _F32Dart>('yinwei_current_elevation_deg'),
+        yinweiCurrentElevationDeg = _lib.lookupFunction<_F32Native, _F32Dart>(
+            'yinwei_current_elevation_deg'),
         yinweiExportWav =
             _lib.lookupFunction<_OpenNative, _OpenDart>('yinwei_export_wav'),
         yinweiDispose =
             _lib.lookupFunction<_VoidNative, _VoidDart>('yinwei_dispose'),
-        yinweiIsPreviewDirty =
-            _lib.lookupFunction<_VoidNative, _VoidDart>('yinwei_is_preview_dirty');
+        yinweiIsPreviewDirty = _lib
+            .lookupFunction<_VoidNative, _VoidDart>('yinwei_is_preview_dirty');
 
   // Kept so the DynamicLibrary mapping stays alive for the process lifetime.
   // ignore: unused_field
@@ -171,8 +173,8 @@ class YinweiBindings {
         final f = File(name);
         if (f.existsSync()) existing.add(f);
       }
-      existing.sort((a, b) =>
-          b.lastModifiedSync().compareTo(a.lastModifiedSync()));
+      existing
+          .sort((a, b) => b.lastModifiedSync().compareTo(a.lastModifiedSync()));
       for (final f in existing) {
         try {
           final abs = f.absolute.path;
@@ -221,7 +223,8 @@ class YinweiBindings {
   // --- Live WASAPI → HRTF transfer (optional symbols) ---
 
   int liveStart(int processId) {
-    final fn = _lib.lookupFunction<_U32InNative, _U32InDart>('yinwei_live_start');
+    final fn =
+        _lib.lookupFunction<_U32InNative, _U32InDart>('yinwei_live_start');
     return fn(processId);
   }
 
@@ -232,7 +235,8 @@ class YinweiBindings {
 
   bool liveIsRunning() {
     try {
-      final fn = _lib.lookupFunction<_VoidNative, _VoidDart>('yinwei_live_is_running');
+      final fn =
+          _lib.lookupFunction<_VoidNative, _VoidDart>('yinwei_live_is_running');
       return fn() != 0;
     } catch (_) {
       return false;
@@ -240,22 +244,26 @@ class YinweiBindings {
   }
 
   int liveSetMode(int mode) {
-    final fn = _lib.lookupFunction<_I32InNative, _I32InDart>('yinwei_live_set_mode');
+    final fn =
+        _lib.lookupFunction<_I32InNative, _I32InDart>('yinwei_live_set_mode');
     return fn(mode);
   }
 
   double liveAzimuthDeg() {
-    final fn = _lib.lookupFunction<_F32Native, _F32Dart>('yinwei_live_azimuth_deg');
+    final fn =
+        _lib.lookupFunction<_F32Native, _F32Dart>('yinwei_live_azimuth_deg');
     return fn();
   }
 
   double liveElevationDeg() {
-    final fn = _lib.lookupFunction<_F32Native, _F32Dart>('yinwei_live_elevation_deg');
+    final fn =
+        _lib.lookupFunction<_F32Native, _F32Dart>('yinwei_live_elevation_deg');
     return fn();
   }
 
   int liveCapturedFrames() {
-    final fn = _lib.lookupFunction<_U64Native, _U64Dart>('yinwei_live_captured_frames');
+    final fn = _lib
+        .lookupFunction<_U64Native, _U64Dart>('yinwei_live_captured_frames');
     return fn();
   }
 
@@ -290,8 +298,8 @@ class YinweiBindings {
   }
 
   int liveLastEnergyMs() {
-    final fn = _lib
-        .lookupFunction<_U64Native, _U64Dart>('yinwei_live_last_energy_ms');
+    final fn =
+        _lib.lookupFunction<_U64Native, _U64Dart>('yinwei_live_last_energy_ms');
     return fn();
   }
 
@@ -334,8 +342,8 @@ class YinweiBindings {
   }
 
   int liveSetOutputDevice(String name) {
-    final fn =
-        _lib.lookupFunction<_OpenNative, _OpenDart>('yinwei_live_set_output_device');
+    final fn = _lib.lookupFunction<_OpenNative, _OpenDart>(
+        'yinwei_live_set_output_device');
     final ptr = name.toNativeUtf8();
     try {
       return fn(ptr);
@@ -347,8 +355,8 @@ class YinweiBindings {
   /// Silence wet output until Dart finishes pinning the source to muted speakers.
   int liveSetOutputHold(bool hold) {
     try {
-      final fn = _lib
-          .lookupFunction<_I32InNative, _I32InDart>('yinwei_live_set_output_hold');
+      final fn = _lib.lookupFunction<_I32InNative, _I32InDart>(
+          'yinwei_live_set_output_hold');
       return fn(hold ? 1 : 0);
     } catch (_) {
       return -1;
@@ -406,10 +414,10 @@ class YinweiBindings {
     required int feed,
   }) {
     try {
-      final fn =
-          _lib.lookupFunction<_SpeakerNative, _SpeakerDart>('yinwei_set_speaker');
-      return fn(index, azimuthDeg, elevationDeg, distanceM, gainDb, mute ? 1 : 0,
-          feed);
+      final fn = _lib
+          .lookupFunction<_SpeakerNative, _SpeakerDart>('yinwei_set_speaker');
+      return fn(index, azimuthDeg, elevationDeg, distanceM, gainDb,
+          mute ? 1 : 0, feed);
     } catch (_) {
       return -1;
     }
@@ -427,8 +435,8 @@ class YinweiBindings {
     try {
       final fn = _lib.lookupFunction<_SpeakerNative, _SpeakerDart>(
           'yinwei_live_set_speaker');
-      return fn(index, azimuthDeg, elevationDeg, distanceM, gainDb, mute ? 1 : 0,
-          feed);
+      return fn(index, azimuthDeg, elevationDeg, distanceM, gainDb,
+          mute ? 1 : 0, feed);
     } catch (_) {
       return -1;
     }
@@ -443,10 +451,24 @@ class YinweiBindings {
     }
   }
 
+  /// Probe existing ABI only; never starts or changes Live capture.
+  bool get hasLiveArraySpeakers {
+    try {
+      _lib.lookupFunction<_I32InNative, _I32InDart>('yinwei_live_set_array');
+      _lib.lookupFunction<_I32InNative, _I32InDart>(
+          'yinwei_live_set_speaker_count');
+      _lib.lookupFunction<_SpeakerNative, _SpeakerDart>(
+          'yinwei_live_set_speaker');
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
   int setSpeakerCount(int n) {
     try {
-      final fn =
-          _lib.lookupFunction<_I32InNative, _I32InDart>('yinwei_set_speaker_count');
+      final fn = _lib
+          .lookupFunction<_I32InNative, _I32InDart>('yinwei_set_speaker_count');
       return fn(n);
     } catch (_) {
       return -1;

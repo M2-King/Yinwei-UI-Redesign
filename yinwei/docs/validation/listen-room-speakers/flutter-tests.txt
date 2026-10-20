@@ -1,0 +1,840 @@
+Flutter assets will be downloaded from https://storage.flutter-io.cn. Make sure you trust this source!
+00:00 +0: loading C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/app_shell_test.dart
+00:00 +0: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/app_shell_test.dart: full window is a spatial workstation, not a three-column player
+00:00 +1: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/app_shell_test.dart: full window is a spatial workstation, not a three-column player
+00:00 +2: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/app_shell_test.dart: full window is a spatial workstation, not a three-column player
+00:00 +3: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/app_shell_test.dart: full window is a spatial workstation, not a three-column player
+00:00 +4: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/app_shell_test.dart: full window is a spatial workstation, not a three-column player
+00:00 +5: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/app_shell_test.dart: full window is a spatial workstation, not a three-column player
+00:00 +6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/app_shell_test.dart: full window is a spatial workstation, not a three-column player
+00:00 +7: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/app_shell_test.dart: full window is a spatial workstation, not a three-column player
+00:00 +8: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/app_shell_test.dart: full window is a spatial workstation, not a three-column player
+00:00 +9: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/app_shell_test.dart: full window is a spatial workstation, not a three-column player
+00:00 +10: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/app_shell_test.dart: full window is a spatial workstation, not a three-column player
+00:00 +11: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/app_shell_test.dart: full window is a spatial workstation, not a three-column player
+00:00 +12: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/app_shell_test.dart: full window is a spatial workstation, not a three-column player
+00:00 +13: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/app_shell_test.dart: full window is a spatial workstation, not a three-column player
+00:00 +14: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/app_shell_test.dart: full window is a spatial workstation, not a three-column player
+00:00 +15: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/app_shell_test.dart: full window is a spatial workstation, not a three-column player
+00:00 +16: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/app_shell_test.dart: full window is a spatial workstation, not a three-column player
+00:00 +17: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/app_shell_test.dart: full window is a spatial workstation, not a three-column player
+00:00 +18: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/app_shell_test.dart: full window is a spatial workstation, not a three-column player
+00:00 +19: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/app_shell_test.dart: full window is a spatial workstation, not a three-column player
+00:00 +20: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/app_shell_test.dart: full window is a spatial workstation, not a three-column player
+00:00 +21: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/app_shell_test.dart: full window is a spatial workstation, not a three-column player
+00:00 +22: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/app_shell_test.dart: full window is a spatial workstation, not a three-column player
+00:00 +23: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/app_shell_test.dart: full window is a spatial workstation, not a three-column player
+00:00 +24: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/app_shell_test.dart: full window is a spatial workstation, not a three-column player
+00:00 +25: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/app_shell_test.dart: full window is a spatial workstation, not a three-column player
+00:00 +26: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/app_shell_test.dart: full window is a spatial workstation, not a three-column player
+00:00 +27: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/app_shell_test.dart: full window is a spatial workstation, not a three-column player
+00:00 +28: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/app_shell_test.dart: full window is a spatial workstation, not a three-column player
+00:00 +29: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/app_shell_test.dart: full window is a spatial workstation, not a three-column player
+00:00 +30: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/app_shell_test.dart: full window is a spatial workstation, not a three-column player
+00:00 +31: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/app_shell_test.dart: full window is a spatial workstation, not a three-column player
+00:01 +32: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/app_shell_test.dart: full window is a spatial workstation, not a three-column player
+00:01 +33: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/app_shell_test.dart: full window is a spatial workstation, not a three-column player
+00:01 +34: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/app_shell_test.dart: full window is a spatial workstation, not a three-column player
+00:01 +35: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/app_shell_test.dart: full window is a spatial workstation, not a three-column player
+00:01 +36: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/app_shell_test.dart: full window is a spatial workstation, not a three-column player
+00:01 +37: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/app_shell_test.dart: full window is a spatial workstation, not a three-column player
+00:01 +38: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/app_shell_test.dart: full window is a spatial workstation, not a three-column player
+00:01 +39: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/app_shell_test.dart: full window is a spatial workstation, not a three-column player
+00:01 +40: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/app_shell_test.dart: full window is a spatial workstation, not a three-column player
+00:01 +41: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/app_shell_test.dart: full window is a spatial workstation, not a three-column player
+00:01 +42: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/app_shell_test.dart: full window is a spatial workstation, not a three-column player
+00:01 +43: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/app_shell_test.dart: full window is a spatial workstation, not a three-column player
+00:01 +44: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/app_shell_test.dart: full window is a spatial workstation, not a three-column player
+00:01 +45: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/app_shell_test.dart: full window is a spatial workstation, not a three-column player
+00:01 +46: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/app_shell_test.dart: full window is a spatial workstation, not a three-column player
+00:01 +47: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/app_shell_test.dart: full window is a spatial workstation, not a three-column player
+00:01 +48: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/app_shell_test.dart: full window is a spatial workstation, not a three-column player
+00:01 +49: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/app_shell_test.dart: full window is a spatial workstation, not a three-column player
+00:01 +50: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/app_shell_test.dart: full window is a spatial workstation, not a three-column player
+00:01 +51: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/app_shell_test.dart: full window is a spatial workstation, not a three-column player
+00:01 +52: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/app_shell_test.dart: full window is a spatial workstation, not a three-column player
+00:01 +53: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/app_shell_test.dart: full window is a spatial workstation, not a three-column player
+00:01 +54: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/app_shell_test.dart: full window is a spatial workstation, not a three-column player
+00:01 +55: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/app_shell_test.dart: full window is a spatial workstation, not a three-column player
+00:01 +56: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/app_shell_test.dart: full window is a spatial workstation, not a three-column player
+00:01 +57: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/app_shell_test.dart: full window is a spatial workstation, not a three-column player
+00:01 +58: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/app_shell_test.dart: full window is a spatial workstation, not a three-column player
+00:01 +59: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/app_shell_test.dart: full window is a spatial workstation, not a three-column player
+00:01 +60: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/app_shell_test.dart: full window is a spatial workstation, not a three-column player
+00:01 +61: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/app_shell_test.dart: full window is a spatial workstation, not a three-column player
+00:01 +62: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/app_shell_test.dart: full window is a spatial workstation, not a three-column player
+00:01 +63: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/app_shell_test.dart: full window is a spatial workstation, not a three-column player
+00:01 +64: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/app_shell_test.dart: full window is a spatial workstation, not a three-column player
+00:01 +65: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/app_shell_test.dart: full window is a spatial workstation, not a three-column player
+00:01 +66: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/app_shell_test.dart: full window is a spatial workstation, not a three-column player
+00:01 +67: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/app_shell_test.dart: full window is a spatial workstation, not a three-column player
+00:01 +68: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/app_shell_test.dart: full window is a spatial workstation, not a three-column player
+00:01 +69: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/app_shell_test.dart: full window is a spatial workstation, not a three-column player
+00:01 +70: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/app_shell_test.dart: full window is a spatial workstation, not a three-column player
+00:01 +71: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/app_shell_test.dart: full window is a spatial workstation, not a three-column player
+00:01 +72: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/app_shell_test.dart: full window is a spatial workstation, not a three-column player
+00:01 +73: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/app_shell_test.dart: full window is a spatial workstation, not a three-column player
+00:01 +74: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/app_shell_test.dart: full window is a spatial workstation, not a three-column player
+00:01 +75: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/app_shell_test.dart: full window is a spatial workstation, not a three-column player
+00:01 +76: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/app_shell_test.dart: full window is a spatial workstation, not a three-column player
+00:01 +77: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/app_shell_test.dart: full window is a spatial workstation, not a three-column player
+00:01 +78: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/app_shell_test.dart: full window is a spatial workstation, not a three-column player
+00:01 +79: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/app_shell_test.dart: full window is a spatial workstation, not a three-column player
+00:01 +80: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/app_shell_test.dart: full window is a spatial workstation, not a three-column player
+00:01 +81: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/app_shell_test.dart: full window is a spatial workstation, not a three-column player
+00:01 +82: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/app_shell_test.dart: full window is a spatial workstation, not a three-column player
+00:01 +83: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/app_shell_test.dart: full window is a spatial workstation, not a three-column player
+00:01 +84: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/app_shell_test.dart: full window is a spatial workstation, not a three-column player
+00:01 +85: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/app_shell_test.dart: full window is a spatial workstation, not a three-column player
+00:01 +86: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/app_shell_test.dart: full window is a spatial workstation, not a three-column player
+00:01 +87: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/app_shell_test.dart: full window is a spatial workstation, not a three-column player
+00:01 +88: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/app_shell_test.dart: full window is a spatial workstation, not a three-column player
+00:01 +89: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/app_shell_test.dart: full window is a spatial workstation, not a three-column player
+00:01 +90: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/app_shell_test.dart: full window is a spatial workstation, not a three-column player
+00:01 +91: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/app_shell_test.dart: full window is a spatial workstation, not a three-column player
+00:01 +92: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/app_shell_test.dart: full window is a spatial workstation, not a three-column player
+00:01 +93: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/app_shell_test.dart: full window is a spatial workstation, not a three-column player
+00:01 +94: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/app_shell_test.dart: full window is a spatial workstation, not a three-column player
+00:01 +95: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/app_shell_test.dart: full window is a spatial workstation, not a three-column player
+00:01 +96: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/app_shell_test.dart: full window is a spatial workstation, not a three-column player
+00:01 +97: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/app_shell_test.dart: full window is a spatial workstation, not a three-column player
+00:01 +98: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/app_shell_test.dart: full window is a spatial workstation, not a three-column player
+00:01 +99: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/app_shell_test.dart: full window is a spatial workstation, not a three-column player
+00:01 +100: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/app_shell_test.dart: full window is a spatial workstation, not a three-column player
+00:01 +101: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/app_shell_test.dart: full window is a spatial workstation, not a three-column player
+00:01 +102: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/app_shell_test.dart: full window is a spatial workstation, not a three-column player
+00:01 +103: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/app_shell_test.dart: full window is a spatial workstation, not a three-column player
+00:01 +104: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/app_shell_test.dart: full window is a spatial workstation, not a three-column player
+00:01 +105: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/app_shell_test.dart: full window is a spatial workstation, not a three-column player
+00:02 +106: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/app_shell_test.dart: full window is a spatial workstation, not a three-column player
+00:02 +107: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/app_shell_test.dart: full window is a spatial workstation, not a three-column player
+00:02 +108: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/app_shell_test.dart: full window is a spatial workstation, not a three-column player
+00:02 +109: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/app_shell_test.dart: full window is a spatial workstation, not a three-column player
+00:02 +110: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/app_shell_test.dart: full window is a spatial workstation, not a three-column player
+00:02 +111: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/app_shell_test.dart: full window is a spatial workstation, not a three-column player
+00:02 +112: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/app_shell_test.dart: full window is a spatial workstation, not a three-column player
+00:02 +113: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/app_shell_test.dart: full window is a spatial workstation, not a three-column player
+00:02 +114: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/app_shell_test.dart: full window is a spatial workstation, not a three-column player
+00:02 +115: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/app_shell_test.dart: full window is a spatial workstation, not a three-column player
+00:02 +116: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/app_shell_test.dart: full window is a spatial workstation, not a three-column player
+00:02 +117: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/app_shell_test.dart: full window is a spatial workstation, not a three-column player
+00:02 +118: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/app_shell_test.dart: full window is a spatial workstation, not a three-column player
+00:02 +119: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/app_shell_test.dart: full window is a spatial workstation, not a three-column player
+00:02 +120: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/app_shell_test.dart: full window is a spatial workstation, not a three-column player
+00:02 +121: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/app_shell_test.dart: full window is a spatial workstation, not a three-column player
+00:02 +122: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/app_shell_test.dart: full window is a spatial workstation, not a three-column player
+00:02 +123: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/app_shell_test.dart: full window is a spatial workstation, not a three-column player
+00:02 +124: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/app_shell_test.dart: full window is a spatial workstation, not a three-column player
+00:02 +125: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/app_shell_test.dart: full window is a spatial workstation, not a three-column player
+00:02 +126: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/app_shell_test.dart: full window is a spatial workstation, not a three-column player
+00:02 +127: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/app_shell_test.dart: full window is a spatial workstation, not a three-column player
+00:02 +128: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/app_shell_test.dart: full window is a spatial workstation, not a three-column player
+00:02 +129: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/app_shell_test.dart: full window is a spatial workstation, not a three-column player
+00:02 +130: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/app_shell_test.dart: full window is a spatial workstation, not a three-column player
+[SpatialWorkspace] windows=true flutterTest=true presentation=point array=off forceFallback=false useWebView=false
+00:03 +131: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/eq_mixer_window_test.dart: mixer shows six sequences and six faders
+00:03 +132: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/eq_mixer_window_test.dart: mixer shows six sequences and six faders
+00:03 +133: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/eq_mixer_window_test.dart: mixer shows six sequences and six faders
+00:03 +134: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/eq_mixer_window_test.dart: mixer shows six sequences and six faders
+00:03 +135: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/eq_mixer_window_test.dart: mixer shows six sequences and six faders
+00:03 +136: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/eq_mixer_window_test.dart: mixer shows six sequences and six faders
+00:03 +137: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/eq_mixer_window_test.dart: mixer shows six sequences and six faders
+00:03 +138: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/eq_mixer_window_test.dart: mixer shows six sequences and six faders
+00:03 +139: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/eq_mixer_window_test.dart: mixer shows six sequences and six faders
+00:03 +140: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/eq_mixer_window_test.dart: mixer shows six sequences and six faders
+00:03 +141: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/eq_mixer_window_test.dart: mixer shows six sequences and six faders
+00:03 +142: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/island_presentation_test.dart: Dormant, activity, hover, expand and delayed return preserve media
+00:03 +143: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/island_presentation_test.dart: Dormant, activity, hover, expand and delayed return preserve media
+00:03 +144: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/island_presentation_test.dart: Dormant, activity, hover, expand and delayed return preserve media
+00:03 +145: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/island_presentation_test.dart: Dormant, activity, hover, expand and delayed return preserve media
+00:03 +146: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/island_presentation_test.dart: Dormant, activity, hover, expand and delayed return preserve media
+00:03 +147: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/island_presentation_test.dart: Dormant, activity, hover, expand and delayed return preserve media
+00:03 +148: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/island_presentation_test.dart: Dormant, activity, hover, expand and delayed return preserve media
+00:03 +149: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/island_presentation_test.dart: Dormant, activity, hover, expand and delayed return preserve media
+00:03 +150: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/island_presentation_test.dart: Dormant, activity, hover, expand and delayed return preserve media
+00:03 +151: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/island_presentation_test.dart: Dormant, activity, hover, expand and delayed return preserve media
+00:04 +152: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/island_presentation_test.dart: Dormant, activity, hover, expand and delayed return preserve media
+00:04 +152: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/app_shell_test.dart: narrow window collapses the product rail
+[SpatialWorkspace] windows=true flutterTest=true presentation=point array=off forceFallback=false useWebView=false
+00:04 +153: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/island_presentation_test.dart: Dormant, activity, hover, expand and delayed return preserve media
+00:04 +154: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/island_spatial_controller_test.dart: Point pad and elevation submit real bridge intents
+00:04 +155: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/island_sync_test.dart: real PlayerScreen Point and Array edits survive Full/Island in both directions
+00:04 +156: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/island_sync_test.dart: real PlayerScreen Point and Array edits survive Full/Island in both directions
+00:04 +157: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/island_sync_test.dart: real PlayerScreen Point and Array edits survive Full/Island in both directions
+00:04 +158: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/island_sync_test.dart: real PlayerScreen Point and Array edits survive Full/Island in both directions
+00:04 +159: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/island_sync_test.dart: real PlayerScreen Point and Array edits survive Full/Island in both directions
+00:05 +160: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/island_sync_test.dart: real PlayerScreen Point and Array edits survive Full/Island in both directions
+00:05 +161: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/island_sync_test.dart: real PlayerScreen Point and Array edits survive Full/Island in both directions
+00:05 +162: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/island_sync_test.dart: real PlayerScreen Point and Array edits survive Full/Island in both directions
+00:05 +163: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/island_sync_test.dart: real PlayerScreen Point and Array edits survive Full/Island in both directions
+00:05 +164: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/island_sync_test.dart: real PlayerScreen Point and Array edits survive Full/Island in both directions
+00:05 +165: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/island_sync_test.dart: real PlayerScreen Point and Array edits survive Full/Island in both directions
+00:05 +166: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/island_sync_test.dart: real PlayerScreen Point and Array edits survive Full/Island in both directions
+00:05 +167: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/island_sync_test.dart: real PlayerScreen Point and Array edits survive Full/Island in both directions
+00:05 +168: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/island_sync_test.dart: real PlayerScreen Point and Array edits survive Full/Island in both directions
+00:05 +169: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/island_sync_test.dart: real PlayerScreen Point and Array edits survive Full/Island in both directions
+00:05 +170: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/island_sync_test.dart: real PlayerScreen Point and Array edits survive Full/Island in both directions
+00:05 +171: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/island_sync_test.dart: real PlayerScreen Point and Array edits survive Full/Island in both directions
+00:05 +172: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/island_sync_test.dart: real PlayerScreen Point and Array edits survive Full/Island in both directions
+00:05 +173: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/island_sync_test.dart: real PlayerScreen Point and Array edits survive Full/Island in both directions
+00:05 +174: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/island_sync_test.dart: real PlayerScreen Point and Array edits survive Full/Island in both directions
+00:05 +175: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/island_sync_test.dart: real PlayerScreen Point and Array edits survive Full/Island in both directions
+00:05 +176: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/island_sync_test.dart: real PlayerScreen Point and Array edits survive Full/Island in both directions
+00:06 +176: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/app_shell_test.dart: Island replaces the workstation shell and restores it
+[SpatialWorkspace] windows=true flutterTest=true presentation=point array=off forceFallback=false useWebView=false
+[SpatialWorkspace] windows=true flutterTest=true presentation=point array=off forceFallback=false useWebView=false
+00:06 +177: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/island_sync_test.dart: real PlayerScreen Point and Array edits survive Full/Island in both directions
+00:06 +178: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/island_sync_test.dart: real PlayerScreen Point and Array edits survive Full/Island in both directions
+00:06 +179: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/island_sync_test.dart: real PlayerScreen Point and Array edits survive Full/Island in both directions
+00:06 +180: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/island_sync_test.dart: real PlayerScreen Point and Array edits survive Full/Island in both directions
+00:06 +181: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/island_sync_test.dart: real PlayerScreen Point and Array edits survive Full/Island in both directions
+00:06 +182: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/island_sync_test.dart: real PlayerScreen Point and Array edits survive Full/Island in both directions
+00:06 +183: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/island_sync_test.dart: real PlayerScreen Point and Array edits survive Full/Island in both directions
+00:06 +184: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/island_sync_test.dart: real PlayerScreen Point and Array edits survive Full/Island in both directions
+00:06 +185: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/island_sync_test.dart: real PlayerScreen Point and Array edits survive Full/Island in both directions
+00:06 +186: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/island_sync_test.dart: real PlayerScreen Point and Array edits survive Full/Island in both directions
+00:06 +187: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/island_sync_test.dart: real PlayerScreen Point and Array edits survive Full/Island in both directions
+00:06 +188: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/island_sync_test.dart: real PlayerScreen Point and Array edits survive Full/Island in both directions
+00:06 +189: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/island_sync_test.dart: real PlayerScreen Point and Array edits survive Full/Island in both directions
+00:06 +190: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/island_sync_test.dart: real PlayerScreen Point and Array edits survive Full/Island in both directions
+00:06 +191: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/island_sync_test.dart: real PlayerScreen Point and Array edits survive Full/Island in both directions
+00:06 +192: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/island_sync_test.dart: real PlayerScreen Point and Array edits survive Full/Island in both directions
+00:06 +193: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/island_sync_test.dart: real PlayerScreen Point and Array edits survive Full/Island in both directions
+00:06 +194: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/island_sync_test.dart: real PlayerScreen Point and Array edits survive Full/Island in both directions
+00:06 +195: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/island_sync_test.dart: real PlayerScreen Point and Array edits survive Full/Island in both directions
+00:06 +196: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/island_sync_test.dart: real PlayerScreen Point and Array edits survive Full/Island in both directions
+00:06 +197: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/island_sync_test.dart: real PlayerScreen Point and Array edits survive Full/Island in both directions
+00:06 +198: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/island_sync_test.dart: real PlayerScreen Point and Array edits survive Full/Island in both directions
+00:06 +199: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/island_sync_test.dart: real PlayerScreen Point and Array edits survive Full/Island in both directions
+00:07 +200: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/island_sync_test.dart: real PlayerScreen Point and Array edits survive Full/Island in both directions
+00:07 +201: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/island_sync_test.dart: real PlayerScreen Point and Array edits survive Full/Island in both directions
+00:07 +202: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/island_sync_test.dart: real PlayerScreen Point and Array edits survive Full/Island in both directions
+00:07 +203: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/island_sync_test.dart: real PlayerScreen Point and Array edits survive Full/Island in both directions
+00:07 +204: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/island_sync_test.dart: real PlayerScreen Point and Array edits survive Full/Island in both directions
+00:07 +205: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/island_sync_test.dart: real PlayerScreen Point and Array edits survive Full/Island in both directions
+00:07 +206: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/island_sync_test.dart: real PlayerScreen Point and Array edits survive Full/Island in both directions
+00:07 +207: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/island_sync_test.dart: real PlayerScreen Point and Array edits survive Full/Island in both directions
+00:07 +208: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/island_sync_test.dart: real PlayerScreen Point and Array edits survive Full/Island in both directions
+00:07 +209: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/island_sync_test.dart: real PlayerScreen Point and Array edits survive Full/Island in both directions
+00:07 +209: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/mobile/ios_listen_room_screen_test.dart: AirPlay is removed on reload, sign-out and fallback
+[ListenRoom] showing the classic screen: Bad state: page lost
+00:07 +210: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/island_sync_test.dart: real PlayerScreen Point and Array edits survive Full/Island in both directions
+00:07 +211: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/island_sync_test.dart: real PlayerScreen Point and Array edits survive Full/Island in both directions
+00:07 +212: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/island_sync_test.dart: real PlayerScreen Point and Array edits survive Full/Island in both directions
+00:07 +213: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/island_sync_test.dart: real PlayerScreen Point and Array edits survive Full/Island in both directions
+00:07 +214: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/island_sync_test.dart: real PlayerScreen Point and Array edits survive Full/Island in both directions
+00:07 +215: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/island_sync_test.dart: real PlayerScreen Point and Array edits survive Full/Island in both directions
+00:07 +216: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/island_sync_test.dart: real PlayerScreen Point and Array edits survive Full/Island in both directions
+00:07 +217: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/island_sync_test.dart: real PlayerScreen Point and Array edits survive Full/Island in both directions
+00:07 +218: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/island_sync_test.dart: real PlayerScreen Point and Array edits survive Full/Island in both directions
+00:07 +219: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/island_sync_test.dart: real PlayerScreen Point and Array edits survive Full/Island in both directions
+00:07 +220: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/island_sync_test.dart: real PlayerScreen Point and Array edits survive Full/Island in both directions
+00:07 +220: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/app_shell_test.dart: transport Original/Spatial does not mutate Array layout
+[SpatialWorkspace] windows=true flutterTest=true presentation=stereo2 array=stereo2 forceFallback=false useWebView=false
+00:07 +221: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/island_sync_test.dart: real PlayerScreen Point and Array edits survive Full/Island in both directions
+00:07 +222: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/island_sync_test.dart: real PlayerScreen Point and Array edits survive Full/Island in both directions
+00:07 +223: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/island_sync_test.dart: real PlayerScreen Point and Array edits survive Full/Island in both directions
+00:07 +224: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/island_sync_test.dart: real PlayerScreen Point and Array edits survive Full/Island in both directions
+00:07 +225: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/island_sync_test.dart: real PlayerScreen Point and Array edits survive Full/Island in both directions
+00:07 +226: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/island_sync_test.dart: real PlayerScreen Point and Array edits survive Full/Island in both directions
+00:07 +227: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/island_sync_test.dart: real PlayerScreen Point and Array edits survive Full/Island in both directions
+00:07 +227: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/mobile/ios_listen_room_screen_test.dart: a page error shows the classic screen; listening is not touched
+[ListenRoom] showing the classic screen: the room reported: webgl
+00:07 +228: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/island_sync_test.dart: real PlayerScreen Point and Array edits survive Full/Island in both directions
+00:07 +229: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/island_sync_test.dart: real PlayerScreen Point and Array edits survive Full/Island in both directions
+00:07 +230: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/island_sync_test.dart: real PlayerScreen Point and Array edits survive Full/Island in both directions
+00:08 +231: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/island_sync_test.dart: real PlayerScreen Point and Array edits survive Full/Island in both directions
+00:08 +232: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/island_sync_test.dart: real PlayerScreen Point and Array edits survive Full/Island in both directions
+00:08 +233: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/island_sync_test.dart: real PlayerScreen Point and Array edits survive Full/Island in both directions
+00:08 +234: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/island_sync_test.dart: real PlayerScreen Point and Array edits survive Full/Island in both directions
+00:08 +235: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/island_sync_test.dart: real PlayerScreen Point and Array edits survive Full/Island in both directions
+00:08 +235: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/mobile/ios_listen_room_screen_test.dart: no ready within the timeout: the classic screen
+[ListenRoom] showing the classic screen: the room was not ready in time
+00:08 +236: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/island_sync_test.dart: real PlayerScreen Point and Array edits survive Full/Island in both directions
+00:08 +237: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/island_sync_test.dart: real PlayerScreen Point and Array edits survive Full/Island in both directions
+00:08 +238: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/island_sync_test.dart: real PlayerScreen Point and Array edits survive Full/Island in both directions
+00:08 +239: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/island_sync_test.dart: real PlayerScreen Point and Array edits survive Full/Island in both directions
+00:08 +240: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/island_sync_test.dart: real PlayerScreen Point and Array edits survive Full/Island in both directions
+00:08 +241: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/island_sync_test.dart: real PlayerScreen Point and Array edits survive Full/Island in both directions
+00:08 +242: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/island_sync_test.dart: real PlayerScreen Point and Array edits survive Full/Island in both directions
+00:08 +243: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/island_sync_test.dart: real PlayerScreen Point and Array edits survive Full/Island in both directions
+00:08 +244: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/island_sync_test.dart: real PlayerScreen Point and Array edits survive Full/Island in both directions
+00:08 +245: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/island_sync_test.dart: real PlayerScreen Point and Array edits survive Full/Island in both directions
+00:08 +246: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/island_sync_test.dart: real PlayerScreen Point and Array edits survive Full/Island in both directions
+00:08 +247: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/island_sync_test.dart: real PlayerScreen Point and Array edits survive Full/Island in both directions
+00:08 +248: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/island_sync_test.dart: real PlayerScreen Point and Array edits survive Full/Island in both directions
+00:08 +249: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/island_sync_test.dart: real PlayerScreen Point and Array edits survive Full/Island in both directions
+00:08 +250: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/island_sync_test.dart: real PlayerScreen Point and Array edits survive Full/Island in both directions
+00:08 +251: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/island_sync_test.dart: real PlayerScreen Point and Array edits survive Full/Island in both directions
+00:08 +252: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/island_sync_test.dart: real PlayerScreen Point and Array edits survive Full/Island in both directions
+00:08 +253: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/island_sync_test.dart: real PlayerScreen Point and Array edits survive Full/Island in both directions
+00:08 +254: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/island_sync_test.dart: real PlayerScreen Point and Array edits survive Full/Island in both directions
+00:08 +255: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/island_sync_test.dart: real PlayerScreen Point and Array edits survive Full/Island in both directions
+00:08 +256: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/island_sync_test.dart: real PlayerScreen Point and Array edits survive Full/Island in both directions
+00:08 +257: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/island_sync_test.dart: real PlayerScreen Point and Array edits survive Full/Island in both directions
+00:08 +258: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/island_sync_test.dart: real PlayerScreen Point and Array edits survive Full/Island in both directions
+00:08 +259: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/island_sync_test.dart: real PlayerScreen Point and Array edits survive Full/Island in both directions
+00:08 +260: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/island_sync_test.dart: real PlayerScreen Point and Array edits survive Full/Island in both directions
+00:08 +261: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/island_sync_test.dart: real PlayerScreen Point and Array edits survive Full/Island in both directions
+00:08 +262: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/island_sync_test.dart: real PlayerScreen Point and Array edits survive Full/Island in both directions
+00:08 +263: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/island_sync_test.dart: real PlayerScreen Point and Array edits survive Full/Island in both directions
+00:08 +264: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/island_sync_test.dart: real PlayerScreen Point and Array edits survive Full/Island in both directions
+00:08 +265: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/island_sync_test.dart: real PlayerScreen Point and Array edits survive Full/Island in both directions
+00:08 +266: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/island_sync_test.dart: real PlayerScreen Point and Array edits survive Full/Island in both directions
+00:08 +267: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/island_sync_test.dart: real PlayerScreen Point and Array edits survive Full/Island in both directions
+00:08 +268: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/island_sync_test.dart: real PlayerScreen Point and Array edits survive Full/Island in both directions
+00:08 +269: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/island_sync_test.dart: real PlayerScreen Point and Array edits survive Full/Island in both directions
+00:08 +270: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/island_sync_test.dart: real PlayerScreen Point and Array edits survive Full/Island in both directions
+00:08 +271: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/island_sync_test.dart: real PlayerScreen Point and Array edits survive Full/Island in both directions
+[SpatialWorkspace] windows=true flutterTest=true presentation=point array=off forceFallback=false useWebView=false
+[SceneBridge] accepted=true mutated=true write=true rev=2 reason=null sel=null
+[SceneBridge] engineWrite az=0.00 el=-10.00 d=2.00
+00:08 +272: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/island_sync_test.dart: real PlayerScreen Point and Array edits survive Full/Island in both directions
+[SpatialWorkspace] windows=true flutterTest=true presentation=point array=off forceFallback=false useWebView=false
+[Player] arrayMode=ArrayMode.stereo2 diag={uiBuild: ui-53-workspace, bridgeBuild: p2.4.32-matrix, backend: Mock, playbackMode: spatial, arrayEnabled: true, arrayMode: stereo2, matrixLinked: false, speakers: [{label: L, az: -30.0, el: 0.0, dist: 1.8, feed: left}, {label: R, az: 30.0, el: 0.0, dist: 1.8, feed: right}], pointAz: -59.99999999999999, pointEl: -10.000000000000002, pointDist: 3.0000000000000004, nativeSpatialWrites: 1, spatialSetParamsCalls: 2}
+[SpatialWorkspace] windows=true flutterTest=true presentation=stereo2 array=stereo2 forceFallback=false useWebView=false
+[SpatialWorkspace] windows=true flutterTest=true presentation=stereo2 array=stereo2 forceFallback=false useWebView=false
+[Player] arrayMode=ArrayMode.off diag={uiBuild: ui-53-workspace, bridgeBuild: p2.4.32-matrix, backend: Mock, playbackMode: spatial, arrayEnabled: false, arrayMode: off, matrixLinked: true, speakers: [{label: L, az: -90.0, el: 25.0, dist: 2.75, feed: left}, {label: R, az: 90.0, el: 25.0, dist: 2.75, feed: right}, {label: 3, az: 0.0, el: 0.0, dist: 1.8, feed: mid}], pointAz: -59.99999999999999, pointEl: -10.000000000000002, pointDist: 3.0000000000000004, nativeSpatialWrites: 2, spatialSetParamsCalls: 2}
+[SpatialWorkspace] windows=true flutterTest=true presentation=point array=off forceFallback=false useWebView=false
+00:08 +273: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/platform/developer_diagnostics_test.dart: diagnostics page copy and export actions are reachable
+00:08 +274: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/platform/developer_diagnostics_test.dart: diagnostics page copy and export actions are reachable
+00:08 +275: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/platform/developer_diagnostics_test.dart: diagnostics page copy and export actions are reachable
+00:08 +276: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/platform/developer_diagnostics_test.dart: diagnostics page copy and export actions are reachable
+00:08 +277: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/platform/developer_diagnostics_test.dart: diagnostics page copy and export actions are reachable
+00:08 +278: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/platform/developer_diagnostics_test.dart: diagnostics page copy and export actions are reachable
+00:08 +279: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/platform/developer_diagnostics_test.dart: diagnostics page copy and export actions are reachable
+00:08 +280: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/platform/developer_diagnostics_test.dart: diagnostics page copy and export actions are reachable
+00:09 +281: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/platform/developer_diagnostics_test.dart: diagnostics page copy and export actions are reachable
+00:09 +281: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/app_shell_test.dart: transport Point/2.0 uses applyArrayMode and keeps PlaybackMode
+[SpatialWorkspace] windows=true flutterTest=true presentation=point array=off forceFallback=false useWebView=false
+[Player] arrayMode=ArrayMode.stereo2 diag={uiBuild: ui-53-workspace, bridgeBuild: p2.4.32-matrix, backend: Mock, playbackMode: spatial, arrayEnabled: true, arrayMode: stereo2, matrixLinked: false, speakers: [{label: L, az: -30.0, el: 0.0, dist: 1.8, feed: left}, {label: R, az: 30.0, el: 0.0, dist: 1.8, feed: right}], pointAz: 90.0, pointEl: -10.0, pointDist: 1.8, nativeSpatialWrites: 1, spatialSetParamsCalls: 0}
+00:09 +282: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/platform/developer_diagnostics_test.dart: diagnostics page copy and export actions are reachable
+00:09 +283: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/platform/ios_remote_live_session_test.dart: missing picker extension cleans up a prepared live session
+00:09 +284: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/platform/ios_remote_live_session_test.dart: missing picker extension cleans up a prepared live session
+00:09 +285: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/platform/ios_remote_live_session_test.dart: missing picker extension cleans up a prepared live session
+00:09 +286: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/platform/ios_remote_live_session_test.dart: missing picker extension cleans up a prepared live session
+00:09 +287: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/platform/ios_remote_live_session_test.dart: missing picker extension cleans up a prepared live session
+00:09 +288: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/platform/ios_remote_live_session_test.dart: missing picker extension cleans up a prepared live session
+00:09 +289: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/platform/ios_remote_live_session_test.dart: missing picker extension cleans up a prepared live session
+00:09 +290: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/platform/ios_remote_live_session_test.dart: missing picker extension cleans up a prepared live session
+00:09 +291: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/platform/ios_remote_live_session_test.dart: missing picker extension cleans up a prepared live session
+00:09 +292: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/platform/ios_remote_live_session_test.dart: missing picker extension cleans up a prepared live session
+00:09 +293: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/platform/ios_remote_live_session_test.dart: missing picker extension cleans up a prepared live session
+00:09 +294: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/platform/ios_remote_live_session_test.dart: missing picker extension cleans up a prepared live session
+00:09 +295: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/platform/ios_remote_live_session_test.dart: missing picker extension cleans up a prepared live session
+00:09 +296: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/platform/ios_remote_live_session_test.dart: missing picker extension cleans up a prepared live session
+00:10 +297: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/platform/ios_remote_live_session_test.dart: missing picker extension cleans up a prepared live session
+00:10 +298: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/platform/ios_remote_live_session_test.dart: missing picker extension cleans up a prepared live session
+00:10 +299: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/platform/ios_remote_live_session_test.dart: missing picker extension cleans up a prepared live session
+00:10 +300: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/platform/ios_remote_live_session_test.dart: missing picker extension cleans up a prepared live session
+00:10 +301: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/platform/ios_remote_live_session_test.dart: missing picker extension cleans up a prepared live session
+00:10 +302: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/platform/ios_remote_live_session_test.dart: missing picker extension cleans up a prepared live session
+00:10 +303: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/platform/ios_remote_live_session_test.dart: missing picker extension cleans up a prepared live session
+00:10 +304: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/platform/ios_remote_live_session_test.dart: missing picker extension cleans up a prepared live session
+00:10 +305: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/platform/ios_remote_live_session_test.dart: missing picker extension cleans up a prepared live session
+00:10 +306: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/platform/ios_remote_live_session_test.dart: missing picker extension cleans up a prepared live session
+00:10 +307: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/platform/ios_remote_live_session_test.dart: missing picker extension cleans up a prepared live session
+00:10 +308: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/mobile/mobile_player_screen_test.dart: Windows workstation layout is unchanged at desktop size
+00:10 +309: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/mobile/mobile_player_screen_test.dart: Windows workstation layout is unchanged at desktop size
+00:10 +310: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/mobile/mobile_player_screen_test.dart: Windows workstation layout is unchanged at desktop size
+00:10 +311: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/mobile/mobile_player_screen_test.dart: Windows workstation layout is unchanged at desktop size
+00:10 +312: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/mobile/mobile_player_screen_test.dart: Windows workstation layout is unchanged at desktop size
+00:10 +313: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/mobile/mobile_player_screen_test.dart: Windows workstation layout is unchanged at desktop size
+00:10 +314: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/mobile/mobile_player_screen_test.dart: Windows workstation layout is unchanged at desktop size
+00:10 +315: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/mobile/mobile_player_screen_test.dart: Windows workstation layout is unchanged at desktop size
+00:10 +316: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/mobile/mobile_player_screen_test.dart: Windows workstation layout is unchanged at desktop size
+00:10 +317: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/mobile/mobile_player_screen_test.dart: Windows workstation layout is unchanged at desktop size
+00:10 +318: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/mobile/mobile_player_screen_test.dart: Windows workstation layout is unchanged at desktop size
+00:10 +319: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/mobile/mobile_player_screen_test.dart: Windows workstation layout is unchanged at desktop size
+00:10 +320: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/mobile/mobile_player_screen_test.dart: Windows workstation layout is unchanged at desktop size
+00:10 +321: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/mobile/mobile_player_screen_test.dart: Windows workstation layout is unchanged at desktop size
+00:10 +322: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/mobile/mobile_player_screen_test.dart: Windows workstation layout is unchanged at desktop size
+00:10 +323: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/mobile/mobile_player_screen_test.dart: Windows workstation layout is unchanged at desktop size
+00:10 +324: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/mobile/mobile_player_screen_test.dart: Windows workstation layout is unchanged at desktop size
+00:10 +325: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/mobile/mobile_player_screen_test.dart: Windows workstation layout is unchanged at desktop size
+00:10 +326: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/mobile/mobile_player_screen_test.dart: Windows workstation layout is unchanged at desktop size
+00:10 +327: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/mobile/mobile_player_screen_test.dart: Windows workstation layout is unchanged at desktop size
+00:10 +328: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/mobile/mobile_player_screen_test.dart: Windows workstation layout is unchanged at desktop size
+00:10 +329: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/mobile/mobile_player_screen_test.dart: Windows workstation layout is unchanged at desktop size
+00:10 +330: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/mobile/mobile_player_screen_test.dart: Windows workstation layout is unchanged at desktop size
+00:10 +331: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/mobile/mobile_player_screen_test.dart: Windows workstation layout is unchanged at desktop size
+[SpatialWorkspace] windows=true flutterTest=true presentation=point array=off forceFallback=false useWebView=false
+00:10 +332: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/platform/macos_m1_player_test.dart: macOS M1 Point UI hides unported surfaces and accepts pose input
+00:10 +333: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/platform/macos_m1_player_test.dart: macOS M1 Point UI hides unported surfaces and accepts pose input
+00:10 +334: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/platform/macos_m1_player_test.dart: macOS M1 Point UI hides unported surfaces and accepts pose input
+00:10 +334: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/app_shell_test.dart: Island play/pause uses the same EngineController as full window
+[SpatialWorkspace] windows=true flutterTest=true presentation=point array=off forceFallback=false useWebView=false
+[SpatialWorkspace] windows=true flutterTest=true presentation=point array=off forceFallback=false useWebView=false
+00:10 +335: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/platform/macos_m1_player_test.dart: macOS M1 Point UI hides unported surfaces and accepts pose input
+00:11 +336: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/platform/macos_m1_player_test.dart: macOS M1 Point UI hides unported surfaces and accepts pose input
+[SpatialWorkspace] windows=true flutterTest=true presentation=point array=off forceFallback=false useWebView=false
+00:11 +337: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/platform/ios_remote_live_session_test.dart: late IPC bind after stop closes its socket without preparing output
+00:11 +338: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/platform/ios_remote_live_session_test.dart: late IPC bind after stop closes its socket without preparing output
+00:11 +339: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/platform/ios_remote_live_session_test.dart: late IPC bind after stop closes its socket without preparing output
+00:11 +340: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/platform/ios_remote_live_session_test.dart: late IPC bind after stop closes its socket without preparing output
+00:11 +341: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/platform/ios_remote_live_session_test.dart: late IPC bind after stop closes its socket without preparing output
+00:11 +342: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/platform/ios_remote_live_session_test.dart: late IPC bind after stop closes its socket without preparing output
+00:11 +343: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/platform/ios_remote_live_session_test.dart: late IPC bind after stop closes its socket without preparing output
+00:11 +344: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/platform/ios_remote_live_session_test.dart: late IPC bind after stop closes its socket without preparing output
+00:11 +345: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/platform/ios_remote_live_session_test.dart: late IPC bind after stop closes its socket without preparing output
+00:11 +346: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/platform/ios_remote_live_session_test.dart: late IPC bind after stop closes its socket without preparing output
+00:11 +347: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/platform/ios_remote_live_session_test.dart: late IPC bind after stop closes its socket without preparing output
+00:11 +348: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/platform/ios_remote_live_session_test.dart: late IPC bind after stop closes its socket without preparing output
+00:11 +349: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/platform/ios_remote_live_session_test.dart: late IPC bind after stop closes its socket without preparing output
+00:11 +350: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/platform/ios_remote_live_session_test.dart: late IPC bind after stop closes its socket without preparing output
+00:11 +351: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/platform/ios_remote_live_session_test.dart: late IPC bind after stop closes its socket without preparing output
+00:11 +352: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/platform/ios_remote_live_session_test.dart: late IPC bind after stop closes its socket without preparing output
+00:11 +353: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/platform/ios_remote_live_session_test.dart: late IPC bind after stop closes its socket without preparing output
+00:11 +354: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/platform/ios_remote_live_session_test.dart: late IPC bind after stop closes its socket without preparing output
+00:11 +355: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/platform/ios_remote_live_session_test.dart: late IPC bind after stop closes its socket without preparing output
+00:11 +356: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/platform/ios_remote_live_session_test.dart: late IPC bind after stop closes its socket without preparing output
+00:11 +357: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/platform/ios_remote_live_session_test.dart: late IPC bind after stop closes its socket without preparing output
+00:11 +358: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/platform/ios_remote_live_session_test.dart: late IPC bind after stop closes its socket without preparing output
+00:11 +359: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/platform/ios_remote_live_session_test.dart: late IPC bind after stop closes its socket without preparing output
+00:11 +360: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/platform/ios_remote_live_session_test.dart: late IPC bind after stop closes its socket without preparing output
+00:11 +361: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/platform/ios_remote_live_session_test.dart: late IPC bind after stop closes its socket without preparing output
+00:11 +362: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/platform/ios_remote_live_session_test.dart: late IPC bind after stop closes its socket without preparing output
+00:11 +363: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/platform/ios_remote_live_session_test.dart: late IPC bind after stop closes its socket without preparing output
+00:11 +364: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/platform/ios_remote_live_session_test.dart: late IPC bind after stop closes its socket without preparing output
+00:11 +365: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/platform/ios_remote_live_session_test.dart: late IPC bind after stop closes its socket without preparing output
+00:11 +366: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/platform/ios_remote_live_session_test.dart: late IPC bind after stop closes its socket without preparing output
+00:11 +367: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/platform/ios_remote_live_session_test.dart: late IPC bind after stop closes its socket without preparing output
+00:11 +368: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/platform/ios_remote_live_session_test.dart: late IPC bind after stop closes its socket without preparing output
+00:11 +368: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/platform/workspace_host_test.dart: fallback host renders OrbitVisualizer without Windows WebView
+[SpatialWorkspace] windows=true flutterTest=true presentation=point array=off forceFallback=false useWebView=false
+00:11 +369: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/platform/ios_remote_live_session_test.dart: late IPC bind after stop closes its socket without preparing output
+00:12 +370: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/platform/ios_remote_live_session_test.dart: late IPC bind after stop closes its socket without preparing output
+00:12 +371: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/platform/ios_remote_live_session_test.dart: late IPC bind after stop closes its socket without preparing output
+00:12 +372: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/platform/ios_remote_live_session_test.dart: late IPC bind after stop closes its socket without preparing output
+00:12 +373: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/platform/ios_remote_live_session_test.dart: late IPC bind after stop closes its socket without preparing output
+00:12 +374: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/platform/ios_remote_live_session_test.dart: late IPC bind after stop closes its socket without preparing output
+00:12 +375: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/platform/ios_remote_live_session_test.dart: late IPC bind after stop closes its socket without preparing output
+00:12 +376: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/platform/ios_remote_live_session_test.dart: late IPC bind after stop closes its socket without preparing output
+00:12 +377: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/position_sidebar_test.dart: Point|2.0 switch is hidden when array is unsupported
+00:12 +378: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/position_sidebar_test.dart: Point|2.0 switch is hidden when array is unsupported
+00:12 +379: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/laptop_listen_controller_test.dart: plays the laptop stream, acknowledging it, and shows now playing
+00:12 +380: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/laptop_listen_controller_test.dart: plays the laptop stream, acknowledging it, and shows now playing
+00:12 +381: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/laptop_listen_controller_test.dart: plays the laptop stream, acknowledging it, and shows now playing
+00:12 +382: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/laptop_listen_controller_test.dart: plays the laptop stream, acknowledging it, and shows now playing
+00:12 +383: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/laptop_listen_controller_test.dart: plays the laptop stream, acknowledging it, and shows now playing
+00:12 +384: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/laptop_listen_controller_test.dart: plays the laptop stream, acknowledging it, and shows now playing
+00:12 +385: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/laptop_listen_controller_test.dart: plays the laptop stream, acknowledging it, and shows now playing
+00:12 +386: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/laptop_listen_controller_test.dart: plays the laptop stream, acknowledging it, and shows now playing
+00:12 +387: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/laptop_listen_controller_test.dart: plays the laptop stream, acknowledging it, and shows now playing
+00:12 +388: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/laptop_listen_controller_test.dart: plays the laptop stream, acknowledging it, and shows now playing
+00:12 +389: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/laptop_listen_controller_test.dart: plays the laptop stream, acknowledging it, and shows now playing
+00:12 +390: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/laptop_listen_controller_test.dart: plays the laptop stream, acknowledging it, and shows now playing
+00:12 +391: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/laptop_listen_controller_test.dart: plays the laptop stream, acknowledging it, and shows now playing
+00:12 +392: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/laptop_listen_controller_test.dart: plays the laptop stream, acknowledging it, and shows now playing
+00:12 +393: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/laptop_listen_controller_test.dart: plays the laptop stream, acknowledging it, and shows now playing
+00:12 +394: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/laptop_listen_controller_test.dart: plays the laptop stream, acknowledging it, and shows now playing
+00:12 +395: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/laptop_listen_controller_test.dart: plays the laptop stream, acknowledging it, and shows now playing
+00:12 +396: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/laptop_listen_controller_test.dart: plays the laptop stream, acknowledging it, and shows now playing
+00:12 +397: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/laptop_listen_controller_test.dart: plays the laptop stream, acknowledging it, and shows now playing
+00:12 +398: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/laptop_listen_controller_test.dart: plays the laptop stream, acknowledging it, and shows now playing
+00:12 +399: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/laptop_listen_controller_test.dart: plays the laptop stream, acknowledging it, and shows now playing
+00:13 +400: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/laptop_listen_controller_test.dart: plays the laptop stream, acknowledging it, and shows now playing
+00:13 +401: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/laptop_listen_controller_test.dart: plays the laptop stream, acknowledging it, and shows now playing
+00:13 +401: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/native_remote_transform_test.dart: real native ABI renders Original and Spatial without a playback device
+  Skip: Requires an explicitly supplied built native test library
+00:13 +401 ~1: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/laptop_listen_controller_test.dart: plays the laptop stream, acknowledging it, and shows now playing
+00:13 +402 ~1: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/laptop_listen_controller_test.dart: plays the laptop stream, acknowledging it, and shows now playing
+00:13 +403 ~1: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/laptop_listen_controller_test.dart: plays the laptop stream, acknowledging it, and shows now playing
+00:13 +404 ~1: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/laptop_listen_controller_test.dart: plays the laptop stream, acknowledging it, and shows now playing
+00:13 +405 ~1: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/laptop_listen_controller_test.dart: plays the laptop stream, acknowledging it, and shows now playing
+00:13 +406 ~1: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/laptop_listen_controller_test.dart: plays the laptop stream, acknowledging it, and shows now playing
+00:13 +407 ~1: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/laptop_listen_controller_test.dart: plays the laptop stream, acknowledging it, and shows now playing
+00:13 +408 ~1: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/laptop_listen_controller_test.dart: plays the laptop stream, acknowledging it, and shows now playing
+00:13 +409 ~1: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/laptop_listen_controller_test.dart: plays the laptop stream, acknowledging it, and shows now playing
+00:13 +410 ~1: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/laptop_listen_controller_test.dart: plays the laptop stream, acknowledging it, and shows now playing
+00:13 +411 ~1: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/laptop_listen_controller_test.dart: plays the laptop stream, acknowledging it, and shows now playing
+00:13 +412 ~1: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/laptop_listen_controller_test.dart: plays the laptop stream, acknowledging it, and shows now playing
+00:13 +413 ~1: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/laptop_listen_controller_test.dart: plays the laptop stream, acknowledging it, and shows now playing
+00:13 +414 ~1: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/laptop_listen_controller_test.dart: plays the laptop stream, acknowledging it, and shows now playing
+00:13 +415 ~1: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/laptop_listen_controller_test.dart: plays the laptop stream, acknowledging it, and shows now playing
+00:13 +415 ~1: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/packaged_remote_transform_test.dart: staged Windows player authenticates and returns native DSP across restart
+  Skip: Requires an explicitly supplied isolated Windows release bundle
+00:13 +415 ~2: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/laptop_listen_controller_test.dart: plays the laptop stream, acknowledging it, and shows now playing
+00:13 +416 ~2: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/laptop_listen_controller_test.dart: plays the laptop stream, acknowledging it, and shows now playing
+00:13 +417 ~2: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/laptop_listen_controller_test.dart: plays the laptop stream, acknowledging it, and shows now playing
+00:13 +418 ~2: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/laptop_listen_controller_test.dart: plays the laptop stream, acknowledging it, and shows now playing
+00:13 +419 ~2: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/laptop_listen_controller_test.dart: plays the laptop stream, acknowledging it, and shows now playing
+00:13 +420 ~2: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/laptop_listen_controller_test.dart: plays the laptop stream, acknowledging it, and shows now playing
+00:13 +421 ~2: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/laptop_listen_controller_test.dart: plays the laptop stream, acknowledging it, and shows now playing
+00:13 +422 ~2: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/laptop_listen_controller_test.dart: plays the laptop stream, acknowledging it, and shows now playing
+00:13 +423 ~2: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/laptop_listen_controller_test.dart: plays the laptop stream, acknowledging it, and shows now playing
+00:13 +424 ~2: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/laptop_listen_controller_test.dart: plays the laptop stream, acknowledging it, and shows now playing
+00:13 +425 ~2: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/laptop_listen_controller_test.dart: plays the laptop stream, acknowledging it, and shows now playing
+00:13 +426 ~2: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/laptop_listen_controller_test.dart: plays the laptop stream, acknowledging it, and shows now playing
+00:13 +427 ~2: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/laptop_listen_controller_test.dart: plays the laptop stream, acknowledging it, and shows now playing
+00:13 +428 ~2: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/laptop_listen_controller_test.dart: plays the laptop stream, acknowledging it, and shows now playing
+00:13 +429 ~2: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/laptop_listen_controller_test.dart: plays the laptop stream, acknowledging it, and shows now playing
+00:13 +430 ~2: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/laptop_listen_controller_test.dart: plays the laptop stream, acknowledging it, and shows now playing
+00:13 +431 ~2: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/laptop_listen_controller_test.dart: plays the laptop stream, acknowledging it, and shows now playing
+00:13 +432 ~2: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/laptop_listen_controller_test.dart: plays the laptop stream, acknowledging it, and shows now playing
+00:13 +433 ~2: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/laptop_listen_controller_test.dart: plays the laptop stream, acknowledging it, and shows now playing
+00:14 +434 ~2: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/laptop_listen_controller_test.dart: plays the laptop stream, acknowledging it, and shows now playing
+00:14 +435 ~2: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/laptop_listen_controller_test.dart: plays the laptop stream, acknowledging it, and shows now playing
+00:14 +436 ~2: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/laptop_listen_controller_test.dart: plays the laptop stream, acknowledging it, and shows now playing
+00:14 +437 ~2: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/laptop_listen_controller_test.dart: plays the laptop stream, acknowledging it, and shows now playing
+00:14 +438 ~2: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/laptop_listen_controller_test.dart: plays the laptop stream, acknowledging it, and shows now playing
+00:14 +439 ~2: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/laptop_listen_controller_test.dart: plays the laptop stream, acknowledging it, and shows now playing
+00:14 +440 ~2: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/laptop_listen_controller_test.dart: plays the laptop stream, acknowledging it, and shows now playing
+00:14 +441 ~2: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/laptop_listen_controller_test.dart: plays the laptop stream, acknowledging it, and shows now playing
+00:14 +442 ~2: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/laptop_listen_controller_test.dart: plays the laptop stream, acknowledging it, and shows now playing
+00:14 +443 ~2: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/laptop_listen_controller_test.dart: plays the laptop stream, acknowledging it, and shows now playing
+00:14 +444 ~2: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/laptop_listen_controller_test.dart: plays the laptop stream, acknowledging it, and shows now playing
+00:14 +445 ~2: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/laptop_listen_controller_test.dart: plays the laptop stream, acknowledging it, and shows now playing
+00:14 +446 ~2: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/laptop_listen_controller_test.dart: plays the laptop stream, acknowledging it, and shows now playing
+00:14 +447 ~2: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/laptop_listen_controller_test.dart: plays the laptop stream, acknowledging it, and shows now playing
+00:14 +448 ~2: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/laptop_listen_controller_test.dart: plays the laptop stream, acknowledging it, and shows now playing
+00:14 +449 ~2: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/laptop_listen_controller_test.dart: plays the laptop stream, acknowledging it, and shows now playing
+00:14 +450 ~2: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/laptop_listen_controller_test.dart: plays the laptop stream, acknowledging it, and shows now playing
+00:14 +451 ~2: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/laptop_listen_controller_test.dart: plays the laptop stream, acknowledging it, and shows now playing
+00:14 +452 ~2: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/laptop_listen_controller_test.dart: plays the laptop stream, acknowledging it, and shows now playing
+00:14 +452 ~2: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_native_relay_test.dart: generated audio crosses public relay and actual laptop Rust DSP
+  Skip: Manual isolated public/native test
+00:14 +452 ~3: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/laptop_listen_controller_test.dart: plays the laptop stream, acknowledging it, and shows now playing
+00:14 +453 ~3: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/laptop_listen_controller_test.dart: plays the laptop stream, acknowledging it, and shows now playing
+00:14 +454 ~3: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/laptop_listen_controller_test.dart: plays the laptop stream, acknowledging it, and shows now playing
+00:14 +455 ~3: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/laptop_listen_controller_test.dart: plays the laptop stream, acknowledging it, and shows now playing
+00:14 +456 ~3: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/laptop_listen_controller_test.dart: plays the laptop stream, acknowledging it, and shows now playing
+00:14 +457 ~3: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/laptop_listen_controller_test.dart: plays the laptop stream, acknowledging it, and shows now playing
+00:14 +458 ~3: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/laptop_listen_controller_test.dart: plays the laptop stream, acknowledging it, and shows now playing
+00:14 +459 ~3: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/laptop_listen_controller_test.dart: plays the laptop stream, acknowledging it, and shows now playing
+00:14 +460 ~3: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/laptop_listen_controller_test.dart: plays the laptop stream, acknowledging it, and shows now playing
+00:14 +461 ~3: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/laptop_listen_controller_test.dart: plays the laptop stream, acknowledging it, and shows now playing
+00:14 +462 ~3: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:14 +463 ~3: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:14 +464 ~3: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:14 +465 ~3: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:14 +465 ~3: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_transform_relay_test.dart: generated PCM roundtrips through exact public Yinwei message relay
+  Skip: Manual generated-PCM public relay test
+00:14 +465 ~4: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:14 +466 ~4: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:14 +467 ~4: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:14 +468 ~4: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:14 +469 ~4: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:14 +470 ~4: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:15 +471 ~4: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:15 +472 ~4: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:15 +473 ~4: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:15 +474 ~4: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:15 +475 ~4: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:15 +476 ~4: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:15 +477 ~4: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:15 +478 ~4: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:15 +479 ~4: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:15 +480 ~4: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:15 +481 ~4: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:15 +482 ~4: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:15 +483 ~4: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:15 +484 ~4: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:15 +485 ~4: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:15 +486 ~4: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:15 +487 ~4: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:15 +488 ~4: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:15 +489 ~4: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:15 +490 ~4: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:15 +491 ~4: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:15 +492 ~4: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:15 +493 ~4: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:15 +494 ~4: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:15 +495 ~4: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:15 +496 ~4: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:16 +497 ~4: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:16 +498 ~4: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:16 +499 ~4: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:16 +500 ~4: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:16 +501 ~4: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:16 +502 ~4: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:16 +503 ~4: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:16 +504 ~4: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:16 +505 ~4: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:17 +506 ~4: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:17 +507 ~4: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:17 +508 ~4: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:17 +509 ~4: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:17 +509 ~5: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:18 +510 ~5: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:18 +511 ~5: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:18 +512 ~5: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:18 +513 ~5: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:18 +514 ~5: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:18 +515 ~5: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:18 +516 ~5: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:18 +517 ~5: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:18 +518 ~5: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:18 +519 ~5: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:18 +520 ~5: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:18 +521 ~5: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:18 +522 ~5: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:18 +523 ~5: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:19 +524 ~5: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:19 +525 ~5: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:19 +526 ~5: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:19 +526 ~5: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/runtime/macos_native_smoke_test.dart: macOS native FFI opens, spatializes and exports a real PCM fixture
+  Skip: Requires a built macOS dylib on a Mac.
+00:19 +526 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:19 +527 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:19 +528 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:19 +528 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/runtime/ios_play_runtime_test.dart: iOS Play activates AVAudioSession before the engine starts
+[YINWEI_IOS] PLAY_BUTTON_PRESSED playing=false hasFile=true backend=EngineBackend.mock loadError=null lastError=null
+[YINWEI_IOS] IOS_CHANNEL_PLAY_RECEIVED
+[YINWEI_IOS] IOS_CHANNEL_PLAY_OK
+[YINWEI_IOS] PLAY_BUTTON_DONE playing=true lastError=null
+00:19 +529 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:19 +530 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:19 +531 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:19 +532 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:19 +532 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/runtime/ios_play_runtime_test.dart: failed native play releases the audio session
+[YINWEI_IOS] PLAY_BUTTON_PRESSED playing=false hasFile=true backend=EngineBackend.mock loadError=null lastError=null
+[YINWEI_IOS] IOS_CHANNEL_PLAY_RECEIVED
+[YINWEI_IOS] IOS_CHANNEL_PLAY_OK
+[YINWEI_IOS] PLAY_FAIL release session lastError=Bad state: AudioDevice: no default output device
+[YINWEI_IOS] PLAY_BUTTON_DONE playing=false lastError=Bad state: AudioDevice: no default output device
+00:19 +533 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:19 +534 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:20 +535 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:20 +536 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:20 +536 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/runtime/ios_play_runtime_test.dart: successful open enables Play and refreshes the loaded track
+[Player] opened path=point-source.wav backend=EngineBackend.mock
+00:20 +537 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:20 +538 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:20 +539 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:20 +540 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:20 +541 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:20 +542 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:20 +543 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:20 +544 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:20 +545 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:20 +546 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:20 +547 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:21 +548 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:21 +549 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:21 +550 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:21 +551 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:21 +552 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:21 +553 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:21 +554 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:21 +555 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:21 +556 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:21 +557 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:21 +558 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:21 +559 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:21 +560 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:21 +561 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:21 +562 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:21 +563 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:21 +564 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:21 +565 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:21 +566 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:21 +567 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:22 +568 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:22 +569 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:22 +570 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:22 +571 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:22 +572 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:22 +573 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:22 +574 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:22 +575 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:22 +576 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:22 +577 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:22 +578 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:22 +579 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:22 +580 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:22 +581 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:22 +582 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:22 +583 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:22 +584 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:22 +585 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:22 +586 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:23 +587 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:23 +588 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:23 +589 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:23 +590 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:23 +591 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:23 +592 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:23 +593 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:23 +594 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:23 +595 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:23 +596 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:23 +597 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:23 +598 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:23 +599 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:23 +600 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:23 +601 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:23 +602 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:23 +603 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:23 +604 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:23 +605 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:23 +606 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:23 +607 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:23 +608 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:23 +609 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:23 +610 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:23 +611 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:23 +612 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:23 +613 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:23 +614 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:23 +615 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:23 +616 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:23 +617 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:23 +618 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:23 +619 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:23 +620 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:23 +621 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:23 +622 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:23 +623 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:23 +624 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:23 +625 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:23 +626 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:23 +627 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:23 +628 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:23 +629 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:23 +630 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:23 +631 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:23 +632 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:23 +633 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:23 +634 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:23 +635 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:23 +636 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:23 +637 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:23 +638 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:23 +639 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:23 +640 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:23 +641 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:23 +642 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:23 +643 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:23 +644 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:23 +645 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:23 +646 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:23 +647 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:23 +648 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:23 +649 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:23 +650 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:23 +651 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:23 +652 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:23 +653 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:23 +654 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:23 +655 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:23 +656 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:23 +657 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:23 +658 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:23 +659 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:23 +660 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:23 +661 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:23 +662 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:23 +663 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:23 +664 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:23 +665 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:23 +666 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:23 +667 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:23 +668 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:24 +669 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:24 +670 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:24 +670 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/runtime/phase6_sync_hardening_test.dart: playhead ticks keep inspector mounted without workspace playhead churn
+[SpatialWorkspace] windows=true flutterTest=true presentation=point array=off forceFallback=false useWebView=false
+00:24 +671 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:24 +672 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:24 +673 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:24 +673 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/runtime/phase65_workspace_presentation_test.dart: PlayerScreen keeps SpatialWorkspace across Original/Point/2.0
+[SpatialWorkspace] windows=true flutterTest=true presentation=point array=off forceFallback=false useWebView=false
+[Player] arrayMode=ArrayMode.stereo2 diag={uiBuild: ui-53-workspace, bridgeBuild: p2.4.32-matrix, backend: Mock, playbackMode: spatial, arrayEnabled: true, arrayMode: stereo2, matrixLinked: false, speakers: [{label: L, az: -30.0, el: 0.0, dist: 1.8, feed: left}, {label: R, az: 30.0, el: 0.0, dist: 1.8, feed: right}], pointAz: 90.0, pointEl: -10.0, pointDist: 1.8, nativeSpatialWrites: 1, spatialSetParamsCalls: 0}
+[Player] arrayMode=ArrayMode.off diag={uiBuild: ui-53-workspace, bridgeBuild: p2.4.32-matrix, backend: Mock, playbackMode: spatial, arrayEnabled: false, arrayMode: off, matrixLinked: false, speakers: [{label: L, az: -30.0, el: 0.0, dist: 1.8, feed: left}, {label: R, az: 30.0, el: 0.0, dist: 1.8, feed: right}], pointAz: 90.0, pointEl: -10.0, pointDist: 1.8, nativeSpatialWrites: 1, spatialSetParamsCalls: 0}
+00:24 +674 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:24 +675 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:24 +676 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:24 +677 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:24 +678 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:24 +679 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:24 +680 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:24 +681 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:24 +682 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:24 +683 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:24 +684 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:24 +685 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:25 +686 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:25 +687 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:25 +688 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:25 +689 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:25 +690 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:25 +690 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/runtime/orbit_visualization_test.dart: Full and Island follow changing live heading across window modes
+[SpatialWorkspace] windows=true flutterTest=true presentation=point array=off forceFallback=false useWebView=false
+[SpatialWorkspace] windows=true flutterTest=true presentation=point array=off forceFallback=false useWebView=false
+00:25 +691 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:25 +692 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:25 +693 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:25 +694 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:25 +695 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:25 +695 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/spatial_workspace_test.dart: fallback keeps OrbitVisualizer pose callbacks
+[SpatialWorkspace] windows=true flutterTest=true presentation=point array=off forceFallback=true useWebView=false
+00:25 +696 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:25 +697 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:25 +698 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:25 +699 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:25 +700 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:25 +701 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:25 +702 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:25 +703 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:25 +704 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:25 +705 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:25 +706 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:25 +707 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:25 +708 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:25 +709 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:25 +710 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:25 +711 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:25 +712 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:25 +713 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:25 +714 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:25 +715 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:25 +716 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:25 +717 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:25 +718 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:25 +719 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:25 +720 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:26 +720 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/runtime/phase65_workspace_presentation_test.dart: Array pose edits rebuild Inspector and workspace presentation
+[SpatialWorkspace] windows=true flutterTest=true presentation=point array=off forceFallback=false useWebView=false
+00:26 +721 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:26 +721 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/runtime/phase65_workspace_presentation_test.dart: test fallback still uses OrbitVisualizer without replacing PlayerScreen workspace
+[SpatialWorkspace] windows=true flutterTest=true presentation=stereo2 array=stereo2 forceFallback=true useWebView=false
+00:26 +722 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:26 +723 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:26 +724 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:26 +724 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/runtime/player_screen_point_adoption_test.dart: Point presets update EngineController through Scene adoption
+[SpatialWorkspace] windows=true flutterTest=true presentation=point array=off forceFallback=false useWebView=false
+00:26 +725 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:26 +726 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:26 +727 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:26 +728 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:26 +729 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:26 +730 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:26 +731 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:26 +732 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:26 +733 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:26 +734 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:26 +734 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/runtime/orbit_visualization_test.dart: stopped Orbit does not overlay playhead-derived heading
+[SpatialWorkspace] windows=true flutterTest=true presentation=point array=off forceFallback=false useWebView=false
+00:26 +735 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:26 +736 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:26 +737 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:26 +738 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:26 +739 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:26 +740 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:26 +741 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:26 +742 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:26 +743 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:26 +744 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:26 +745 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:26 +746 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:27 +747 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:27 +748 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:27 +748 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/ui_golden_test.dart: player UI dark field golden
+[SpatialWorkspace] windows=true flutterTest=true presentation=point array=off forceFallback=false useWebView=false
+00:28 +748 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/widget_test.dart: app builds
+[SpatialWorkspace] windows=true flutterTest=true presentation=point array=off forceFallback=false useWebView=false
+00:28 +749 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_media_keys_test.dart: a helper that never gets ready falls back
+00:29 +750 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/ui_golden_test.dart: player UI dark field golden
+00:29 +751 ~6: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/ui_golden_test.dart: player UI dark field golden
+00:29 +752 ~6: All tests passed!

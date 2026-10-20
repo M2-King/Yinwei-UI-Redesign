@@ -15,7 +15,8 @@ class MockEngine implements EngineApi {
   @override
   Future<TrackMeta> open(String path) async {
     await Future<void>.delayed(const Duration(milliseconds: 40));
-    final name = path.split(RegExp(r'[\\/]')).last.replaceAll(RegExp(r'\.[^.]+$'), '');
+    final name =
+        path.split(RegExp(r'[\\/]')).last.replaceAll(RegExp(r'\.[^.]+$'), '');
     _track = TrackMeta(
       title: name.isEmpty ? 'Untitled' : name,
       artist: 'Local file',
@@ -49,7 +50,8 @@ class MockEngine implements EngineApi {
   }
 
   @override
-  Future<void> rebuildPreview({void Function(double progress)? onProgress}) async {
+  Future<void> rebuildPreview(
+      {void Function(double progress)? onProgress}) async {
     for (var i = 0; i <= 10; i++) {
       await Future<void>.delayed(const Duration(milliseconds: 20));
       onProgress?.call(i / 10);
@@ -80,7 +82,8 @@ class MockEngine implements EngineApi {
   @override
   Future<void> seek(Duration position) async {
     final max = _track?.duration ?? Duration.zero;
-    _position = position > max ? max : (position.isNegative ? Duration.zero : position);
+    _position =
+        position > max ? max : (position.isNegative ? Duration.zero : position);
     if (_playing) {
       _playAnchor = _position;
       _playStarted = DateTime.now();
@@ -160,6 +163,24 @@ class MockEngine implements EngineApi {
 
   @override
   Future<void> setSpeakerCount(int n) async {}
+
+  @override
+  Future<void> setArrayAcknowledged(ArrayLayout layout) async {
+    await setArrayMode(layout.nativeMode);
+    if (!layout.enabled) return;
+    await setSpeakerCount(layout.speakers.length);
+    for (var i = 0; i < layout.speakers.length; i++) {
+      final s = layout.speakers[i];
+      await setSpeaker(
+          index: i,
+          azimuthDeg: s.azimuthDeg,
+          elevationDeg: s.elevationDeg,
+          distanceM: s.distanceM,
+          gainDb: s.gainDb,
+          mute: s.mute,
+          feed: s.nativeFeed);
+    }
+  }
 
   PlaybackMode get mode => _mode;
   SpatialParams get params => _params.copy();

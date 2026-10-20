@@ -1,0 +1,97 @@
+Flutter assets will be downloaded from https://storage.flutter-io.cn. Make sure you trust this source!
+00:00 +0: loading C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/state/engine_controller_array_ack_test.dart
+00:00 +0: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/state/engine_controller_array_ack_test.dart: local array edits retain their immediate UI and 32ms throttle
+00:00 +1: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/state/engine_controller_array_ack_test.dart: local array edits retain their immediate UI and 32ms throttle
+00:00 +1 -1: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/state/engine_controller_array_ack_test.dart: local array edits retain their immediate UI and 32ms throttle
+00:00 +1 -1: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/array_speaker_commands_test.dart: every speaker command requires revision; count and L/R bounds enforced [E]
+  Converting object to an encodable object failed: NaN
+  dart:convert                                                     jsonEncode
+  package:yinwei_player/state/app_session_coordinator.dart 349:21  AppSessionCoordinator.command
+  test\remote\array_speaker_commands_test.dart 75:12               main.edit
+  test\remote\array_speaker_commands_test.dart 116:9               main.<fn>
+  
+00:00 +2 -1: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/state/engine_controller_array_ack_test.dart: local array edits retain their immediate UI and 32ms throttle
+00:00 +3 -1: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/state/engine_controller_array_ack_test.dart: local array edits retain their immediate UI and 32ms throttle
+00:00 +4 -1: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/array_speaker_commands_test.dart: laptop selection and gain/mute changes update revision and revoke lease
+00:00 +5 -1: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/state/engine_controller_array_ack_test.dart: remote commit waits for all native writes and cancels pending local write
+00:00 +6 -1: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/state/engine_controller_array_ack_test.dart: remote commit waits for all native writes and cancels pending local write
+00:00 +7 -1: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/state/engine_controller_array_ack_test.dart: failed remote write propagates and restores the previous UI array
+00:00 +8 -1: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/listen_room_bridge_test.dart: copies bounded audio diagnostics locally without laptop commands
+00:00 +9 -1: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/listen_room_bridge_test.dart: native P3 additions volume reaches only the iPad and survives reopening the bridge
+00:00 +10 -1: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/listen_room_bridge_test.dart: native P3 additions volume reaches only the iPad and survives reopening the bridge
+00:00 +11 -1: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/listen_room_bridge_test.dart: native P3 additions volume reaches only the iPad and survives reopening the bridge
+00:00 +12 -1: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/listen_room_bridge_test.dart: native P3 additions volume reaches only the iPad and survives reopening the bridge
+00:00 +13 -1: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/listen_room_bridge_test.dart: native P3 additions volume reaches only the iPad and survives reopening the bridge
+00:00 +14 -1: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/listen_room_bridge_test.dart: native P3 additions volume reaches only the iPad and survives reopening the bridge
+00:00 +15 -1: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/listen_room_bridge_test.dart: native P3 additions volume reaches only the iPad and survives reopening the bridge
+00:00 +16 -1: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/listen_room_bridge_test.dart: native P3 additions volume reaches only the iPad and survives reopening the bridge
+00:00 +17 -1: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/listen_room_bridge_test.dart: native P3 additions volume reaches only the iPad and survives reopening the bridge
+00:00 +18 -1: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/listen_room_bridge_test.dart: native P3 additions volume reaches only the iPad and survives reopening the bridge
+00:00 +19 -1: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/listen_room_bridge_test.dart: native P3 additions volume reaches only the iPad and survives reopening the bridge
+00:00 +20 -1: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/listen_room_bridge_test.dart: native P3 additions volume reaches only the iPad and survives reopening the bridge
+00:00 +21 -1: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/listen_room_bridge_test.dart: native P3 additions volume reaches only the iPad and survives reopening the bridge
+00:00 +22 -1: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/listen_room_bridge_test.dart: native P3 additions volume reaches only the iPad and survives reopening the bridge
+00:00 +23 -1: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/listen_room_bridge_test.dart: native P3 additions volume reaches only the iPad and survives reopening the bridge
+00:00 +24 -1: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/app_session_coordinator_test.dart: live control hooks a refused media command reports media_command_failed
+00:00 +25 -1: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/app_session_coordinator_test.dart: live control hooks media commands also work before Live starts
+00:01 +26 -1: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/listen_room_bridge_test.dart: native P3 additions failed volume is reported and the confirmed value re-sent
+00:01 +27 -1: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/listen_room_bridge_test.dart: native P3 additions failed volume is reported and the confirmed value re-sent
+00:01 +28 -1: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/app_session_coordinator_test.dart: live control hooks start failures keep their reason; others become live_start_failed
+00:01 +29 -1: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/listen_room_bridge_test.dart: native P3 additions packet peaks reach the page at most ten times a second
+00:01 +30 -1: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/listen_room_bridge_test.dart: native P3 additions packet peaks reach the page at most ten times a second
+00:01 +31 -1: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/app_session_coordinator_test.dart: live control hooks Orbit switch and speed reach the live engine; not in 2.0
+00:01 +32 -1: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/listen_room_bridge_test.dart: AirPlay bounds notify only on change and reject invalid rectangles
+00:01 +33 -1: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_gateway_test.dart: live listener streams without an imported file and file commands stay blocked
+00:01 +34 -1: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_gateway_test.dart: live listener streams without an imported file and file commands stay blocked
+00:01 +35 -1: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_gateway_test.dart: live listener streams without an imported file and file commands stay blocked
+00:01 +36 -1: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_gateway_test.dart: live listener streams without an imported file and file commands stay blocked
+00:01 +37 -1: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_gateway_test.dart: live listener streams without an imported file and file commands stay blocked
+00:01 +38 -1: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_gateway_test.dart: live listener streams without an imported file and file commands stay blocked
+00:01 +39 -1: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_gateway_test.dart: live listener streams without an imported file and file commands stay blocked
+00:01 +40 -1: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_gateway_test.dart: live listener streams without an imported file and file commands stay blocked
+00:01 +41 -1: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_gateway_test.dart: live listener streams without an imported file and file commands stay blocked
+00:01 +42 -1: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_gateway_test.dart: live listener streams without an imported file and file commands stay blocked
+00:01 +43 -1: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_gateway_test.dart: live listener streams without an imported file and file commands stay blocked
+00:01 +44 -1: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_gateway_test.dart: live listener streams without an imported file and file commands stay blocked
+00:01 +45 -1: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_gateway_test.dart: live listener streams without an imported file and file commands stay blocked
+00:01 +46 -1: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_gateway_test.dart: live listener streams without an imported file and file commands stay blocked
+00:01 +47 -1: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_gateway_test.dart: live listener streams without an imported file and file commands stay blocked
+00:01 +48 -1: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_gateway_test.dart: live listener streams without an imported file and file commands stay blocked
+00:01 +49 -1: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_gateway_test.dart: live listener streams without an imported file and file commands stay blocked
+00:01 +50 -1: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_gateway_test.dart: live listener streams without an imported file and file commands stay blocked
+00:01 +51 -1: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_gateway_test.dart: live listener streams without an imported file and file commands stay blocked
+00:01 +52 -1: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/listen_room_bridge_test.dart: sending state at most once per interval, and only when something changed
+00:01 +53 -1: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/listen_room_bridge_test.dart: sending state at most once per interval, and only when something changed
+00:01 +54 -1: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/listen_room_bridge_test.dart: sending state at most once per interval, and only when something changed
+00:01 +55 -1: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/listen_room_bridge_test.dart: sending state at most once per interval, and only when something changed
+00:01 +56 -1: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_gateway_test.dart: live source retarget flushes epochs without disconnecting controls or restarting capture
+00:01 +57 -1: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/listen_room_bridge_test.dart: sending state a reloaded page gets the whole state again after ready
+00:01 +58 -1: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/listen_room_bridge_test.dart: sending state a reloaded page gets the whole state again after ready
+00:01 +59 -1: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/listen_room_bridge_test.dart: sending state a reloaded page gets the whole state again after ready
+00:01 +60 -1: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/listen_room_bridge_test.dart: sending state a reloaded page gets the whole state again after ready
+00:01 +61 -1: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_gateway_test.dart: login requires the exact origin and prelogin CSRF token
+00:01 +62 -1: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_gateway_test.dart: login requires the exact origin and prelogin CSRF token
+00:01 +63 -1: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_gateway_test.dart: login requires the exact origin and prelogin CSRF token
+00:01 +64 -1: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_gateway_test.dart: login requires the exact origin and prelogin CSRF token
+00:01 +65 -1: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/listen_room_bridge_test.dart: intents from the page media: Live music-app commands, and play starts Live when it is off
+00:01 +66 -1: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_gateway_test.dart: authenticated controls require CSRF and signout revokes the session
+00:01 +67 -1: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_gateway_test.dart: authenticated controls require CSRF and signout revokes the session
+00:01 +68 -1: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_gateway_test.dart: authenticated controls require CSRF and signout revokes the session
+00:01 +69 -1: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_gateway_test.dart: authenticated controls require CSRF and signout revokes the session
+00:01 +70 -1: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_gateway_test.dart: authenticated controls require CSRF and signout revokes the session
+00:01 +71 -1: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_gateway_test.dart: bad credentials do not create a session
+00:01 +72 -1: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_gateway_test.dart: tickets are one-use and bound to the signed-in device and purpose
+00:01 +73 -1: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_gateway_test.dart: normal gateway has no remote transform adapter or media uplink
+00:01 +74 -1: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_gateway_test.dart: authenticated event WebSocket sends actual state and closes on revocation
+00:02 +75 -1: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_gateway_test.dart: unknown media IDs and raw filesystem input never open a file
+00:02 +76 -1: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_gateway_test.dart: owner config rejects weak hashes and unsupported role
+00:02 +77 -1: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_gateway_test.dart: real-cost owner provisioning persists only a valid salted hash
+00:07 +78 -1: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_gateway_test.dart: audio subscription mirrors PCM and closing leaves laptop playing
+00:07 +79 -1: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_gateway_test.dart: the app chooses Opus or lossless; browsers keep plain PCM
+00:07 +80 -1: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_gateway_test.dart: stalled audio subscriber loses bounded credit without pausing laptop
+00:13 +81 -1: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_gateway_test.dart: signout revokes an active audio stream without pausing laptop
+00:13 +82 -1: C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/remote_gateway_test.dart: disabled owner invalidates previously authenticated sessions
+00:13 +83 -1: Some tests failed.
+
+Failing tests:
+  C:/Users/Tim-King.Kings-laptop/Documents/yinwei-repo/yinwei/apps/yinwei_player/test/remote/array_speaker_commands_test.dart: every speaker command requires revision; count and L/R bounds enforced

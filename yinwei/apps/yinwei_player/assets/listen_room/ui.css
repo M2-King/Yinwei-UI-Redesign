@@ -348,3 +348,16 @@ input[type="range"]:disabled { opacity: 0.4; }
   .toast { position: fixed; bottom: calc(24px + env(safe-area-inset-bottom, 0px)); }
 }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+
+/* Speaker placement extends the existing glass popover. */
+.speaker-count { float: right; font-size: 12px; font-weight: 400; color: var(--text-3); }
+.speaker-list { display: grid; gap: 5px; max-height: 170px; overflow-y: auto; overscroll-behavior: contain; }
+.speaker-row { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; padding: 8px 10px; border: 1px solid transparent; border-radius: 12px; color: var(--text-2); background: rgba(255,255,255,0.025); }
+.speaker-row[aria-pressed="true"] { border-color: rgba(220,231,245,0.23); background: rgba(224,234,248,0.09); color: var(--text); }
+.speaker-badge { display: grid; place-items: center; width: 26px; height: 26px; border-radius: 8px; background: rgba(255,255,255,0.06); font-size: 12px; }
+.speaker-detail { font-size: 12px; font-variant-numeric: tabular-nums; }
+.speaker-add { display: flex; justify-content: center; align-items: center; gap: 6px; width: 100%; padding: 9px; margin: 10px 0; border: 1px solid var(--rim); border-radius: 12px; background: rgba(255,255,255,0.04); color: var(--text); font-size: 13px; }
+.speaker-foot { margin-top: 12px; font-size: 11px; }
+#speaker-editor .readout { font-size: 12px; margin-bottom: 8px; }
+#speaker-editor .slider { margin-top: 10px; }
+.speaker-row:disabled, .speaker-add:disabled { opacity: 0.45; }

@@ -1,0 +1,37 @@
+✔ applies a state message and reports what changed (3.2989ms)
+✔ accepts the JSON text form too (0.3596ms)
+✔ ignores messages of another version, bad JSON and unknown fields (0.3037ms)
+✔ rejects values the page cannot draw and clamps numbers (0.237ms)
+✔ a value you just set is kept until the app confirms it (0.4547ms)
+✔ a hold ends on its own if the laptop never confirms (0.2089ms)
+✔ positions are compared with a tolerance, and kept while you drag the sound (0.3164ms)
+✔ listening shows "connecting" until the app reports connecting or on (0.3063ms)
+✔ orbit: small differences are eased in, big jumps are taken (1.4021ms)
+✔ track text is cut to a safe length and the cover tint is stable (0.5439ms)
+✔ opens: the music app the laptop opens on Start, or null (0.2776ms)
+✔ progress and pending: known steps only, booleans only (0.1988ms)
+✔ song progress: seconds clamped, a jump held until the laptop agrees (0.6097ms)
+✔ sound quality: known choices only; stream null until audio; opus a boolean (0.2255ms)
+✔ no http(s) URL anywhere in the shipped page (38.3133ms)
+✔ every script, stylesheet and font the page uses is in the folder (12.97ms)
+✔ vendor/ files match the SHA-256 pinned in vendor/README.md (12.2382ms)
+✔ fonts/ files match the SHA-256 pinned in fonts/README.md (2.6022ms)
+✔ the page loads the review stand-in only on request (2.0206ms)
+✔ axes and orientation match the engine frame (1.4187ms)
+✔ the drag inverse is an exact round trip on the level plane (14.3359ms)
+✔ the distance slider covers 0.5–10 m and round-trips (0.6987ms)
+✔ direction snaps onto 0°, ±30°, ±90° and 180° within 4° (0.3349ms)
+✔ on-screen and spoken text (0.5175ms)
+✔ 2.0 speakers sit at ±30°, 1.8 m (ArrayLayout.stereo2Speakers) (1.1225ms)
+✔ speaker records are bounded, finite, indexed and copied from app state (1.9897ms)
+✔ array state and revisions follow the laptop even while Point pose is held (0.5771ms)
+✔ speaker preview keeps its starting revision and linked cluster spherical deltas (6.6459ms)
+✔ release after laptop takeover or pointer cancellation discards the speaker gesture (6.2058ms)
+ℹ tests 29
+ℹ suites 0
+ℹ pass 29
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 252.3182

@@ -68,7 +68,9 @@ def main(out):
     body = page[page.index("<style>"):page.index("</head>")] + page[page.index("<body>") + 6:page.index("</body>")]
     links = head
     with open(out, "w", encoding="utf-8", newline="\n") as f:
-        f.write(title + "\n" + links + body)
+        # Standalone browsers may default to a legacy system encoding. UTF-8
+        # must be declared before Chinese labels and Unicode JS expressions.
+        f.write('<meta charset="utf-8">\n' + title + "\n" + links + body)
     print(f"wrote {out} ({os.path.getsize(out)} bytes)")
     for n in notes:
         print("  note:", n)

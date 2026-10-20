@@ -131,7 +131,8 @@ class NativeEngine implements EngineApi {
   }
 
   @override
-  Future<void> rebuildPreview({void Function(double progress)? onProgress}) async {
+  Future<void> rebuildPreview(
+      {void Function(double progress)? onProgress}) async {
     onProgress?.call(0.05);
     final libPath = _libPath;
     final code = await Isolate.run(() {
@@ -280,7 +281,34 @@ class NativeEngine implements EngineApi {
     ref.orbitHz = p.orbitHz;
     ref.envelopment = p.envelopment;
     ref.reverbMix = p.reverbMix;
-    ref.preset = p.selectedPreset == null ? -1 : _presetIndex(p.selectedPreset!);
+    ref.preset =
+        p.selectedPreset == null ? -1 : _presetIndex(p.selectedPreset!);
+  }
+
+  /// The remote must never report native_applied for a missing/failed symbol.
+  /// These are the same existing ABI calls; local compatibility setters above
+  /// remain unchanged.
+  @override
+  Future<void> setArrayAcknowledged(ArrayLayout layout) async {
+    void checked(int code) {
+      if (code == -1) throw StateError('Array speaker ABI unavailable');
+      _check(code);
+    }
+
+    checked(_b.setArray(layout.nativeMode));
+    if (!layout.enabled) return;
+    checked(_b.setSpeakerCount(layout.speakers.length));
+    for (var i = 0; i < layout.speakers.length; i++) {
+      final s = layout.speakers[i];
+      checked(_b.setSpeaker(
+          index: i,
+          azimuthDeg: s.azimuthDeg,
+          elevationDeg: s.elevationDeg,
+          distanceM: s.distanceM,
+          gainDb: s.gainDb,
+          mute: s.mute,
+          feed: s.nativeFeed));
+    }
   }
 
   SpatialParams _readParams(YinweiParamsC ref) {

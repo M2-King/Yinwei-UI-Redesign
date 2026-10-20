@@ -5,6 +5,7 @@ import 'dart:typed_data';
 import 'package:cryptography/cryptography.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:yinwei_player/bridge/mock_engine.dart';
+import 'package:yinwei_player/models/spatial_params.dart';
 import 'package:yinwei_player/remote/remote_auth.dart';
 import 'package:yinwei_player/remote/remote_gateway.dart';
 import 'package:yinwei_player/remote/listen_stream_source.dart';
@@ -59,6 +60,7 @@ void main() {
         auth: auth,
         audioTap: audioTap,
         liveAudioTap: liveTap,
+        allowArrayFileAudio: false,
         createOpusEncoder: _FakeOpus.new,
         coordinator: AppSessionCoordinator(
             controller: controller,
@@ -144,6 +146,64 @@ void main() {
     expect((jsonDecode(events.current as String) as Map)['type'], 'audioReady');
     return (socket: socket, events: events);
   }
+
+  test('array file audio stays blocked by default; existing stream closes',
+      () async {
+    await signin();
+    final stream = await subscribeAudio();
+    await controller.applyArrayMode(ArrayMode.stereo2);
+    while (
+        await stream.events.moveNext().timeout(const Duration(seconds: 3))) {}
+    expect(stream.socket.closeReason, 'audio_source_changed');
+    expect(
+        (await request('/remote/api/ws-ticket',
+                body: {'purpose': 'audio'}, csrfToken: csrf))
+            .status,
+        400);
+    liveActive = true;
+    final live = await subscribeAudio();
+    expect(liveTap.enabled, true);
+    await live.events.cancel();
+    await live.socket.close();
+  });
+
+  test(
+      'explicit file-array opt-in streams file tap but still gates Live readiness',
+      () async {
+    await gateway.close();
+    auth = RemoteAuth(auth.account);
+    audioTap = FakeOutputSource();
+    liveTap = FakeOutputSource();
+    gateway = RemoteGateway(
+        auth: auth,
+        audioTap: audioTap,
+        liveAudioTap: liveTap,
+        allowArrayFileAudio: true,
+        coordinator: AppSessionCoordinator(
+            controller: controller,
+            spatial: SpatialRuntimeAdapter()..bootstrap(controller.params),
+            nativeBackend: true,
+            liveRunning: () => liveActive,
+            liveAudioReady: () => liveReady),
+        loadAsset: (_) async => Uint8List.fromList(
+            utf8.encode('<meta content="LOGIN_CSRF_TOKEN">')));
+    await gateway.start();
+    await signin();
+    await controller.applyArrayMode(ArrayMode.stereo2);
+    final stream = await subscribeAudio();
+    expect(audioTap.enabled, true);
+    expect(liveTap.enabled, false);
+    await stream.events.cancel();
+    await stream.socket.close();
+    await Future<void>.delayed(const Duration(milliseconds: 30));
+    liveActive = true;
+    liveReady = false;
+    expect(
+        (await request('/remote/api/ws-ticket',
+                body: {'purpose': 'audio'}, csrfToken: csrf))
+            .status,
+        400);
+  });
 
   test(
       'live listener streams without an imported file and file commands stay blocked',
@@ -560,8 +620,8 @@ void main() {
     Future<ByteData> next() async {
       expect(
           await events.moveNext().timeout(const Duration(seconds: 3)), isTrue);
-      final p = ByteData.sublistView(
-          Uint8List.fromList(events.current as List<int>));
+      final p =
+          ByteData.sublistView(Uint8List.fromList(events.current as List<int>));
       socket.add(jsonEncode({'ack': p.getUint64(16, Endian.little)}));
       return p;
     }

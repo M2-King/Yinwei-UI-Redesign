@@ -30,7 +30,37 @@ const S = {
   quality: "high", stream: null, opus: false, // sound quality chosen / sent now / Opus possible
   canClose: true, updates: false, // the room as the whole app: no way back; updates checked here
   screen: "room", view: "3d", panel: null,
+  speakers: [], selectedSpeakerIndex: 0, arrayRevision: 0, maxSpeakers: 8, speakerControl: false, matrixLinked: false,
 };
+// A gesture preview, never a second authoritative array. Every commit retains
+// the revision at gesture start, even if a laptop edit arrives in the meantime.
+let speakerDraft = null;
+const activeSpeaker = () => speakerDraft || S.speakers[S.selectedSpeakerIndex];
+const canEditSpeakers = () => S.mode === "stereo2" && S.speakerControl && !S.pending && !lost() && S.control === "mine";
+function beginSpeaker(index) {
+  const s = S.speakers[index];
+  if (!s || !canEditSpeakers()) return false;
+  speakerDraft = { ...s, arrayRevision: S.arrayRevision };
+  return true;
+}
+function speakerIntent(t, extra = {}) {
+  send({ t, arrayRevision: S.arrayRevision, ...extra });
+}
+function commitSpeaker() {
+  if (!speakerDraft) return;
+  speakerDraft.committed = performance.now();
+  const { index, az, el, dist, arrayRevision } = speakerDraft;
+  send({ t: "speakerPlace", index, az, el, dist, arrayRevision });
+}
+function speakerPose(index) {
+  const s = S.speakers[index];
+  if (!speakerDraft || !s) return s;
+  if (index === speakerDraft.index) return speakerDraft;
+  if (!S.matrixLinked) return s;
+  const base = S.speakers[speakerDraft.index];
+  return { ...s, az: wrap(s.az + wrap(speakerDraft.az - base.az)),
+    el: clamp(s.el + speakerDraft.el - base.el, -90, 90), dist: speakerDraft.dist };
+}
 const held = {}; // values you just set, kept until the app confirms them
 const setLocal = (fields, ok) => { const now = performance.now(); for (const k in fields) { S[k] = fields[k]; ListenBridge.hold(held, k, fields[k], now, ok && ok[k]); } };
 
@@ -44,6 +74,7 @@ function send(intent) {
 function apply(next) {
   if (typeof next === "string") { try { next = JSON.parse(next); } catch (e) { return; } }
   const now = performance.now(), heldBefore = Object.keys(held).join();
+  const wasPending = S.pending;
   // What you tapped stays while its command is on its way to the laptop (a
   // Start or a cold music app can take many seconds); once answered, the
   // laptop has HOLD_MS to show it, as before.
@@ -54,6 +85,9 @@ function apply(next) {
     placing: typeof dragging !== "undefined" && dragging === "source",
     orbiting: S.mode === "point" && S.motion === "orbit",
   });
+  if (speakerDraft && (S.mode !== "stereo2" || S.control !== "mine" ||
+      (speakerDraft.committed && (S.arrayRevision !== speakerDraft.arrayRevision ||
+        (wasPending && !S.pending) || now - speakerDraft.committed > ListenBridge.HOLD_MS)))) speakerDraft = null;
   if (changed.includes("pos")) posAt = now; // the song clock restarts from each report
   if (changed.length || Object.keys(held).join() !== heldBefore) render();
 }
@@ -257,12 +291,12 @@ function renderPop() {
   // Rebuilt only when what the panel shows changes; live values (orbit speed,
   // position) are updated in place so a slider is never replaced mid-drag.
   const sig = S.panel === "layout" ? [S.panel, S.mode] : S.panel === "motion" ? [S.panel, S.mode, S.motion]
-    : S.panel === "place" ? [S.panel, S.mode, S.motion] : [S.panel, S.laptop, S.source, S.live, isLost];
+    : S.panel === "place" ? [S.panel, S.mode, S.motion, S.speakers.length, S.speakerControl] : [S.panel, S.laptop, S.source, S.live, isLost];
   once("pop", sig, () => {
     if (S.panel === "layout") {
       pop.innerHTML = `<h3>Layout</h3>
         <button class="choice" id="c-point" type="button" aria-pressed="${!stereo}">${ms("radar")}<span><b>Point</b><small>One sound you place anywhere around you</small></span></button>
-        <button class="choice" id="c-stereo" type="button" aria-pressed="${stereo}">${ms("speaker")}<span><b>2.0 speakers</b><small>Left and right at ±30°, 1.8 m in front</small></span></button>`;
+        <button class="choice" id="c-stereo" type="button" aria-pressed="${stereo}">${ms("speaker")}<span><b>2.0 speakers</b><small>Your left, right and added speakers</small></span></button>`;
       $("c-point").onclick = () => { act("Layout Point"); setLocal({ mode: "point" }); send({ t: "layout", mode: "point" }); render(); };
       $("c-stereo").onclick = () => { act("Layout 2.0"); setLocal({ mode: "stereo2", motion: "fixed" }); send({ t: "layout", mode: "stereo2" }); render(); };
     } else if (S.panel === "motion") {
@@ -280,7 +314,28 @@ function renderPop() {
       }
     } else if (S.panel === "place") {
       if (stereo) {
-        pop.innerHTML = `<h3>Place</h3><div class="pop-foot" style="font-size:14px">In 2.0 the two speakers sit at ±30°, 1.8 m in front of you. Switch Layout to Point to place the sound yourself.</div>`;
+        pop.innerHTML = `<h3>Place <span class="speaker-count">${S.speakers.length} / ${S.maxSpeakers}</span></h3>
+          <div class="speaker-list" role="group" aria-label="Speakers">${S.speakers.map(s => `<button class="speaker-row" data-speaker="${s.index}" type="button" aria-pressed="false"><span class="speaker-badge">${esc(s.label)}</span><span class="speaker-detail"></span></button>`).join("")}</div>
+          <button class="speaker-add" id="speaker-add" type="button">${ms("add")} Add speaker</button>
+          <div id="speaker-editor"><div class="readout" id="speaker-read"></div>
+          <div class="slider"><div class="slider-head"><span>Direction</span><output id="speaker-az-value"></output></div><input id="speaker-az" type="range" min="-180" max="180" step="1" aria-label="Speaker direction"></div>
+          <div class="slider"><div class="slider-head"><span>Height</span><output id="speaker-el-value"></output></div><input id="speaker-el" type="range" min="-90" max="90" step="1" aria-label="Speaker height"></div>
+          <div class="slider"><div class="slider-head"><span>Distance</span><output id="speaker-dist-value"></output></div><input id="speaker-dist" type="range" min="0" max="1000" step="1" aria-label="Speaker distance"></div></div>
+          <div class="pop-foot speaker-foot"><span id="speaker-hint"></span><button class="link" id="speaker-remove" type="button">Remove</button></div>`;
+        pop.querySelectorAll("[data-speaker]").forEach(b => { b.onclick = () => {
+          speakerDraft = null; speakerIntent("speakerSelect", { index: Number(b.dataset.speaker) });
+        }; });
+        $("speaker-add").onclick = () => speakerIntent("speakerAdd");
+        $("speaker-remove").onclick = () => speakerIntent("speakerRemove", { index: S.selectedSpeakerIndex });
+        for (const k of ["az", "el", "dist"]) {
+          const slider = $(`speaker-${k}`);
+          slider.oninput = () => {
+            if (!speakerDraft && !beginSpeaker(S.selectedSpeakerIndex)) return;
+            speakerDraft[k] = k === "dist" ? sliderToDist(Number(slider.value)) : Number(slider.value);
+            renderSpeakerPlace();
+          };
+          slider.onchange = commitSpeaker;
+        }
       } else {
         pop.innerHTML = `<h3>Place the sound</h3>
           <div class="readout" id="p-read"></div>
@@ -314,6 +369,7 @@ function renderPop() {
   if (S.panel === "place") renderPlace();
 }
 function renderPlace() {
+  if (S.panel === "place" && S.mode === "stereo2") { renderSpeakerPlace(); return; }
   if (S.panel !== "place" || !$("p-read")) { const v = $("sv-place"); if (v) setText(v, S.mode === "point" ? fmtDist(S.dist) : "Speakers"); return; }
   setText($("p-read"), `${fmtAz(S.az)} · ${fmtEl(S.el)} · ${fmtDist(S.dist)}`);
   setText($("p-az"), fmtAz(S.az)); setText($("p-el"), fmtEl(S.el)); setText($("p-dist"), fmtDist(S.dist));
@@ -325,6 +381,30 @@ function renderPlace() {
   sAz.setAttribute("aria-valuetext", RoomMath.sayAz(S.az)); sEl.setAttribute("aria-valuetext", RoomMath.sayEl(S.el));
   sDist.setAttribute("aria-valuetext", RoomMath.sayDist(S.dist));
   setText($("sv-place"), fmtDist(S.dist));
+}
+function renderSpeakerPlace() {
+  if (!$("speaker-add")) return;
+  const s = activeSpeaker(), editable = canEditSpeakers();
+  $("speaker-add").disabled = !editable || S.speakers.length >= S.maxSpeakers;
+  $("speaker-editor").hidden = !s;
+  $("speaker-remove").hidden = !s || s.index < 2;
+  $("speaker-remove").disabled = !editable;
+  setText($("speaker-hint"), !S.speakerControl ? "Speaker editing is unavailable on this laptop." : S.matrixLinked ? "Linked · moving the whole array" : "Drag a speaker, or use the controls.");
+  document.querySelectorAll("[data-speaker]").forEach(b => {
+    const i = Number(b.dataset.speaker), pose = speakerPose(i);
+    b.disabled = !editable;
+    b.setAttribute("aria-pressed", String(s && i === s.index));
+    setText(b.querySelector(".speaker-detail"), pose ? `${fmtAz(pose.az)} · ${fmtDist(pose.dist)}${pose.mute ? " · Muted" : ""}` : "");
+  });
+  if (!s) return;
+  setText($("speaker-read"), `Speaker ${s.label} · ${fmtAz(s.az)} · ${fmtEl(s.el)} · ${fmtDist(s.dist)}`);
+  for (const k of ["az", "el", "dist"]) {
+    const slider = $(`speaker-${k}`), fmt = k === "az" ? fmtAz : k === "el" ? fmtEl : fmtDist;
+    slider.disabled = !editable;
+    if (document.activeElement !== slider) slider.value = k === "dist" ? distToSlider(s.dist) : Math.round(s[k]);
+    sliderPct(slider); setText($(`speaker-${k}-value`), fmt(s[k]));
+    slider.setAttribute("aria-valuetext", fmt(s[k]));
+  }
 }
 // Placing is sent once, on release (as the app does today): the snapped direction if it snapped.
 function commitPlace() {

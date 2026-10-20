@@ -1,0 +1,5 @@
+Flutter assets will be downloaded from https://storage.flutter-io.cn. Make sure you trust this source!
+Building Windows application...                                 
+Nuget is not installed.
+Building Windows application...                                    36.2s
+√ Built build\windows\x64\runner\Debug\yinwei_player.exe

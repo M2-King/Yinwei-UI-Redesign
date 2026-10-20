@@ -127,6 +127,45 @@ void main() {
   late ListenRoomBridge bridge;
   late List<String> scripts;
 
+  test('speaker state and intents keep the page revision through commands',
+      () async {
+    final s = FakeSession()..control = true;
+    final b = ListenRoomBridge(session: s, run: (_) async {});
+    s.snapshot = snapshot()..['capabilities']['remoteSpeakers'] = true;
+    s.snapshot!['arrayState'] = {
+      'revision': 12,
+      'selectedIndex': 2,
+      'maxSpeakers': 8,
+      'matrixLinked': true,
+      'speakers': [
+        {
+          'index': 2,
+          'label': '3',
+          'az': 40,
+          'el': 0,
+          'dist': 2,
+          'gainDb': 0,
+          'mute': false,
+          'feed': 'mid'
+        }
+      ]
+    };
+    expect(b.state()['arrayRevision'], 12);
+    expect(b.state()['selectedSpeakerIndex'], 2);
+    expect(b.state()['matrixLinked'], true);
+    // A newer snapshot must not replace the old gesture's revision.
+    await b.handle(
+        '{"t":"speakerPlace","arrayRevision":11,"index":2,"az":50,"el":10,"dist":3}');
+    expect(s.calls.single, startsWith('array.speaker.set '));
+    expect(s.calls.single, contains('"arrayRevision":11'));
+    s.calls.clear();
+    await b.handle('{"t":"speakerAdd"}');
+    await b.handle('{"t":"speakerRemove","arrayRevision":12,"index":8}');
+    expect(s.calls, isEmpty);
+    b.dispose();
+    s.dispose();
+  });
+
   ListenRoomBridge make({bool playerPlaying = false, Duration? interval}) {
     final b = ListenRoomBridge(
       session: session,

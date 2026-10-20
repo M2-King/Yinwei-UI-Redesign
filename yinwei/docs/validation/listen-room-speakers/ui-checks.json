@@ -1,0 +1,12 @@
+{
+  "maxEightDisablesAdd": true,
+  "leftCannotRemove": true,
+  "removeWorked": true,
+  "addWorked": true,
+  "takeoverLocksSpeakers": true,
+  "takeControlRestoresEditing": true,
+  "dragReadout": "Speaker 3 · 99° L · Ear level · 1.0 m",
+  "consoleErrors": 0,
+  "pointReadout": "35° R · +20° · 3.2 m",
+  "arrayPoseSurvivesPointRoundTrip": true
+}

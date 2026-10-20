@@ -27,6 +27,8 @@ class AppSessionCoordinator {
     this.startLive,
     this.stopLive,
     this.applyArrayMode,
+    this.applyArrayLayout,
+    this.liveArraySpeakersAvailable,
     DateTime Function()? now,
   }) : _now = now ?? DateTime.now;
 
@@ -53,6 +55,10 @@ class AppSessionCoordinator {
     'live.start',
     'live.stop',
     'array.mode',
+    'array.speaker.add',
+    'array.speaker.remove',
+    'array.speaker.select',
+    'array.speaker.set',
     'motion.set',
     'media.seek',
   };
@@ -67,6 +73,33 @@ class AppSessionCoordinator {
   /// Point / Stereo 2.0, through the same steps as the laptop's mode
   /// switch (file engine, plus Live Transfer while it runs).
   final Future<void> Function(ArrayMode mode)? applyArrayMode;
+  final Future<void> Function(ArrayLayout layout)? applyArrayLayout;
+  final bool Function()? liveArraySpeakersAvailable;
+  int _arrayRevision = 0;
+  String? _lastArrayFingerprint;
+
+  Map<String, dynamic> _arrayState() {
+    final a = controller.array;
+    return {
+      'mode': a.mode.name,
+      'selectedIndex': a.selectedIndex,
+      'matrixLinked': a.matrixLinked,
+      'matrixSpread': a.matrixSpread,
+      'speakers': [
+        for (var i = 0; i < a.speakers.length; i++)
+          {
+            'index': i,
+            'label': a.speakers[i].label,
+            'az': a.speakers[i].azimuthDeg,
+            'el': a.speakers[i].elevationDeg,
+            'dist': a.speakers[i].distanceM,
+            'gainDb': a.speakers[i].gainDb,
+            'mute': a.speakers[i].mute,
+            'feed': a.speakers[i].feed.name,
+          },
+      ],
+    };
+  }
 
   /// Play/pause/next/previous for the Live source app through Windows media
   /// controls. It drives the music app only; the audio engine is untouched.
@@ -161,6 +194,12 @@ class AppSessionCoordinator {
   }
 
   Map<String, dynamic> snapshot({String? device}) {
+    final arrayState = _arrayState();
+    final arrayFingerprint = jsonEncode(arrayState);
+    if (arrayFingerprint != _lastArrayFingerprint) {
+      _lastArrayFingerprint = arrayFingerprint;
+      ++_arrayRevision;
+    }
     final liveActive = liveRunning();
     final liveInfo = liveSnapshot?.call() ?? const <String, dynamic>{};
     // Settings a person changes. If one changes at the laptop (not by the
@@ -174,7 +213,7 @@ class AppSessionCoordinator {
         controller.params.motion.name,
         controller.params.orbitHz
       ],
-      'array': controller.runtimeAudioDiag()['speakers'],
+      'array': arrayState,
       'arrayMode': controller.array.mode.name,
       'path': controller.track.path,
       'mode': controller.mode.name,
@@ -216,6 +255,10 @@ class AppSessionCoordinator {
         'liveMedia': liveMedia != null,
         'remoteLive': remoteLive,
         'remoteArray': applyArrayMode != null,
+        'remoteSpeakers': applyArrayLayout != null &&
+            controller.arraySupported &&
+            controller.extraSpeakersSupported &&
+            (!liveActive || liveArraySpeakersAvailable?.call() == true),
         'liveSeek': liveSeek != null
       },
       'track': {
@@ -238,6 +281,11 @@ class AppSessionCoordinator {
         'orbitHz': controller.params.orbitHz,
       },
       'presentation': _presentation(),
+      'arrayState': {
+        ...arrayState,
+        'revision': _arrayRevision,
+        'maxSpeakers': ArrayLayout.maxSpeakers
+      },
       'pose': {
         'azimuthDeg': controller.params.azimuthDeg,
         'elevationDeg': controller.params.elevationDeg,
@@ -302,6 +350,18 @@ class AppSessionCoordinator {
     if (_results.containsKey(key)) {
       if (_fingerprints[key] != encoded) {
         throw const RemoteFailure('command_id_reused');
+      }
+      if ((input['type'] as String?)?.startsWith('array.speaker.') == true) {
+        return _results[key]!.then((result) {
+          snapshot();
+          final applied = (result['snapshot'] as Map)['arrayState'] as Map;
+          // An identical retry is idempotent only while its resulting array
+          // is still current. Never return an obsolete shifted-index snapshot.
+          if (applied['revision'] != _arrayRevision) {
+            throw const RemoteFailure('stale_array');
+          }
+          return result;
+        });
       }
       return _results[key]!;
     }
@@ -435,6 +495,62 @@ class AppSessionCoordinator {
               throw const RemoteFailure('unsupported_command', httpStatus: 400);
             }
             await applyArrayMode!(arrayMode);
+          case 'array.speaker.add':
+          case 'array.speaker.remove':
+          case 'array.speaker.select':
+          case 'array.speaker.set':
+            if (applyArrayLayout == null ||
+                !controller.arraySupported ||
+                !controller.extraSpeakersSupported ||
+                (live && liveArraySpeakersAvailable?.call() != true)) {
+              throw const RemoteFailure('unsupported_command', httpStatus: 400);
+            }
+            if (!controller.array.enabled) {
+              throw const RemoteFailure('array_inactive');
+            }
+            // Required even when the general state version was refreshed by a
+            // retry. Index identities are valid only within this array revision.
+            if (payload['arrayRevision'] is! int ||
+                payload['arrayRevision'] != _arrayRevision) {
+              throw const RemoteFailure('stale_array');
+            }
+            final next = controller.array.copy();
+            final type = input['type'];
+            if (type == 'array.speaker.add') {
+              if (!next.canAddSpeaker) {
+                throw const RemoteFailure('speaker_limit');
+              }
+              next.addSpeaker();
+            } else {
+              final index = payload['index'];
+              if (index is! int || index < 0 || index >= next.speakers.length) {
+                throw const RemoteFailure('invalid_payload', httpStatus: 400);
+              }
+              next.selectedIndex = index;
+              if (type == 'array.speaker.remove') {
+                if (!next.canRemoveSelected) {
+                  throw const RemoteFailure('speaker_protected');
+                }
+                next.removeSelected();
+              } else if (type == 'array.speaker.set') {
+                final az = remoteNumber(payload, 'az', -180, 180).toDouble();
+                final el = remoteNumber(payload, 'el', -90, 90).toDouble();
+                final dist = remoteNumber(payload, 'dist', 0.5, 10).toDouble();
+                if (next.matrixLinked) {
+                  next.moveSelectedInGroup(azimuthDeg: az, elevationDeg: el);
+                  next.setAllDistance(dist);
+                } else {
+                  next.selected.azimuthDeg = az;
+                  next.selected.elevationDeg = el;
+                  next.selected.distanceM = dist;
+                }
+              }
+            }
+            if (type == 'array.speaker.select') {
+              await controller.selectArraySpeaker(next.selectedIndex);
+            } else {
+              await applyArrayLayout!(next);
+            }
           case 'motion.set':
             // Orbit moves the single Point source; the laptop disables it in
             // 2.0 too.
