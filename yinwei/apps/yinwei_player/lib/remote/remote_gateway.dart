@@ -5,6 +5,7 @@ import 'dart:math';
 import 'dart:typed_data';
 import 'package:yinwei_player/remote/remote_auth.dart';
 import 'package:yinwei_player/remote/remote_guest.dart';
+import 'package:yinwei_player/remote/listen_stream_source.dart';
 import 'package:yinwei_player/remote/native_output_tap.dart';
 import 'package:yinwei_player/remote/remote_protocol.dart';
 import 'package:yinwei_player/remote/remote_transform.dart';
@@ -26,7 +27,11 @@ class RemoteGateway {
       this.audioTap,
       this.liveAudioTap,
       this.transformAdapter,
+      this.createOpusEncoder,
       this.guests});
+
+  /// The Listen stream's Opus encoder; null keeps every stream uncompressed.
+  final ListenOpusEncoder? Function()? createOpusEncoder;
 
   /// Friend accounts (Option L). Null unless YINWEI_GUEST_ENABLED=1; then
   /// every `/remote/guest/*` request returns 404.
@@ -60,6 +65,8 @@ class RemoteGateway {
   WebSocket? _audioSocket;
   RemoteSession? _audioSession;
   RemoteOutputSource? _activeAudioTap;
+  // Set when the client chose a quality (the iPad app); browsers read the tap.
+  ListenStreamSource? _audioStream;
   bool _activeAudioIsLive = false;
   final _audioOutstanding = <int, DateTime>{};
   int _audioLastAck = 0;
@@ -743,6 +750,16 @@ class RemoteGateway {
         final data = jsonDecode(message);
         if (authorized) {
           if (purpose == 'audio') {
+            if (data is Map && data.containsKey('quality')) {
+              final quality = ListenQuality.parse(data['quality']);
+              final stream = _audioStream;
+              if (quality == null || stream == null) {
+                unawaited(socket.close(1008, 'invalid_audio_quality'));
+              } else {
+                stream.quality = quality;
+              }
+              return;
+            }
             final ack = data is Map ? data['ack'] : null;
             if (ack is int &&
                 ack > 0 &&
@@ -783,12 +800,24 @@ class RemoteGateway {
           _audioSession = session;
           _activeAudioTap = selectedTap;
           _activeAudioIsLive = liveSource;
+          final quality = ListenQuality.parse(data['quality']);
+          _audioStream?.close();
+          _audioStream = quality == null
+              ? null
+              // The encoder exists even for lossless, so the iPad can switch.
+              : ListenStreamSource(selectedTap,
+                  encoder: createOpusEncoder?.call(), quality: quality);
           selectedTap.setEnabled(true);
+          final stream = _audioStream;
           socket.add(jsonEncode({
             'type': 'audioReady',
             'format': 'YNW1',
             'channels': 2,
-            'source': liveSource ? 'live' : 'file'
+            'source': liveSource ? 'live' : 'file',
+            if (stream != null) ...{
+              'codecs': ['pcm', if (stream.opusAvailable) 'opus'],
+              'quality': stream.quality.name,
+            },
           }));
         } else {
           _sockets[socket] = session;
@@ -833,6 +862,8 @@ class RemoteGateway {
       _audioSocket = null;
       _audioSession = null;
       _activeAudioTap = null;
+      _audioStream?.close();
+      _audioStream = null;
       _audioOutstanding.clear();
       _audioLastAck = 0;
     }
@@ -922,7 +953,7 @@ class RemoteGateway {
       // a stall (Windows timers can fire every ~15.6 ms). Native production
       // never waits here.
       for (var i = 0; i < 4 && _audioOutstanding.length < audioCredit; ++i) {
-        final packet = _activeAudioTap!.read();
+        final packet = (_audioStream ?? _activeAudioTap!).read();
         if (packet == null) break;
         final sequence =
             ByteData.sublistView(packet).getUint64(16, Endian.little);

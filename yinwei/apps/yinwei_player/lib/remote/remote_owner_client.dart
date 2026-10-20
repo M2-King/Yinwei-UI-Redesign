@@ -165,7 +165,9 @@ class RemoteOwnerClient {
 
   /// Opens `/remote/ws/<purpose>` (`events` or `audio`) with a one-time
   /// ticket and sends it; the laptop answers with its first message.
-  Future<WebSocket> openSocket(String purpose) async {
+  /// [hello] adds fields to the first message (the audio socket's quality).
+  Future<WebSocket> openSocket(String purpose,
+      {Map<String, Object?>? hello}) async {
     final grant =
         await _request('/remote/api/ws-ticket', body: {'purpose': purpose});
     final ticket = grant['ticket'];
@@ -195,7 +197,7 @@ class RemoteOwnerClient {
       rethrow;
     }
     socket.pingInterval = const Duration(seconds: 10);
-    socket.add(jsonEncode({'ticket': ticket}));
+    socket.add(jsonEncode({...?hello, 'ticket': ticket}));
     return socket;
   }
 

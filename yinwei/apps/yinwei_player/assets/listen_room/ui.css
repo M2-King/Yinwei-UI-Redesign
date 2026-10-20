@@ -257,6 +257,13 @@ input[type="range"]:disabled { opacity: 0.4; }
 .menu hr { border: 0; height: 1px; background: var(--rim); margin: 6px 8px; }
 .menu .info-row { padding: var(--s-3) var(--s-3) var(--s-1); display: grid; grid-template-columns: 1fr auto; gap: 6px var(--s-4); font-size: var(--t-label); color: var(--text-2); }
 .menu .info-row b { color: var(--text); font-weight: 400; text-align: right; font-variant-numeric: tabular-nums; }
+/* Sound quality: how the laptop sends the audio (Opus or uncompressed). */
+.sound-q { display: grid; gap: var(--s-2); padding: var(--s-2) var(--s-3) var(--s-3); font-size: var(--t-label); color: var(--text-2); }
+.sound-q .seg { display: grid; grid-template-columns: repeat(3, 1fr); gap: 2px; padding: 2px; border-radius: 12px; background: rgba(255, 255, 255, 0.05); border: 1px solid var(--rim); }
+.sound-q .seg button { padding: 7px 0; border-radius: 10px; font-size: var(--t-label); color: var(--text-2); transition: background 0.2s, color 0.2s; }
+.sound-q .seg button[aria-pressed="true"] { background: rgba(111, 155, 255, 0.2); color: var(--text); box-shadow: inset 0 0 0 1px rgba(140, 175, 255, 0.45); }
+.sound-q .seg button:disabled { opacity: 0.35; }
+.sound-q small { font-size: var(--t-cap); color: var(--text-3); }
 .toast { position: absolute; z-index: 30; left: 50%; bottom: calc(var(--bar-h) + 40px + env(safe-area-inset-bottom, 0px)); transform: translate(-50%, 10px); opacity: 0; padding: var(--s-3) var(--s-4); border-radius: 999px; font-size: var(--t-label); transition: opacity 0.25s, transform 0.25s; pointer-events: none; }
 .toast.show { opacity: 1; transform: translate(-50%, 0); }
 

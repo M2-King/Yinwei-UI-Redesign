@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:yinwei_player/platform/ios_laptop_listen_output.dart';
 
 import 'laptop_listen_controller.dart';
+import 'listen_quality.dart';
 
 /// Connects the Listen Room page (`assets/listen_room/`) to the listening
 /// session (IMPLEMENTATION_IPAD_LISTEN_ROOM.md §4).
@@ -232,6 +233,9 @@ class ListenRoomBridge {
       'pending': s.pending,
       'canClose': canClose,
       'updates': onCheckUpdates != null,
+      'quality': s.soundQuality.name,
+      'stream': s.audioConnected ? s.streamQuality?.name : null,
+      'opus': s.opusAvailable,
       'progress': progress,
       'pos': dur > 0 ? pos.clamp(0.0, dur) : 0,
       'dur': dur > 0 ? dur : 0,
@@ -315,6 +319,9 @@ class ListenRoomBridge {
         onPageError?.call(_text(m['msg']));
       case 'close':
         if (canClose) onClose?.call();
+      case 'quality':
+        final quality = ListenQuality.parse(m['quality']);
+        if (quality != null) session.setSoundQuality(quality);
       case 'checkUpdates':
         onCheckUpdates?.call();
       case 'copyAudioDiagnostics':

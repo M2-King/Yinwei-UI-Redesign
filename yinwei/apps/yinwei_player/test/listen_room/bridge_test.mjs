@@ -140,3 +140,13 @@ test('song progress: seconds clamped, a jump held until the laptop agrees', () =
   B.merge(S, {v: 1, pos: 121.5}, held, 4);
   assert.equal(S.pos, 121.5, 'within 2.5 s of the jump: confirmed');
 });
+
+test('sound quality: known choices only; stream null until audio; opus a boolean', () => {
+  const S = {...base(), quality: 'high', stream: null, opus: false};
+  B.merge(S, {v: 1, quality: 'max', stream: 'max', opus: true}, {}, 0);
+  assert.deepEqual([S.quality, S.stream, S.opus], ['max', 'max', true]);
+  B.merge(S, {v: 1, quality: 'ultra', stream: 'flac', opus: 'yes'}, {}, 1);
+  assert.equal(S.quality, 'max', 'an unknown choice is ignored');
+  assert.equal(S.stream, null, 'an unknown stream shows as none');
+  assert.equal(S.opus, true, 'a non-boolean is ignored');
+});

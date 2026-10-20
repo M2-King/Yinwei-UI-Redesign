@@ -27,6 +27,7 @@ const S = {
   control: "mine", notice: "none", mode: "point", motion: "fixed", orbitHz: 0.4,
   az: 0, el: 0, dist: 2, track: null, volume: 1, level: 0, stats: { received: 0, bufferMs: 0, underruns: 0 }, opens: null,
   pending: false, progress: null, pos: 0, dur: 0, seekable: false,
+  quality: "high", stream: null, opus: false, // sound quality chosen / sent now / Opus possible
   canClose: true, updates: false, // the room as the whole app: no way back; updates checked here
   screen: "room", view: "3d", panel: null,
 };
@@ -187,6 +188,15 @@ function render() {
   $("m-stop-listen").disabled = !listening;
   $("m-close").hidden = !S.canClose;
   $("m-updates").hidden = !S.updates;
+  for (const q of ["high", "max", "lossless"]) {
+    const b = $(`q-${q}`);
+    b.setAttribute("aria-pressed", String(S.quality === q));
+    b.disabled = q !== "lossless" && !S.opus;
+  }
+  setText($("sq-note"), !S.opus ? "Uncompressed only on this connection"
+    : { high: "Opus 320 kbps · steadiest on Wi-Fi and hotspot", max: "Opus 510 kbps · the most detail Opus carries",
+      lossless: "Uncompressed · needs a strong network" }[S.quality]);
+  setText($("d-stream"), { high: "Opus 320 kbps", max: "Opus 510 kbps", lossless: "48 kHz · lossless" }[S.stream] || "–");
   setText($("d-recv"), Number(S.stats.received || 0).toLocaleString());
   setText($("d-buffer"), S.stats.bufferMs ? `${Math.round(S.stats.bufferMs)} ms` : "–");
   if (S.panel) renderPop();
@@ -436,6 +446,9 @@ $("m-stop-listen").onclick = () => { closeMenus(); setLocal({ listening: "off" }
 $("m-signout").onclick = () => { closeMenus(); send({ t: "signOut" }); };
 $("m-close").onclick = () => { closeMenus(); send({ t: "close" }); }; // the app closes the room; listening carries on
 $("m-updates").onclick = () => { closeMenus(); send({ t: "checkUpdates" }); }; // the app checks and shows the result
+for (const q of ["high", "max", "lossless"]) {
+  $(`q-${q}`).onclick = () => { if (S.quality !== q) { setLocal({ quality: q }); send({ t: "quality", quality: q }); render(); } }; // the menu stays open
+}
 $("m-audio-diagnostics").onclick = () => { closeMenus(); send({ t: "copyAudioDiagnostics" }); };
 document.addEventListener("gesturestart", (e) => e.preventDefault()); // iPad: a pinch never zooms the page (and never shifts the header)
 

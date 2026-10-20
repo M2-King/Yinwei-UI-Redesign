@@ -1,0 +1,22 @@
+[package]
+name = "yinwei_opus"
+version = "0.1.0"
+edition = "2021"
+publish = false
+description = "Opus encoder for the laptop's Listen stream (C ABI for Dart FFI). Not part of the audio engine."
+
+# Standalone on purpose: not a member of the engine workspace, so the engine's
+# builds, tests and lockfile never change because of it.
+[workspace]
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+audiopus_sys = { version = "0.2", features = ["static"] }
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+panic = "abort"

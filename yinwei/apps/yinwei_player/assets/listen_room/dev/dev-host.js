@@ -18,7 +18,7 @@
     listening: "on", control: "mine", notice: "none", mode: "point", motion: "fixed", orbitHz: 0.4,
     az: 35, el: 20, dist: 3.2, track: { ...tracks[0] }, volume: 0.72, level: 0,
     stats: { received: 18240, bufferMs: 160, underruns: 0 }, opens: null, pending: false, progress: null,
-    pos: 42, dur: 245, seekable: true,
+    pos: 42, dur: 245, seekable: true, quality: "high", stream: "high", opus: true,
   };
   const later = (ms, f) => setTimeout(f, ms);
   const say = (t) => YinweiListen.toast(t);
@@ -56,6 +56,7 @@
       case "signOut": say("The app goes back to its own sign-in screen"); break;
       case "airplay": say("In the app, iPadOS's AirPlay picker opens here"); break;
       case "close": say("In the app, the room closes and listening carries on"); break;
+      case "quality": later(250, () => { M.quality = M.stream = i.quality; say({ high: "Sound: Opus 320 kbps", max: "Sound: Opus 510 kbps", lossless: "Sound: uncompressed" }[i.quality]); }); break;
       default: break; // ready, error, rects
     }
   }

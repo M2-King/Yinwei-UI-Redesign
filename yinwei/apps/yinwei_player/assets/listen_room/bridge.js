@@ -15,12 +15,13 @@ const ListenBridge = (() => {
   const VERSION = 1, HOLD_MS = 2500;
   const FIELDS = ["laptop", "connection", "source", "live", "playing", "listening", "control", "notice",
     "mode", "motion", "orbitHz", "az", "el", "dist", "track", "volume", "level", "stats", "opens",
-    "pending", "progress", "pos", "dur", "seekable", "canClose", "updates"];
+    "pending", "progress", "pos", "dur", "seekable", "canClose", "updates", "quality", "stream", "opus"];
   const wrap = (a) => { a = ((a + 180) % 360 + 360) % 360 - 180; return a === -180 ? 180 : a; };
   // Values the app may send, so a bad message can't put the page in a state it can't draw.
   const ENUMS = {
     connection: ["connected", "reconnecting"], listening: ["off", "connecting", "on"], control: ["mine", "other"],
     notice: ["none", "busy", "interrupted", "lost", "taken", "noapp"], mode: ["point", "stereo2"], motion: ["fixed", "orbit"],
+    quality: ["high", "max", "lossless"],
   };
   const PROGRESS = ["asking", "opening", "pressing", "starting", "audio"];
   // Song progress, in seconds.
@@ -29,7 +30,9 @@ const ListenBridge = (() => {
   function clean(k, v) {
     if (ENUMS[k]) return ENUMS[k].includes(v) ? v : undefined;
     if (RANGES[k]) { const n = Number(v); return Number.isFinite(n) ? Math.min(RANGES[k][1], Math.max(RANGES[k][0], n)) : undefined; }
-    if (["live", "playing", "pending", "seekable", "canClose", "updates"].includes(k)) return typeof v === "boolean" ? v : undefined;
+    if (["live", "playing", "pending", "seekable", "canClose", "updates", "opus"].includes(k)) return typeof v === "boolean" ? v : undefined;
+    // What the laptop is sending now (Opus high / max, or lossless); null before its audio starts.
+    if (k === "stream") return ["high", "max", "lossless"].includes(v) ? v : null;
     // Start progress: asking (this iPad), opening / pressing / starting (the laptop), audio; null when idle.
     if (k === "progress") return PROGRESS.includes(v) ? v : null;
     if (k === "laptop" || k === "source") return typeof v === "string" ? v.slice(0, 80) : undefined;

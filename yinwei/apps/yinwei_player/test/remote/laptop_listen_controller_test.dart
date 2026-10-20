@@ -5,6 +5,7 @@ import 'package:cryptography/cryptography.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:yinwei_player/bridge/mock_engine.dart';
 import 'package:yinwei_player/remote/laptop_listen_controller.dart';
+import 'package:yinwei_player/remote/listen_stream_source.dart';
 import 'package:yinwei_player/remote/remote_auth.dart';
 import 'package:yinwei_player/remote/remote_gateway.dart';
 import 'package:yinwei_player/remote/remote_owner_client.dart';
@@ -16,8 +17,21 @@ import 'package:yinwei_player/state/engine_controller.dart';
 import 'fake_output_source.dart';
 
 /// Records what the iPad output would play and show.
+class _FakeOpus implements ListenOpusEncoder {
+  @override
+  bool setBitrate(int bitrate) => true;
+  @override
+  Uint8List? encode(Float32List pcm) => Uint8List.fromList([0xfc, 9, 9]);
+  @override
+  void reset() {}
+  @override
+  void close() {}
+}
+
 class FakeListenOutput implements LaptopListenOutput {
   int prepared = 0, stopped = 0, written = 0;
+  bool opus = false;
+  final magics = <int>[];
   final rates = <int>[];
   final nowPlaying = <String>[];
   bool hidden = false;
@@ -30,8 +44,12 @@ class FakeListenOutput implements LaptopListenOutput {
   @override
   Future<bool> write(Uint8List packet) async {
     ++written;
+    magics.add(ByteData.sublistView(packet).getUint32(0, Endian.little));
     return true;
   }
+
+  @override
+  Future<bool> supportsOpus() async => opus;
 
   @override
   Future<Map<String, dynamic>> status() async =>
@@ -70,12 +88,14 @@ void main() {
   late FakeListenOutput output;
   late LaptopListenController listen;
   late DateTime now;
+  var laptopOpus = false;
   var live = false, livePlaying = true, liveSource = 'Music';
   final media = <String>[];
   final liveCalls = <String>[];
   RemoteFailure? startFailure;
 
   setUp(() async {
+    laptopOpus = false;
     startFailure = null;
     live = false;
     livePlaying = true;
@@ -121,6 +141,7 @@ void main() {
       coordinator: coordinator,
       audioTap: FakeOutputSource(),
       liveAudioTap: FakeOutputSource(),
+      createOpusEncoder: () => laptopOpus ? _FakeOpus() : null,
       loadAsset: (_) async => Uint8List.fromList(utf8.encode('<html></html>')),
     );
     await gateway.start();
@@ -266,6 +287,55 @@ void main() {
     expect(await listen.command('media.next'), isTrue);
     expect(listen.hasControl, isTrue);
     expect(media, ['next']);
+  });
+
+  test('an Opus iPad gets High from the laptop and switches without reconnecting',
+      () async {
+    laptopOpus = true;
+    output.opus = true;
+    await signIn();
+    await listen.startListening();
+    await until(() => listen.audioConnected && output.written > 5);
+    expect(listen.opusAvailable, isTrue);
+    expect(listen.soundQuality, ListenQuality.high);
+    expect(listen.streamQuality, ListenQuality.high);
+    expect(output.magics.toSet(), {ynoMagic});
+    listen.setSoundQuality(ListenQuality.lossless);
+    expect(listen.streamQuality, ListenQuality.lossless);
+    await until(() => output.magics.last == ynwMagic);
+    listen.setSoundQuality(ListenQuality.max);
+    await until(() => output.magics.last == ynoMagic);
+    expect(output.rates, [48000]); // one stream throughout: no reconnect
+    expect(listen.audioDiagnostics()['streamQuality'], 'max');
+  });
+
+  test('without the laptop encoder the stream stays uncompressed', () async {
+    output.opus = true;
+    await signIn();
+    await listen.startListening();
+    await until(() => listen.audioConnected && output.written > 5);
+    expect(listen.opusAvailable, isFalse);
+    expect(listen.streamQuality, ListenQuality.lossless);
+    expect(output.magics.toSet(), {ynwMagic});
+    listen.setSoundQuality(ListenQuality.max); // remembered, not sent
+    expect(listen.streamQuality, ListenQuality.lossless);
+  });
+
+  test('Opus packet headers are checked too', () {
+    final packet = Uint8List(56 + 700);
+    final data = ByteData.sublistView(packet);
+    data.setUint32(0, ynoMagic, Endian.little);
+    data.setUint32(4, 1, Endian.little);
+    data.setUint64(16, 4, Endian.little);
+    data.setUint32(32, 48000, Endian.little);
+    data.setUint32(36, 960, Endian.little);
+    final header = YnwPacketHeader.parse(packet)!;
+    expect([header.opus, header.sequence, header.frames], [true, 4, 960]);
+    data.setUint32(32, 44100, Endian.little);
+    expect(YnwPacketHeader.parse(packet), isNull);
+    data.setUint32(32, 48000, Endian.little);
+    expect(YnwPacketHeader.parse(Uint8List(56 + 1501)..setRange(0, 56, packet)),
+        isNull);
   });
 
   test('packet headers are checked before playing', () {

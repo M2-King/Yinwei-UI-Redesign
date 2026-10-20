@@ -12,3 +12,7 @@ xcrun --sdk macosx swiftc -sdk "$(xcrun --sdk macosx --show-sdk-path)" \
   "$PLAYER/ios/Runner/YinweiListenBuffer.swift" \
   "$PLAYER/test/native_listen/main.swift" -o "$CAPTURE_TEST_DIR/listen-tests"
 "$CAPTURE_TEST_DIR/listen-tests"
+xcrun --sdk macosx swiftc -sdk "$(xcrun --sdk macosx --show-sdk-path)" \
+  "$PLAYER/ios/Runner/YinweiOpusDecoder.swift" \
+  "$PLAYER/test/native_listen_opus/main.swift" -o "$CAPTURE_TEST_DIR/listen-opus-tests"
+"$CAPTURE_TEST_DIR/listen-opus-tests" "$PLAYER/test/fixtures/listen_opus/signal_320k.bin"

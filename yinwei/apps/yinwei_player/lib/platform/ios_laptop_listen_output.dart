@@ -63,8 +63,16 @@ class IosLaptopListenOutput implements LaptopListenOutput {
     level.value = 0;
   }
 
+  void _showLevel(double peak) {
+    if (++_meterPackets % 2 != 0 || !peak.isFinite) return;
+    level.value = math.max(peak.clamp(0.0, 1.0), level.value * 0.8);
+    _levelDecay?.cancel();
+    _decayLevel();
+  }
+
   void _sampleLevel(Uint8List packet) {
-    if (++_meterPackets % 4 != 0 || YnwPacketHeader.parse(packet) == null) {
+    final header = YnwPacketHeader.parse(packet);
+    if (++_meterPackets % 4 != 0 || header == null || header.opus) {
       return;
     }
     // YNW1: 56-byte header, interleaved little-endian stereo Float32 PCM.
@@ -122,7 +130,13 @@ class IosLaptopListenOutput implements LaptopListenOutput {
           'writeRemoteReturn', packet);
       final accepted = result?['accepted'] == true;
       if (accepted && _prepared && generation == _meterGeneration) {
-        _sampleLevel(packet);
+        final peak = result?['peak'];
+        // Opus: the native decoder reports the peak of what it decoded.
+        if (peak is num) {
+          _showLevel(peak.toDouble());
+        } else {
+          _sampleLevel(packet);
+        }
       }
       return accepted;
     } on PlatformException {
@@ -130,6 +144,10 @@ class IosLaptopListenOutput implements LaptopListenOutput {
       return false;
     }
   }
+
+  @override
+  Future<bool> supportsOpus() async =>
+      await _player.invokeMethod<bool>('remoteReturnSupportsOpus') == true;
 
   @override
   Future<Map<String, dynamic>> status() async =>

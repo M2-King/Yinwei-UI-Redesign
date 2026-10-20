@@ -1,4 +1,7 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:yinwei_player/mobile/ios_listen_room_screen.dart';
 import 'package:yinwei_player/platform/ios_laptop_listen_output.dart';
 import 'package:yinwei_player/remote/laptop_listen_controller.dart';
@@ -10,7 +13,18 @@ LaptopListenController? _shared;
 /// One listening session for the app: it keeps playing when this screen is
 /// closed, Yinwei is in the background or the iPad is locked.
 LaptopListenController sharedLaptopListen() =>
-    _shared ??= LaptopListenController(output: IosLaptopListenOutput());
+    _shared ??= LaptopListenController(
+        output: IosLaptopListenOutput(),
+        loadSoundQuality: () async {
+          final file = await _soundQualityFile();
+          return await file.exists() ? (await file.readAsString()).trim() : null;
+        },
+        saveSoundQuality: (quality) async =>
+            (await _soundQualityFile()).writeAsString(quality, flush: true));
+
+/// The chosen sound quality (High, Max or Lossless), kept between launches.
+Future<File> _soundQualityFile() async => File(
+    '${(await getApplicationSupportDirectory()).path}${Platform.pathSeparator}listen_sound_quality');
 
 /// "Listen to laptop": the laptop plays the music with Live Transfer, this
 /// iPad plays the spatial result and controls the laptop (like the iPad web

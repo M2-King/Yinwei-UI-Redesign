@@ -84,7 +84,17 @@
   <div class="info-row">
     <span>Received</span><b id="d-recv">0</b>
     <span>Buffer</span><b id="d-buffer">–</b>
-    <span>Stream</span><b>48 kHz · stereo</b>
+    <span>Stream</span><b id="d-stream">–</b>
+  </div>
+  <hr>
+  <div class="sound-q" role="group" aria-labelledby="sq-label">
+    <span id="sq-label">Sound quality</span>
+    <div class="seg">
+      <button type="button" id="q-high" aria-pressed="true">High</button>
+      <button type="button" id="q-max" aria-pressed="false">Max</button>
+      <button type="button" id="q-lossless" aria-pressed="false">Lossless</button>
+    </div>
+    <small id="sq-note"></small>
   </div>
   <hr>
   <button role="menuitem" id="m-audio-diagnostics" type="button"><span class="ms" aria-hidden="true">info</span>Copy audio diagnostics</button>

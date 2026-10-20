@@ -18,6 +18,8 @@ class _SilentOutput implements LaptopListenOutput {
   @override
   Future<bool> write(Uint8List packet) async => true;
   @override
+  Future<bool> supportsOpus() async => false;
+  @override
   Future<Map<String, dynamic>> status() async => {'ready': true};
   @override
   Future<void> stop() async {}

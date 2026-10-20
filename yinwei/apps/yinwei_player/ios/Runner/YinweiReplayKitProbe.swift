@@ -93,6 +93,8 @@ final class YinweiReplayKitProbeController {
         message: "Could not open iPad audio output", details: nil)) }
     case "writeRemoteReturn":
       write(call: call, result: result)
+    case "remoteReturnSupportsOpus":
+      result(YinweiOpusDecoder() != nil)
     case "getRemoteReturnStatus":
       result(remoteReturn.status)
     case "setRemoteReturnVolume":
@@ -137,12 +139,15 @@ final class YinweiReplayKitProbeController {
     guard let typed = call.arguments as? FlutterStandardTypedData else {
       result(["accepted": false]); return
     }
-    guard let accepted = remoteReturn.write(typed.data) else {
+    guard let written = remoteReturn.write(typed.data) else {
       result(FlutterError(code: "return_output_interrupted",
         message: "iPad audio output interrupted. Start again explicitly.", details: nil))
       return
     }
-    result(["accepted": accepted])
+    // Opus packets carry no PCM the Dart side can meter: send the decoded peak.
+    var value: [String: Any] = ["accepted": written.accepted]
+    if let peak = written.peak { value["peak"] = Double(peak) }
+    result(value)
   }
 
   private func availability() -> [String: Any] {
@@ -312,6 +317,12 @@ private final class YinweiRemoteReturnPlayer {
   private var configurationChanges = 0
   private var lastRenderCheck: TimeInterval?
   private var maxRenderCheckGapMs = 0.0
+  // Opus ("High"/"Max" sound quality): decoded here, then played exactly
+  // like the uncompressed stream. Listen mode only.
+  private var opusDecoder: YinweiOpusDecoder?
+  private var opusPackets = 0
+  private var opusFailures = 0
+  private var opusPeak: Float?
   // Thread-safe entry points (callers are the main and audio channels).
   var isReady: Bool { audio.sync { ready } }
   var status: [String: Any] { audio.sync { currentStatus } }
@@ -320,8 +331,16 @@ private final class YinweiRemoteReturnPlayer {
   func newStream(sampleRate: Double) { audio.sync { _newStream(sampleRate: sampleRate) } }
   func reset() { audio.sync { _reset() } }
   func stop() { audio.sync { _stop() } }
-  /// A packet from the laptop: nil while the output isn't running.
-  func write(_ data: Data) -> Bool? { audio.sync { ready ? _accept(data) : nil } }
+  /// A packet from the laptop: nil while the output isn't running. `peak` is
+  /// set for a decoded Opus packet.
+  func write(_ data: Data) -> (accepted: Bool, peak: Float?)? {
+    audio.sync {
+      guard ready else { return nil }
+      opusPeak = nil
+      let accepted = _accept(data)
+      return (accepted, opusPeak)
+    }
+  }
 
   private var ready: Bool { prepared && engine.isRunning }
   private var currentStatus: [String: Any] {
@@ -343,6 +362,7 @@ private final class YinweiRemoteReturnPlayer {
         "capacityDrops": capacityDrops, "completionBacklogDrops": completionBacklogDrops,
         "configurationChanges": configurationChanges,
         "maxRenderCheckGapMs": maxRenderCheckGapMs,
+        "opusPackets": opusPackets, "opusFailures": opusFailures,
       ]) { _, new in new }
     }
     return value
@@ -359,6 +379,7 @@ private final class YinweiRemoteReturnPlayer {
     stableSince = Date()
     listenBuffer = YinweiListenBuffer()
     capacityDrops = 0; completionBacklogDrops = 0; configurationChanges = 0
+    opusPackets = 0; opusFailures = 0; opusDecoder = nil
     lastRenderCheck = nil; maxRenderCheckGapMs = 0
     let session = AVAudioSession.sharedInstance()
     // No .duckOthers: on device it did not stop the source app's original
@@ -453,6 +474,7 @@ private final class YinweiRemoteReturnPlayer {
           let next = AVAudioFormat(standardFormatWithSampleRate: sampleRate, channels: 2)
     else { return }
     format = next
+    opusDecoder = nil // made for the old format
     engine.disconnectNodeOutput(player)
     engine.connect(player, to: engine.mainMixerNode, format: next)
   }
@@ -483,7 +505,8 @@ private final class YinweiRemoteReturnPlayer {
 
   private func _accept(_ data: Data) -> Bool {
     counters.receive()
-    guard ready, data.count >= 64, data.count <= 4152,
+    // A quiet Opus packet can be a few bytes; PCM is checked exactly below.
+    guard ready, data.count > 56, data.count <= 4152,
           let format else { return false }
     func u32(_ offset: Int) -> UInt32 {
       data.withUnsafeBytes { $0.loadUnaligned(fromByteOffset: offset, as: UInt32.self).littleEndian }
@@ -491,9 +514,18 @@ private final class YinweiRemoteReturnPlayer {
     func u64(_ offset: Int) -> UInt64 {
       data.withUnsafeBytes { $0.loadUnaligned(fromByteOffset: offset, as: UInt64.self).littleEndian }
     }
-    let frames = Int(u32(36))
-    guard u32(0) == 0x31574e59, u32(4) == 1, Double(u32(32)) == format.sampleRate,
-          frames > 0, frames <= 512, data.count == 56 + frames * 8 else { return false }
+    var frames = Int(u32(36))
+    // YNW1: float PCM. YNO1: the same header, then one 20 ms Opus packet.
+    let opus = u32(0) == 0x314f4e59
+    guard u32(0) == 0x31574e59 || opus, u32(4) == 1, Double(u32(32)) == format.sampleRate
+    else { return false }
+    if opus {
+      guard listenMode, format.sampleRate == 48_000, frames == 960,
+            data.count > 56, data.count <= 56 + YinweiOpusDecoder.maxPacketBytes
+      else { return false }
+    } else {
+      guard frames > 0, frames <= 512, data.count == 56 + frames * 8 else { return false }
+    }
     if listenMode {
       updateListenClock()
       if listenBuffer.queuedFrames + Int64(frames) > listenBuffer.frames(milliseconds: YinweiListenBuffer.capacityMs) {
@@ -514,18 +546,33 @@ private final class YinweiRemoteReturnPlayer {
       targetFrames = max(Self.initialTargetFrames, targetFrames - Self.decayStepFrames)
       stableSince = Date()
     }
-    guard let buffer = AVAudioPCMBuffer(pcmFormat: format,
-      frameCapacity: AVAudioFrameCount(frames)), let pcm = buffer.floatChannelData
-    else { return false }
-    for frame in 0..<frames {
-      for channel in 0..<2 {
-        let bits = u32(56 + frame * 8 + channel * 4)
-        let sample = Float(bitPattern: bits)
-        guard sample.isFinite else { return false }
-        pcm[channel][frame] = sample
+    let buffer: AVAudioPCMBuffer
+    if opus {
+      if opusDecoder == nil { opusDecoder = YinweiOpusDecoder(output: format) }
+      guard let decoder = opusDecoder,
+            let decoded = data.withUnsafeBytes({
+              decoder.decode(UnsafeRawBufferPointer(rebasing: $0[56...]))
+            })
+      else { opusFailures += 1; return false }
+      opusPackets += 1
+      opusPeak = YinweiOpusDecoder.peak(decoded)
+      buffer = decoded
+      frames = Int(decoded.frameLength)
+    } else {
+      guard let pcmBuffer = AVAudioPCMBuffer(pcmFormat: format,
+        frameCapacity: AVAudioFrameCount(frames)), let pcm = pcmBuffer.floatChannelData
+      else { return false }
+      for frame in 0..<frames {
+        for channel in 0..<2 {
+          let bits = u32(56 + frame * 8 + channel * 4)
+          let sample = Float(bitPattern: bits)
+          guard sample.isFinite else { return false }
+          pcm[channel][frame] = sample
+        }
       }
+      pcmBuffer.frameLength = AVAudioFrameCount(frames)
+      buffer = pcmBuffer
     }
-    buffer.frameLength = AVAudioFrameCount(frames)
     var when: AVAudioTime?
     if listenMode {
       guard let start = listenBuffer.enqueue(frames: frames) else { return false }
@@ -565,6 +612,7 @@ private final class YinweiRemoteReturnPlayer {
     counters.invalidate()
     queued = 0; queuedFrames = 0
     listenBuffer.reset(sampleRate: format?.sampleRate ?? 48_000)
+    opusDecoder?.reset()
     lastRenderCheck = nil
     guard prepared else { return }
     player.stop(); player.reset()

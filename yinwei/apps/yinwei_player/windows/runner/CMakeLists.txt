@@ -48,3 +48,13 @@ if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/spatial_core.dll")
       "$<TARGET_FILE_DIR:${BINARY_NAME}>/spatial_core.dll"
     COMMENT "Copy spatial_core.dll next to yinwei_player.exe")
 endif()
+
+# The Listen stream's Opus encoder (crates/yinwei_opus). Optional: without it
+# the laptop keeps sending uncompressed audio.
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/yinwei_opus.dll")
+  add_custom_command(TARGET ${BINARY_NAME} POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+      "${CMAKE_CURRENT_SOURCE_DIR}/yinwei_opus.dll"
+      "$<TARGET_FILE_DIR:${BINARY_NAME}>/yinwei_opus.dll"
+    COMMENT "Copy yinwei_opus.dll next to yinwei_player.exe")
+endif()

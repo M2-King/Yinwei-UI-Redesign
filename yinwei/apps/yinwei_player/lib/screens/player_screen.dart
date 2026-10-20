@@ -31,6 +31,7 @@ import 'package:yinwei_player/runtime/workspace_presentation.dart';
 import 'package:yinwei_player/state/engine_controller.dart';
 import 'package:yinwei_player/state/app_session_coordinator.dart';
 import 'package:yinwei_player/remote/remote_gateway.dart';
+import 'package:yinwei_player/remote/listen_stream_source.dart';
 import 'package:yinwei_player/remote/remote_protocol.dart';
 import 'package:yinwei_player/remote/remote_guest.dart';
 import 'package:yinwei_player/mobile/ios_listen_room_screen.dart';
@@ -1781,6 +1782,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
             Platform.environment['YINWEI_REMOTE_ALLOW_ORIGIN_ROTATION'] == '1',
         audioTap: NativeOutputTap.tryCreate(),
         liveAudioTap: NativeOutputTap.tryCreate(live: true),
+        createOpusEncoder: NativeListenOpusEncoder.tryCreate,
         transformAdapter: NativeRemoteTransform.tryCreate(
           sourceAvailable: () =>
               !_ctrl.playing &&

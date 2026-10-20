@@ -7,10 +7,22 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:yinwei_player/bridge/mock_engine.dart';
 import 'package:yinwei_player/remote/remote_auth.dart';
 import 'package:yinwei_player/remote/remote_gateway.dart';
+import 'package:yinwei_player/remote/listen_stream_source.dart';
 import 'package:yinwei_player/runtime/spatial_runtime_adapter.dart';
 import 'package:yinwei_player/state/app_session_coordinator.dart';
 import 'package:yinwei_player/state/engine_controller.dart';
 import 'fake_output_source.dart';
+
+class _FakeOpus implements ListenOpusEncoder {
+  @override
+  bool setBitrate(int bitrate) => true;
+  @override
+  Uint8List? encode(Float32List pcm) => Uint8List.fromList([0xfc, 1, 2, 3]);
+  @override
+  void reset() {}
+  @override
+  void close() {}
+}
 
 void main() {
   late RemoteGateway gateway;
@@ -47,6 +59,7 @@ void main() {
         auth: auth,
         audioTap: audioTap,
         liveAudioTap: liveTap,
+        createOpusEncoder: _FakeOpus.new,
         coordinator: AppSessionCoordinator(
             controller: controller,
             spatial: spatial,
@@ -519,6 +532,56 @@ void main() {
     await closing;
     await events.cancel();
     expect(audioTap.enabled, isFalse);
+    expect(controller.playing, isTrue);
+  });
+
+  test('the app chooses Opus or lossless; browsers keep plain PCM', () async {
+    await controller.openPath('synthetic.wav');
+    await controller.play();
+    await signin();
+    final ticket = (jsonDecode((await request('/remote/api/ws-ticket',
+            body: {'purpose': 'audio'}, csrfToken: csrf))
+        .text) as Map)['ticket'];
+    final socket = await WebSocket.connect(
+        gateway.origin
+            .replace(scheme: 'ws', path: '/remote/ws/audio')
+            .toString(),
+        headers: {
+          'Origin': gateway.origin.toString(),
+          'Cookie': 'yinwei_local=${cookies['yinwei_local']}'
+        });
+    final events = StreamIterator<dynamic>(socket);
+    socket.add(jsonEncode({'ticket': ticket, 'quality': 'high'}));
+    expect(await events.moveNext().timeout(const Duration(seconds: 3)), isTrue);
+    final ready = jsonDecode(events.current as String) as Map;
+    expect(ready['type'], 'audioReady');
+    expect(ready['codecs'], ['pcm', 'opus']);
+    expect(ready['quality'], 'high');
+    Future<ByteData> next() async {
+      expect(
+          await events.moveNext().timeout(const Duration(seconds: 3)), isTrue);
+      final p = ByteData.sublistView(
+          Uint8List.fromList(events.current as List<int>));
+      socket.add(jsonEncode({'ack': p.getUint64(16, Endian.little)}));
+      return p;
+    }
+
+    final opus = await next();
+    expect(opus.getUint32(0, Endian.little), 0x314f4e59); // YNO1
+    expect(opus.getUint32(36, Endian.little), 960);
+    expect(opus.lengthInBytes, 60);
+    expect(opus.getUint64(16, Endian.little), 1);
+    socket.add(jsonEncode({'quality': 'lossless'}));
+    ByteData pcm;
+    do {
+      pcm = await next();
+    } while (pcm.getUint32(0, Endian.little) != 0x31574e59);
+    expect(pcm.getUint32(36, Endian.little), 512);
+    socket.add(jsonEncode({'quality': 'ultra'}));
+    while (await events.moveNext().timeout(const Duration(seconds: 3))) {}
+    expect(socket.closeCode, 1008);
+    expect(socket.closeReason, 'invalid_audio_quality');
+    await events.cancel();
     expect(controller.playing, isTrue);
   });
 

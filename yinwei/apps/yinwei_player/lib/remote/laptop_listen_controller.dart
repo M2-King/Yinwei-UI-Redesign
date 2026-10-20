@@ -5,6 +5,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 
+import 'listen_quality.dart';
 import 'remote_entry.dart';
 import 'remote_owner_client.dart';
 import 'listen_audio_diagnostics.dart';
@@ -21,8 +22,11 @@ abstract class LaptopListenOutput {
   /// audio and play [sampleRate] from now on.
   Future<void> newStream(int sampleRate);
 
-  /// Queues one YNW1 packet; false when it was dropped.
+  /// Queues one YNW1 (PCM) or YNO1 (Opus) packet; false when it was dropped.
   Future<bool> write(Uint8List packet);
+
+  /// True when this device can decode the laptop's Opus stream.
+  Future<bool> supportsOpus();
 
   /// `ready`, `interrupted`, `played`, `underruns`, `bufferMs`, `queuedMs`.
   Future<Map<String, dynamic>> status();
@@ -39,21 +43,38 @@ abstract class LaptopListenOutput {
   void setRemoteCommandHandler(void Function(String action)? handler);
 }
 
-/// The header fields of one laptop audio packet (YNW1).
+/// The header fields of one laptop audio packet: YNW1 (float PCM) or YNO1
+/// (the same header, then one 20 ms Opus packet).
 class YnwPacketHeader {
   const YnwPacketHeader(this.epoch, this.sequence, this.sampleRate,
       {required this.firstFrame,
       required this.frames,
-      required this.droppedChunks});
+      required this.droppedChunks,
+      this.opus = false});
   final int epoch, sequence, sampleRate;
   final int firstFrame, frames, droppedChunks;
+  final bool opus;
 
   static YnwPacketHeader? parse(Uint8List packet) {
-    if (packet.length < 64 || packet.length > 56 + 512 * 8) return null;
+    if (packet.length < 57 || packet.length > 56 + 512 * 8) return null;
     final data = ByteData.sublistView(packet);
     final frames = data.getUint32(36, Endian.little);
     final rate = data.getUint32(32, Endian.little);
-    if (data.getUint32(0, Endian.little) != 0x31574e59 ||
+    if (data.getUint32(0, Endian.little) == ynoMagic) {
+      if (data.getUint32(4, Endian.little) != 1 ||
+          frames != listenOpusFrames ||
+          rate != 48000 ||
+          packet.length > 56 + 1500) {
+        return null;
+      }
+      return YnwPacketHeader(data.getUint64(8, Endian.little),
+          data.getUint64(16, Endian.little), rate,
+          firstFrame: data.getUint64(24, Endian.little),
+          frames: frames,
+          droppedChunks: data.getUint32(44, Endian.little),
+          opus: true);
+    }
+    if (data.getUint32(0, Endian.little) != ynwMagic ||
         data.getUint32(4, Endian.little) != 1 ||
         frames == 0 ||
         frames > 512 ||
@@ -81,11 +102,21 @@ class LaptopListenController extends ChangeNotifier {
     RemoteOwnerClient Function(Uri origin)? clientFor,
     this.retryDelay = const Duration(seconds: 1),
     this.leaseRenewal = const Duration(seconds: 10),
+    Future<String?> Function()? loadSoundQuality,
+    this.saveSoundQuality,
   })  : _resolveEntry = resolveEntry ?? resolveRemoteEntry,
         _clientFor =
-            clientFor ?? ((origin) => RemoteOwnerClient(origin: origin));
+            clientFor ?? ((origin) => RemoteOwnerClient(origin: origin)) {
+    if (loadSoundQuality != null) {
+      unawaited(loadSoundQuality().then((value) {
+        final saved = ListenQuality.parse(value);
+        if (saved != null && !_qualityTouched) soundQuality = saved;
+      }, onError: (Object _) {}));
+    }
+  }
 
   final LaptopListenOutput output;
+  final Future<void> Function(String quality)? saveSoundQuality;
   final Future<Uri> Function(String) _resolveEntry;
   final RemoteOwnerClient Function(Uri) _clientFor;
   final Duration retryDelay, leaseRenewal;
@@ -114,6 +145,20 @@ class LaptopListenController extends ChangeNotifier {
 
   /// `live` (Live Transfer) or `file` (the laptop's own player).
   String audioSource = '';
+
+  /// The sound quality chosen here (Opus 320 kbit/s unless changed).
+  ListenQuality soundQuality = ListenQuality.high;
+  bool _qualityTouched = false;
+
+  /// What the laptop is sending now; null until its audio is ready.
+  ListenQuality? streamQuality;
+
+  /// Both ends can do Opus: this device decodes it and the laptop sends it.
+  /// Before the laptop answers, whether this device can.
+  bool get opusAvailable => (_nativeOpus ?? false) && (_laptopOpus ?? true);
+  bool? _nativeOpus, _laptopOpus;
+  // The laptop understands quality changes on the open audio socket.
+  bool _laptopQuality = false;
   int received = 0, dropped = 0, played = 0, underruns = 0;
   int bufferMs = 0, queuedMs = 0;
   final _audioClock = Stopwatch();
@@ -127,6 +172,8 @@ class LaptopListenController extends ChangeNotifier {
         'listening': listening,
         'audioConnected': audioConnected,
         'source': audioSource,
+        'soundQuality': soundQuality.name,
+        'streamQuality': streamQuality?.name,
         'elapsedMs': _audioClock.elapsedMilliseconds,
         'received': received,
         'played': played,
@@ -547,7 +594,17 @@ class LaptopListenController extends ChangeNotifier {
     while (_listening(generation, session)) {
       String? reason;
       try {
-        final socket = await _client!.openSocket('audio');
+        if (_nativeOpus == null) {
+          try {
+            _nativeOpus = await output.supportsOpus();
+          } catch (_) {
+            _nativeOpus = false;
+          }
+        }
+        // Ask for a quality only when this device can play Opus; older
+        // laptops ignore it and keep sending uncompressed audio.
+        final socket = await _client!.openSocket('audio',
+            hello: _nativeOpus == true ? {'quality': soundQuality.name} : null);
         if (!_listening(generation, session)) {
           unawaited(socket.close());
           return;
@@ -563,6 +620,11 @@ class LaptopListenController extends ChangeNotifier {
               audioConnected = true;
               attempt = 0;
               audioSource = data['source'] is String ? data['source'] : '';
+              final codecs = data['codecs'];
+              _laptopQuality = codecs is List;
+              _laptopOpus = codecs is List && codecs.contains('opus');
+              streamQuality = ListenQuality.parse(data['quality']) ??
+                  ListenQuality.lossless;
               _changed(audioSource == 'live'
                   ? 'Listening · Live from the laptop'
                   : 'Listening · the laptop’s player');
@@ -602,6 +664,7 @@ class LaptopListenController extends ChangeNotifier {
           _write(packet, generation);
         }
         reason = socket.closeReason;
+        streamQuality = null;
       } on RemoteApiException catch (error) {
         if (error.statusCode == 401) return; // The events loop signs out.
         reason = error.code;
@@ -622,6 +685,26 @@ class LaptopListenController extends ChangeNotifier {
       });
       await _pause(attempt++);
     }
+  }
+
+  /// Changes the sound quality now (no reconnect when the laptop supports
+  /// it) and remembers it for next time.
+  void setSoundQuality(ListenQuality quality) {
+    _qualityTouched = true;
+    if (quality == soundQuality) return;
+    soundQuality = quality;
+    unawaited(saveSoundQuality?.call(quality.name).catchError((Object _) {}));
+    final socket = _audio;
+    if (socket != null && _laptopQuality && audioConnected) {
+      final next = quality == ListenQuality.lossless || opusAvailable
+          ? quality
+          : ListenQuality.lossless;
+      try {
+        socket.add(jsonEncode({'quality': next.name}));
+        streamQuality = next;
+      } catch (_) {}
+    }
+    _changed();
   }
 
   void _write(Uint8List packet, int generation) {
