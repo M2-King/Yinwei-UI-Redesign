@@ -100,10 +100,10 @@
     ${group("Room quality", "quality", [["auto", "Auto"], ["full", "Full"], ["light", "Light"]])}
     ${group("Developer overlay", "fps", [["off", "Off"], ["on", "FPS meter"]])}
     <div class="grp"><span>Intents the page sent (newest first)</span><pre id="dev-log">–</pre></div>
-    <div class="grp"><button class="cta report" id="dev-replay" type="button">Replay starting animation</button></div>
+    <div class="grp"><button class="cta report" id="dev-replay" type="button">Replay opening (with sound)</button></div>
     <div class="grp"><button class="cta report" id="dev-bench" type="button">Run speed test (8 s)</button><button class="cta report" id="dev-copy" type="button">Copy speed report</button><textarea id="dev-report" aria-label="Speed report" readonly hidden></textarea></div>`;
   document.body.appendChild(panel);
-  panel.querySelector("#dev-replay").onclick = () => location.reload(); // the opening runs on every load
+  panel.querySelector("#dev-replay").onclick = () => YinweiListen.replayOpening(); // a tap, so its sound plays
   const local = { quality: "auto", fps: "off" };
   function renderLog() { const el = document.getElementById("dev-log"); if (el) el.textContent = log.join("\n") || "–"; }
   function sync() {

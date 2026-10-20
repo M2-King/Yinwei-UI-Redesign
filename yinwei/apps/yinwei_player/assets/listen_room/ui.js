@@ -484,6 +484,7 @@ window.YinweiListen = Object.freeze({
   devOverlay: (on) => { $("fps").hidden = !on; renderMeter(); }, // developer diagnostics only
   speedReport: () => speedReport(),
   speedTest: () => runSpeedTest(),
+  replayOpening: () => replayOpening(),         // review page only; call inside a tap so its sound may play
 });
 
 // Review only: index.html?dev loads a stand-in for the app (dev/dev-host.js, never bundled).

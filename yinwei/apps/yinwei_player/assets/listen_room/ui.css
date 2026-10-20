@@ -264,37 +264,16 @@ input[type="range"]:disabled { opacity: 0.4; }
 
 /* ---------- Opening veil: a calm first frame, never a blank screen ---------- */
 .veil { position: absolute; inset: 0; display: grid; place-items: center; pointer-events: none; background: radial-gradient(90% 75% at 50% 42%, #121a31, #070a12 72%); transition: opacity 0.9s ease; }
-/* Starting animation: a moon rises, the wordmark comes into focus, a hairline
-   shimmers while the room loads; then the night lifts (room.js revealRoom) and
-   the controls arrive in turn. Reduced motion: the global rule makes it a cut. */
-.veil-mark { display: flex; flex-direction: column; align-items: center; gap: 18px; transition: opacity 0.6s ease, translate 0.8s cubic-bezier(0.2, 0.7, 0.2, 1); }
-.veil-moon {
-  width: 54px; height: 54px; border-radius: 50%;
-  background: radial-gradient(circle at 42% 40%, #f4f7ff, #c9d6ff 55%, rgba(170, 195, 255, 0) 72%);
-  box-shadow: 0 0 40px 10px rgba(150, 180, 255, 0.28), 0 0 120px 40px rgba(110, 150, 255, 0.12);
-  animation: moon-in 1.6s cubic-bezier(0.2, 0.7, 0.2, 1) both;
-}
-.veil .wordmark { font-size: 40px; font-weight: 200; color: var(--text-2); letter-spacing: 0.06em; animation: mark-in 1.3s cubic-bezier(0.2, 0.7, 0.2, 1) 0.25s both; }
-.veil-line {
-  width: 84px; height: 1px; border-radius: 1px;
-  background: rgba(255, 255, 255, 0.08) linear-gradient(90deg, transparent, rgba(190, 210, 255, 0.85), transparent) no-repeat;
-  background-size: 40px 1px;
-  animation: line-in 0.8s ease 0.7s both, line-sheen 1.4s ease-in-out 0.7s infinite;
-}
-@keyframes moon-in { from { opacity: 0; translate: 0 12px; scale: 0.92; } to { opacity: 1; translate: 0 0; scale: 1; } }
-@keyframes mark-in { from { opacity: 0; letter-spacing: 0.24em; filter: blur(8px); } to { opacity: 1; letter-spacing: 0.06em; filter: blur(0); } }
-@keyframes line-in { from { opacity: 0; } to { opacity: 1; } }
-@keyframes line-sheen { from { background-position: -40px 0; } to { background-position: 84px 0; } }
-.veil.gone .veil-mark { opacity: 0; translate: 0 -12px; }
-/* The controls arrive in turn as the night lifts (translate leaves each
-   bar's own transform alone). */
+/* The opening itself is 3D (room.js applyOpening, sound.js); the controls
+   arrive in turn as the sound ignites (translate leaves each bar's own
+   transform alone). */
 .app.intro .top { opacity: 0; translate: 0 -10px; }
 .app.intro .side { opacity: 0; translate: 16px 0; }
 .app.intro .player { opacity: 0; translate: 0 18px; }
 .app.intro-run .top, .app.intro-run .side, .app.intro-run .player { transition: opacity 0.7s ease, translate 0.9s cubic-bezier(0.2, 0.7, 0.2, 1); }
-.app.intro-run .top { transition-delay: 0.45s; }
-.app.intro-run .side { transition-delay: 0.6s; }
-.app.intro-run .player { transition-delay: 0.75s; }
+.app.intro-run .top { transition-delay: 0.1s; }
+.app.intro-run .side { transition-delay: 0.25s; }
+.app.intro-run .player { transition-delay: 0.4s; }
 .veil.gone { opacity: 0; }
 
 .veil-note { position: absolute; left: 0; right: 0; top: calc(50% + 34px); text-align: center; font-size: var(--t-label); color: var(--text-2); }

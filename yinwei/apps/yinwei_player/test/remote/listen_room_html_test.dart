@@ -26,6 +26,7 @@ void main() {
       'const RoomMath =',
       'const ListenBridge =',
       'window.YinweiListen =',
+      'const OpeningSound =',
       'function buildScene()',
     ];
     final positions = [for (final marker in order) html.indexOf(marker)];

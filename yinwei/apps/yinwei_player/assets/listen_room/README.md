@@ -10,7 +10,8 @@ offline page for the app's WebView. Plan: `docs/IMPLEMENTATION_IPAD_LISTEN_ROOM.
 | `room-math.js` | Pure room maths: engine ↔ room coordinates, the drag inverse, slider mapping, snapping, text. |
 | `bridge.js` | Pure bridge rules: which state fields the page accepts, their ranges, and how a value you just set is kept until the app confirms it. |
 | `ui.js` | Header, side panel, popovers, player bar, menu, toasts; `window.YinweiListen`. |
-| `room.js` | The 3D room (three.js r128), frame loop, touch input, developer speed meter, GPU-loss recovery. |
+| `sound.js` | The opening's sound effects, synthesized with Web Audio (no audio files); silent while this iPad is already listening. |
+| `room.js` | The 3D room (three.js r128), the 3D opening, frame loop, touch input, developer speed meter, GPU-loss recovery. |
 | `vendor/` | three.js r128 and its 10 add-ons, pinned by SHA-256 in `vendor/README.md`. |
 | `fonts/` | Outfit (OFL) and a Material Symbols Rounded subset (Apache 2.0). Chinese uses the system font. |
 | `dev/` | Review only, **never bundled**: `dev-host.js` stands in for the app in a browser. |

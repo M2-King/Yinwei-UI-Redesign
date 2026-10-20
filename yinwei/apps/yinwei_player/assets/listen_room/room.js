@@ -15,6 +15,10 @@ let three = null;
 // The opening move: when the room first appears, the camera glides in from a
 // little higher, further and to the left (off under reduced motion).
 let entered = false, entrance = null;
+// The opening (the lights coming on, the sound igniting, the title, its sound
+// effects); see applyOpening. Off under reduced motion.
+let opening = null, replaySound = false;
+const IGNITE = 1.9, OPENING_END = 3.4, MOVE_MS = 3000;
 // Gentle motion after you let go: the camera glides to a stop (fling) and the
 // direction settles onto 0°, ±30°, ±90° or 180° when released close to one.
 let fling = null, snapAnim = null, popSide = "right", bench = null;
@@ -980,6 +984,23 @@ function buildScene() {
   const skyFill = new T.PointLight(col("#5b77c8"), 0.55, 7, 2); skyFill.position.set(0, 3.2, -0.6); scene.add(skyFill);
   // a soft cool fill from behind you, so the chair's shape reads against the window
   const rim = new T.DirectionalLight(col("#8ea4e6"), 0.28); rim.position.set(2.5, 3.5, 7); scene.add(rim);
+  // The opening's title, hung in the night sky over the lake; shown only while
+  // the room opens (applyOpening). Redrawn once the page's font has loaded.
+  const paintTitle = (g, w, h) => {
+    g.clearRect(0, 0, w, h);
+    g.font = '200 150px "Outfit", "Helvetica Neue", sans-serif'; g.textBaseline = "middle";
+    const word = "Yinwei", track = 26, widths = [...word].map((ch) => g.measureText(ch).width);
+    let x = (w - widths.reduce((a, b) => a + b, 0) - track * (word.length - 1)) / 2;
+    g.shadowColor = "rgba(160, 190, 255, 0.95)"; g.shadowBlur = 34; g.fillStyle = "rgba(236, 242, 255, 0.96)";
+    [...word].forEach((ch, i) => { g.fillText(ch, x, h / 2 + 8); x += widths[i] + track; });
+  };
+  const titleTex = canvasTex(1024, 256, paintTitle);
+  if (document.fonts && document.fonts.load) {
+    document.fonts.load('200 150px "Outfit"').then(() => { paintTitle(titleTex.image.getContext("2d"), 1024, 256); titleTex.needsUpdate = true; }).catch(() => {});
+  }
+  const titleCard = new T.Mesh(new T.PlaneGeometry(5.2, 1.3), new T.MeshBasicMaterial({ map: titleTex, transparent: true, opacity: 0, depthWrite: false, fog: false, blending: T.AdditiveBlending }));
+  titleCard.renderOrder = 5; titleCard.visible = false; scene.add(titleCard);
+  titleCard.layers.set(1); camera.layers.enable(1); // the floor mirror's camera sees layer 0 only: no backwards title in the floor
 
   // ---------------------------------------------------------------- sound
   const makeRings = (n = 4) => Array.from({ length: n }, () => {
@@ -1151,7 +1172,8 @@ function buildScene() {
   };
   startSurfaces((name, px) => { try { targets[name](maps(px)); } catch (e) { console.error("Surface", name, e); } });
 
-  three = { T, renderer, composer, grade, bloom, floorFinish, water, sparkles, skipReflection: false, flame, candleLight, mirror, scene, camera, source, dome, halo, blue, speakerMid, hit, sourceRings, sourceGlow, beam, beamGeo, orbit, guides, speakers, speakerFx, raycaster: new T.Raycaster(), v: new T.Vector3(), ceilingParts: [ceiling, skylight, cove] };
+  three = { T, renderer, composer, grade, bloom, floorFinish, water, sparkles, skipReflection: false, flame, candleLight, mirror, scene, camera, source, dome, halo, blue, speakerMid, hit, sourceRings, sourceGlow, beam, beamGeo, orbit, guides, speakers, speakerFx, raycaster: new T.Raycaster(), v: new T.Vector3(), ceilingParts: [ceiling, skylight, cove], lampL, lampS, readLight, skyFill, cove, titleCard };
+  three.base = { exposure: renderer.toneMappingExposure, bloom: bloom ? bloom.strength : 0, lampL: lampL.intensity, lampS: lampS.intensity, read: readLight.intensity, sky: skyFill.intensity, cove: cove.material.color.clone() };
 }
 
 // Labels for the placement guides.
@@ -1210,27 +1232,83 @@ function placeCamera() {
 const screenOf = (v) => [((v.x + 1) / 2) * W, ((1 - v.y) / 2) * H];
 
 let suspended = false; // YinweiListen.suspend() / resume()
-// Starting animation: the logo shows for at least INTRO_MIN ms from page start,
-// then the night lifts, the camera glides in and the controls arrive in turn.
-// A touch skips the wait.
-const INTRO_MIN = 1500;
+// The dark cover lifts with the first frame; the room itself opens dark (see
+// applyOpening) and the controls arrive as the sound ignites.
 let revealed = 0;
-function revealRoom(now = false) {
+function revealRoom() {
   if (revealed) return;
-  const go = () => {
-    if (revealed) return;
-    revealed = performance.now();
-    const veil = $("veil"), app = $("app");
-    veil.classList.add("gone"); setTimeout(() => { veil.hidden = true; }, 1300);
-    app.classList.add("intro-run"); app.classList.remove("intro");
-    setTimeout(() => app.classList.remove("intro-run"), 2200);
-  };
-  const wait = now ? 0 : INTRO_MIN - performance.now();
-  if (wait > 0) setTimeout(go, wait); else go();
+  revealed = performance.now();
+  const veil = $("veil"); veil.classList.add("gone"); setTimeout(() => { veil.hidden = true; }, 1000);
+  if (reduced || S.screen !== "room") releaseChrome();
+  setTimeout(releaseChrome, 14000); // never leave the controls away (the opening starts within 6 s)
+}
+function releaseChrome() {
+  const app = $("app");
+  if (!app.classList.contains("intro")) return;
+  app.classList.add("intro-run"); app.classList.remove("intro");
+  setTimeout(() => app.classList.remove("intro-run"), 2200);
+}
+function finishOpening() {
+  if (opening) opening.skip = true;
+  entrance = null;
+  releaseChrome();
+}
+// The opening, over OPENING_END seconds: the night outside first (exposure
+// low, the title over the lake), the ceiling's cove ring and the lamps coming
+// on in turn, then at IGNITE the sound lights up with a flare, a ring of light
+// and a bloom flash, and the controls arrive. Values the frame loop eases
+// itself are scaled for this frame only (the returned undo puts them back).
+function applyOpening(now, point) {
+  const o = opening;
+  if (!o || !three) return null;
+  const B = three.base, t = o.skip ? OPENING_END : o.t0 ? (now - o.t0) / 1000 : 0;
+  const ease = (x) => x * x * (3 - 2 * x);
+  const ramp = (a, d) => ease(clamp((t - a) / d, 0, 1));
+  if (t >= OPENING_END) {
+    three.renderer.toneMappingExposure = B.exposure;
+    if (three.bloom) three.bloom.strength = B.bloom;
+    three.lampL.intensity = B.lampL; three.lampS.intensity = B.lampS; three.readLight.intensity = B.read; three.skyFill.intensity = B.sky;
+    three.cove.material.color.copy(B.cove); three.flame.material.opacity = 1; three.titleCard.visible = false;
+    opening = null; releaseChrome();
+    return null;
+  }
+  three.renderer.toneMappingExposure = B.exposure * (0.36 + 0.64 * ramp(0.15, 2.7));
+  three.skyFill.intensity = B.sky * ramp(0.3, 1.2);
+  three.cove.material.color.copy(B.cove).multiplyScalar(ramp(0.45, 0.8));
+  three.lampL.intensity = B.lampL * ramp(0.95, 0.6);
+  three.lampS.intensity = B.lampS * ramp(1.2, 0.6);
+  three.readLight.intensity = B.read * ramp(1.4, 0.6);
+  const candle = ramp(1.6, 0.5); three.candleLight.intensity *= candle; three.flame.material.opacity = candle;
+  // The title: in over the dark lake, out as the camera comes inside.
+  const card = three.titleCard;
+  if (!o.titleAt) { // ahead of where the camera starts, out over the lake
+    const c = three.camera, d = c.getWorldDirection(new three.T.Vector3()).setY(0).normalize();
+    o.titleAt = c.position.clone().addScaledVector(d, 12);
+  }
+  card.visible = true; card.position.set(o.titleAt.x, 0, o.titleAt.z); card.lookAt(three.camera.position.x, 0, three.camera.position.z);
+  card.material.opacity = 0.9 * ramp(0.1, 0.8) * (1 - ramp(1.5, 0.8));
+  card.position.y = 2.9 + 0.25 * ramp(0, 2.4);
+  // The sound ignites: a quick flare that settles, a ring of light, a bloom flash.
+  const s = t - IGNITE, ig = s < 0 ? 0 : s < 0.18 ? (s / 0.18) * 1.8 : 1 + 0.8 * Math.exp(-(s - 0.18) * 4);
+  if (three.bloom) three.bloom.strength = B.bloom * (1 + 0.7 * Math.max(0, ig - 1));
+  const dome = three.dome.material, blue = three.blue, was = [dome.emissiveIntensity, blue.intensity];
+  dome.emissiveIntensity *= ig; blue.intensity *= ig;
+  three.halo.material.opacity *= Math.min(1.6, ig); three.sourceGlow.material.opacity *= Math.min(1, ig);
+  const ring = three.sourceRings[0], u = s / 1.3;
+  if (point && u >= 0 && u < 1) { ring.visible = true; const r = 0.1 + u * 1.5; ring.scale.set(r, r, r); ring.material.opacity = 0.9 * Math.pow(1 - u, 2); }
+  if (s >= 0.15 && !o.chrome) { o.chrome = true; releaseChrome(); }
+  return () => { dome.emissiveIntensity = was[0]; blue.intensity = was[1]; };
+}
+/** Plays the opening again (the review page's button; its tap also lets the sound play). */
+function replayOpening() {
+  if (!three || reduced) return;
+  OpeningSound.unlock();
+  $("app").classList.add("intro"); $("app").classList.remove("intro-run");
+  entered = false; entrance = null; opening = null; replaySound = true; // the next frame starts it again
 }
 let level = 0, levelTarget = 0, last = performance.now(), slow = 0, levelTick = 0, lastRender = 0, lastMode = null, camMoving = false;
 // Something on screen is moving: draw at full rate. Otherwise 30 fps.
-const isActive = () => !!bench || (!!entrance && !entrance.t0 && perf.texturesFrame > 0) || pointers.size > 0 || !!dragging || camMoving || !!snapAnim || S.listening === "connecting" ||
+const isActive = () => !!bench || !!opening || (!!entrance && !entrance.t0 && perf.texturesFrame > 0) || pointers.size > 0 || !!dragging || camMoving || !!snapAnim || S.listening === "connecting" ||
   (S.screen === "room" && S.mode === "point" && S.motion === "orbit" && S.notice !== "lost");
 function frame(now) {
   requestAnimationFrame(frame);
@@ -1256,11 +1334,17 @@ function frame(now) {
       entered = true;
       // It holds at its start pose until the detailed surfaces are in, so their
       // one-off shader rebuild never lands in the middle of the move.
-      if (!reduced) entrance = { t0: 0, yaw: cam.tYaw - 0.38, lift: Math.min(28 * DEG, cam.tLift + 9 * DEG), zoom: Math.min(1.25, cam.tZoom * 1.22) };
+      if (!reduced) {
+        entrance = { t0: 0, yaw: cam.tYaw - 0.6, lift: Math.min(20 * DEG, cam.tLift + 9 * DEG), zoom: Math.min(1.38, cam.tZoom * 1.38) };
+        opening = { t0: 0, chrome: false, sound: replaySound }; replaySound = false;
+      } else releaseChrome();
     }
     // a few full-rate frames after the warm-up, then the move
-    if (entrance && !entrance.t0 && revealed && ((perf.warmFrame && perf.frames > perf.warmFrame + 6) || now - t0Script > 6000)) { entrance.t0 = now; act("opening move"); }
-    if (entrance && (pointers.size || dragging || (entrance.t0 && now - entrance.t0 >= 2400))) entrance = null; // a touch takes over at once
+    if (entrance && !entrance.t0 && revealed && ((perf.warmFrame && perf.frames > perf.warmFrame + 6) || now - t0Script > 6000)) {
+      entrance.t0 = now; act("opening move");
+      if (opening) { opening.t0 = now; OpeningSound.play({ ignite: IGNITE, pan: Math.sin(S.az * DEG), mute: !opening.sound && S.listening !== "off" }); }
+    }
+    if (entrance && (pointers.size || dragging || (entrance.t0 && now - entrance.t0 >= MOVE_MS))) entrance = null; // a touch takes over at once
     applyInput(now);
     if (dragging) perf.touchTime += dt;
     if (fling && !dragging) {
@@ -1278,7 +1362,7 @@ function frame(now) {
       renderPlace();
     }
     if (entrance) {
-      const u = entrance.t0 ? (now - entrance.t0) / 2400 : 0, e = 1 - Math.pow(1 - u, 3);
+      const u = entrance.t0 ? Math.min(1, (now - entrance.t0) / MOVE_MS) : 0, e = u < 0.5 ? 4 * u * u * u : 1 - Math.pow(-2 * u + 2, 3) / 2;
       cam.yaw = entrance.yaw + (cam.tYaw - entrance.yaw) * e;
       cam.lift = entrance.lift + (cam.tLift - entrance.lift) * e;
       cam.zoom = entrance.zoom + (cam.tZoom - entrance.zoom) * e;
@@ -1346,8 +1430,10 @@ function frame(now) {
     three.flame.scale.set(0.028, 0.06 * flick, 1);
     three.candleLight.intensity = 0.5 * flick;
     three.skipReflection = !active && perf.frames % 2 === 1; // reflection at 15 fps while idle
+    const undoOpening = applyOpening(now, point);
     three.renderer.info.reset();
     if (three.composer && quality.effective !== "light") three.composer.render(); else three.renderer.render(three.scene, three.camera);
+    if (undoOpening) undoOpening();
     perf.draws = three.renderer.info.render.calls; perf.tris = three.renderer.info.render.triangles;
     if (input && input.used) { const lag = performance.now() - input.ts; if (lag > 0 && lag < 500) { perf.touch.n++; perf.touch.t += lag; } input.used = 0; }
     if (perf.texturesFrame && !perf.compiled && perf.frames > perf.texturesFrame) {
@@ -1433,7 +1519,7 @@ function moveSourceTo(x, y, planeY) {
 function bindInput() {
   const gl = $("gl");
   gl.addEventListener("pointerdown", (e) => {
-    revealRoom(true); // a touch skips the starting animation
+    revealRoom(); finishOpening(); // a touch skips the opening
     try { gl.setPointerCapture(e.pointerId); } catch (err) { /* pointer already gone */ }
     glRect = gl.getBoundingClientRect(); // measured once per touch, not on every move
     const [x, y] = local(e);
