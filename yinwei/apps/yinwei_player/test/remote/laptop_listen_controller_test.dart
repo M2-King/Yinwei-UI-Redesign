@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:yinwei_player/bridge/mock_engine.dart';
 import 'package:yinwei_player/remote/laptop_listen_controller.dart';
 import 'package:yinwei_player/remote/listen_stream_source.dart';
+import 'package:yinwei_player/remote/saved_sign_in.dart';
 import 'package:yinwei_player/remote/remote_auth.dart';
 import 'package:yinwei_player/remote/remote_gateway.dart';
 import 'package:yinwei_player/remote/remote_owner_client.dart';
@@ -26,6 +27,16 @@ class _FakeOpus implements ListenOpusEncoder {
   void reset() {}
   @override
   void close() {}
+}
+
+class _MemoryStore implements SignInStore {
+  SavedSignIn? value;
+  @override
+  Future<SavedSignIn?> load() async => value;
+  @override
+  Future<void> save(SavedSignIn v) async => value = v;
+  @override
+  Future<void> clear() async => value = null;
 }
 
 class FakeListenOutput implements LaptopListenOutput {
@@ -319,6 +330,84 @@ void main() {
     expect(output.magics.toSet(), {ynwMagic});
     listen.setSoundQuality(ListenQuality.max); // remembered, not sent
     expect(listen.streamQuality, ListenQuality.lossless);
+  });
+
+  group('remember me', () {
+    late _MemoryStore store;
+    late LaptopListenController remembered;
+    setUp(() {
+      store = _MemoryStore();
+      remembered = LaptopListenController(
+        output: output,
+        resolveEntry: (_) async => gateway.origin,
+        clientFor: (origin) =>
+            RemoteOwnerClient(origin: origin, allowLoopbackForTests: true),
+        retryDelay: const Duration(milliseconds: 50),
+        leaseRenewal: const Duration(milliseconds: 200),
+        signInStore: store,
+      );
+    });
+    tearDown(() => remembered.dispose());
+
+    test('a successful sign-in is kept; sign out forgets it', () async {
+      await remembered.signIn('https://entry.example/', 'fixture-owner', 'wrong');
+      expect(store.value, isNull, reason: 'a failed sign-in is never kept');
+      await remembered.signIn(
+          'https://entry.example/', 'fixture-owner', password);
+      expect(remembered.signedIn, isTrue);
+      await until(() => store.value != null);
+      expect([store.value!.entry, store.value!.username, store.value!.password],
+          ['https://entry.example/', 'fixture-owner', password]);
+      await remembered.signOut();
+      await until(() => store.value == null);
+    });
+
+    test('switched off, nothing is kept', () async {
+      store.value = const SavedSignIn(
+          entry: 'https://entry.example/', username: 'old', password: 'old');
+      remembered.rememberSignIn = false;
+      await remembered.signIn(
+          'https://entry.example/', 'fixture-owner', password);
+      await until(() => store.value == null);
+    });
+
+    test('the saved login signs in by itself; a rejected one is forgotten',
+        () async {
+      expect(await remembered.signInSaved(), isFalse);
+      store.value = const SavedSignIn(
+          entry: 'https://entry.example/',
+          username: 'fixture-owner',
+          password: password);
+      expect(await remembered.signInSaved(), isTrue);
+      expect(remembered.signedIn, isTrue);
+      expect(remembered.autoSignInTried, isTrue);
+      await remembered.signOut();
+      store.value = const SavedSignIn(
+          entry: 'https://entry.example/',
+          username: 'fixture-owner',
+          password: 'changed-on-laptop');
+      expect(await remembered.signInSaved(), isTrue);
+      expect(remembered.signedIn, isFalse);
+      await until(() => store.value == null);
+    });
+
+    test('after the laptop forgets this iPad it signs back in and listens',
+        () async {
+      await remembered.signIn(
+          'https://entry.example/', 'fixture-owner', password);
+      await until(() => remembered.connected && store.value != null);
+      await remembered.startListening();
+      await until(() => remembered.audioConnected);
+      // What a backend restart does to this iPad's session.
+      for (final session in gateway.auth.sessions) {
+        gateway.auth.revoke(session);
+      }
+      await until(() => !remembered.signedIn);
+      await until(() => remembered.signedIn && remembered.listening,
+          seconds: 10);
+      final written = output.written;
+      await until(() => output.written > written + 5);
+    });
   });
 
   test('Opus packet headers are checked too', () {

@@ -9,6 +9,7 @@
 /* Begin PBXBuildFile section */
         D8A000030000000000000201 /* YinweiListenBuffer.swift in Sources */ = {isa = PBXBuildFile; fileRef = D8A000030000000000000010 /* YinweiListenBuffer.swift */; };
         D8A000040000000000000201 /* YinweiOpusDecoder.swift in Sources */ = {isa = PBXBuildFile; fileRef = D8A000040000000000000010 /* YinweiOpusDecoder.swift */; };
+        D8A000050000000000000201 /* YinweiSignInKeychainChannel.swift in Sources */ = {isa = PBXBuildFile; fileRef = D8A000050000000000000010 /* YinweiSignInKeychainChannel.swift */; };
         D8A000020000000000000201 /* YinweiCaptureSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = D8A000020000000000000010 /* YinweiCaptureSupport.swift */; };
         D8A000020000000000000202 /* YinweiCaptureSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = D8A000020000000000000010 /* YinweiCaptureSupport.swift */; };
 		1498D2341E8E89220040F4C2 /* GeneratedPluginRegistrant.m in Sources */ = {isa = PBXBuildFile; fileRef = 1498D2331E8E89220040F4C2 /* GeneratedPluginRegistrant.m */; };
@@ -135,6 +136,7 @@
 /* Begin PBXFileReference section */
         D8A000030000000000000010 /* YinweiListenBuffer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YinweiListenBuffer.swift; sourceTree = "<group>"; };
         D8A000040000000000000010 /* YinweiOpusDecoder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YinweiOpusDecoder.swift; sourceTree = "<group>"; };
+        D8A000050000000000000010 /* YinweiSignInKeychainChannel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YinweiSignInKeychainChannel.swift; sourceTree = "<group>"; };
         D8A000020000000000000010 /* YinweiCaptureSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/YinweiCaptureSupport.swift; sourceTree = SOURCE_ROOT; };
 		1498D2321E8E86230040F4C2 /* GeneratedPluginRegistrant.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = GeneratedPluginRegistrant.h; sourceTree = "<group>"; };
 		1498D2331E8E89220040F4C2 /* GeneratedPluginRegistrant.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = GeneratedPluginRegistrant.m; sourceTree = "<group>"; };
@@ -272,6 +274,7 @@
 				D8A000010000000000000010 /* YinweiReplayKitProbe.swift */,
                 D8A000030000000000000010 /* YinweiListenBuffer.swift */,
                 D8A000040000000000000010 /* YinweiOpusDecoder.swift */,
+                D8A000050000000000000010 /* YinweiSignInKeychainChannel.swift */,
                 D8A000020000000000000010 /* YinweiCaptureSupport.swift */,
 				D8A000010000000000000011 /* Runner.entitlements */,
 				7884E8672EC3CC0400C636F2 /* SceneDelegate.swift */,
@@ -574,6 +577,7 @@
 				D8A000010000000000000201 /* YinweiReplayKitProbe.swift in Sources */,
                 D8A000030000000000000201 /* YinweiListenBuffer.swift in Sources */,
                 D8A000040000000000000201 /* YinweiOpusDecoder.swift in Sources */,
+                D8A000050000000000000201 /* YinweiSignInKeychainChannel.swift in Sources */,
                 D8A000020000000000000201 /* YinweiCaptureSupport.swift in Sources */,
 				C7C200010000000000000203 /* YinweiActivityAttributes.swift in Sources */,
 				C7C200010000000000000204 /* YinweiActivityPresentation.swift in Sources */,

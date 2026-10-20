@@ -3,8 +3,11 @@ import 'dart:ui' show ImageFilter;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:yinwei_player/remote/laptop_listen_controller.dart';
+import 'package:yinwei_player/remote/saved_sign_in.dart';
 
-/// The Listen Room's sign-in, native so the password never enters the page:
+/// The Listen Room's sign-in, native so the password never enters the page.
+/// With "Remember me on this iPad" the app signs in by itself next time
+/// (the login is kept in this iPad's Keychain):
 /// the approved prototype's glass card over a still picture of the room, with
 /// the same fields and messages as the classic screen. A wrong password shows
 /// in red; an unreachable laptop shows an amber note and "Try again".
@@ -30,8 +33,42 @@ class _ListenRoomSignInState extends State<ListenRoomSignIn> {
   final _password = TextEditingController();
   final _passwordFocus = FocusNode();
   bool _tried = false;
+  SavedSignIn? _saved;
 
   LaptopListenController get _s => widget.session;
+
+  @override
+  void initState() {
+    super.initState();
+    _restore();
+  }
+
+  /// Fills in the saved login and, once per app start, signs in with it.
+  Future<void> _restore() async {
+    final saved = await _s.savedSignIn();
+    if (!mounted || saved == null) return;
+    setState(() {
+      _saved = saved;
+      _entry.text = saved.entry;
+      _username.text = saved.username;
+    });
+    if (_s.autoSignInTried || _s.busy || _s.signedIn) return;
+    setState(() => _tried = true);
+    await _s.signInSaved();
+    if (!mounted) return;
+    // A rejected saved password was forgotten: ask for it.
+    if (_outcome == _Outcome.wrongPassword) setState(() => _saved = null);
+  }
+
+  /// The saved password stands in for an empty field, for the same login.
+  String? get _savedPassword {
+    final saved = _saved;
+    return saved != null &&
+            saved.entry == _entry.text.trim() &&
+            saved.username == _username.text.trim()
+        ? saved.password
+        : null;
+  }
 
   @override
   void dispose() {
@@ -60,19 +97,21 @@ class _ListenRoomSignInState extends State<ListenRoomSignIn> {
   }
 
   Future<void> _signIn() async {
-    if (_password.text.isEmpty) {
+    final password =
+        _password.text.isNotEmpty ? _password.text : _savedPassword;
+    if (password == null) {
       _passwordFocus.requestFocus();
       return;
     }
     setState(() => _tried = true);
     try {
-      await _s.signIn(
-          _entry.text.trim(), _username.text.trim(), _password.text);
+      await _s.signIn(_entry.text.trim(), _username.text.trim(), password);
     } finally {
       _password.clear();
       TextInput.finishAutofillContext();
     }
     if (mounted && _outcome == _Outcome.wrongPassword) {
+      setState(() => _saved = null);
       _passwordFocus.requestFocus();
     }
   }
@@ -214,11 +253,33 @@ class _ListenRoomSignInState extends State<ListenRoomSignIn> {
                             onSubmitted: (_) => _signIn(),
                             style: _Look.input,
                             decoration: _Look.bare.copyWith(
-                                hintText: 'Laptop owner password',
+                                hintText: _saved != null
+                                    ? 'Saved on this iPad'
+                                    : 'Laptop owner password',
                                 hintStyle: const TextStyle(color: _Look.text3)),
                           )),
                     ],
                   ),
+                  Row(children: [
+                    const Expanded(
+                      child: Text('Remember me on this iPad',
+                          style: TextStyle(color: _Look.text2, fontSize: 14)),
+                    ),
+                    Switch.adaptive(
+                      key: const Key('listen-room-remember'),
+                      value: _s.rememberSignIn,
+                      activeTrackColor: const Color(0xFF6F9BFF),
+                      onChanged: busy
+                          ? null
+                          : (on) {
+                              setState(() => _s.rememberSignIn = on);
+                              if (!on) {
+                                _saved = null;
+                                _s.forgetSavedSignIn();
+                              }
+                            },
+                    ),
+                  ]),
                   Theme(
                     data: Theme.of(context)
                         .copyWith(dividerColor: Colors.transparent),
@@ -339,11 +400,14 @@ class _ListenRoomSignInState extends State<ListenRoomSignIn> {
                     ),
                   ),
                   const SizedBox(height: 16),
-                  const Text(
-                      'Your password goes only to your laptop and is never '
-                      'stored on this iPad.',
+                  Text(
+                      _s.rememberSignIn
+                          ? 'Kept only in this iPad’s Keychain and sent only to '
+                              'your laptop. Sign out to forget it.'
+                          : 'Your password goes only to your laptop and is never '
+                              'stored on this iPad.',
                       textAlign: TextAlign.center,
-                      style: TextStyle(color: _Look.text3, fontSize: 12)),
+                      style: const TextStyle(color: _Look.text3, fontSize: 12)),
                 ],
               ),
             ),

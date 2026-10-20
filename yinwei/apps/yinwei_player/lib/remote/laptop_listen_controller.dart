@@ -8,6 +8,7 @@ import 'package:flutter/foundation.dart';
 import 'listen_quality.dart';
 import 'remote_entry.dart';
 import 'remote_owner_client.dart';
+import 'saved_sign_in.dart';
 import 'listen_audio_diagnostics.dart';
 
 /// Plays the laptop's processed stereo on this device: the iPad's native
@@ -104,6 +105,7 @@ class LaptopListenController extends ChangeNotifier {
     this.leaseRenewal = const Duration(seconds: 10),
     Future<String?> Function()? loadSoundQuality,
     this.saveSoundQuality,
+    this.signInStore,
   })  : _resolveEntry = resolveEntry ?? resolveRemoteEntry,
         _clientFor =
             clientFor ?? ((origin) => RemoteOwnerClient(origin: origin)) {
@@ -117,6 +119,18 @@ class LaptopListenController extends ChangeNotifier {
 
   final LaptopListenOutput output;
   final Future<void> Function(String quality)? saveSoundQuality;
+
+  /// "Remember me on this iPad" (the Keychain in the app; null in tests
+  /// that do not need it).
+  final SignInStore? signInStore;
+
+  /// Keep the next successful sign-in (the sign-in card's switch).
+  bool rememberSignIn = true;
+
+  /// The saved sign-in was tried once since the app started.
+  bool autoSignInTried = false;
+  bool _autoSigningIn = false;
+  int _signBack = 0;
   final Future<Uri> Function(String) _resolveEntry;
   final RemoteOwnerClient Function(Uri) _clientFor;
   final Duration retryDelay, leaseRenewal;
@@ -203,6 +217,14 @@ class LaptopListenController extends ChangeNotifier {
       final value = await client.signIn(username, password);
       if (session != _session) return;
       _applySnapshot(value['snapshot'] as Map<String, dynamic>);
+      final store = signInStore;
+      if (store != null) {
+        unawaited((rememberSignIn
+                ? store.save(SavedSignIn(
+                    entry: entry, username: username, password: password))
+                : store.clear())
+            .catchError((Object _) {}));
+      }
       _changed('Signed in · connecting to the laptop…');
       _renewTimer =
           Timer.periodic(leaseRenewal, (_) => unawaited(_renewLease()));
@@ -212,6 +234,13 @@ class LaptopListenController extends ChangeNotifier {
       _client?.close();
       _client = null;
       snapshot = null;
+      // The saved password no longer works (changed on the laptop): forget
+      // it rather than retrying it.
+      if (_autoSigningIn &&
+          error is RemoteApiException &&
+          error.statusCode == 401) {
+        unawaited(forgetSavedSignIn());
+      }
       _changed(_signInFailure(error));
     } finally {
       busy = false;
@@ -236,7 +265,59 @@ class LaptopListenController extends ChangeNotifier {
         _ => 'Could not sign in. Check the laptop connection and owner login.',
       };
 
+  /// The saved sign-in, if any (to fill the sign-in card).
+  Future<SavedSignIn?> savedSignIn() async {
+    try {
+      return await signInStore?.load();
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<void> forgetSavedSignIn() async {
+    try {
+      await signInStore?.clear();
+    } catch (_) {}
+  }
+
+  /// Signs in with the saved login; false when there is none.
+  Future<bool> signInSaved() async {
+    autoSignInTried = true;
+    if (busy || signedIn) return false;
+    final saved = await savedSignIn();
+    if (saved == null || busy || signedIn) return false;
+    _autoSigningIn = true;
+    try {
+      await signIn(saved.entry, saved.username, saved.password);
+    } finally {
+      _autoSigningIn = false;
+    }
+    return true;
+  }
+
+  /// The laptop forgot this iPad (its backend restarted): sign back in with
+  /// the saved login while it comes back (about a minute), and listen again
+  /// if this iPad was listening.
+  Future<void> _signBackIn({required bool listen}) async {
+    final generation = ++_signBack;
+    for (final wait in const [1, 3, 5, 10, 15, 20, 30]) {
+      await Future<void>.delayed(retryDelay * wait);
+      if (_disposed || generation != _signBack) return;
+      if (busy) continue;
+      if (!signedIn && !await signInSaved()) return; // nothing saved
+      if (signedIn) {
+        if (listen && !listening && generation == _signBack) {
+          await startListening();
+        }
+        return;
+      }
+    }
+  }
+
+  /// Sign out also forgets the saved sign-in.
   Future<void> signOut() async {
+    ++_signBack;
+    unawaited(forgetSavedSignIn());
     final client = _client;
     await stopListening();
     try {
@@ -316,10 +397,14 @@ class LaptopListenController extends ChangeNotifier {
       } on RemoteApiException catch (error) {
         if (error.statusCode == 401) {
           if (_alive(session)) {
+            final wasListening = listening;
             await _endSession();
             _changed(
                 'The laptop signed this iPad out (it may have restarted) · '
                 'sign in again.');
+            if (signInStore != null) {
+              unawaited(_signBackIn(listen: wasListening));
+            }
           }
           return;
         }

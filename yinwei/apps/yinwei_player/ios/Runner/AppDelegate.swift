@@ -20,6 +20,7 @@ import UIKit
     engineBridge.applicationRegistrar.register(
       YinweiListenRoomRoutePickerFactory(), withId: YinweiListenRoomRoutePickerFactory.viewType)
     YinweiDeveloperDiagnosticsChannel.register(messenger: messenger)
+    YinweiSignInKeychainChannel.register(messenger: messenger)
     print("[YINWEI_IOS] native channels registered")
   }
 
