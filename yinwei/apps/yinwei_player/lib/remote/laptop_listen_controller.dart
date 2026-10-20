@@ -7,6 +7,7 @@ import 'package:flutter/foundation.dart';
 
 import 'remote_entry.dart';
 import 'remote_owner_client.dart';
+import 'listen_audio_diagnostics.dart';
 
 /// Plays the laptop's processed stereo on this device: the iPad's native
 /// player in the app, a fake in tests.
@@ -40,8 +41,12 @@ abstract class LaptopListenOutput {
 
 /// The header fields of one laptop audio packet (YNW1).
 class YnwPacketHeader {
-  const YnwPacketHeader(this.epoch, this.sequence, this.sampleRate);
+  const YnwPacketHeader(this.epoch, this.sequence, this.sampleRate,
+      {required this.firstFrame,
+      required this.frames,
+      required this.droppedChunks});
   final int epoch, sequence, sampleRate;
+  final int firstFrame, frames, droppedChunks;
 
   static YnwPacketHeader? parse(Uint8List packet) {
     if (packet.length < 64 || packet.length > 56 + 512 * 8) return null;
@@ -58,7 +63,10 @@ class YnwPacketHeader {
       return null;
     }
     return YnwPacketHeader(data.getUint64(8, Endian.little),
-        data.getUint64(16, Endian.little), rate);
+        data.getUint64(16, Endian.little), rate,
+        firstFrame: data.getUint64(24, Endian.little),
+        frames: frames,
+        droppedChunks: data.getUint32(44, Endian.little));
   }
 }
 
@@ -108,6 +116,25 @@ class LaptopListenController extends ChangeNotifier {
   String audioSource = '';
   int received = 0, dropped = 0, played = 0, underruns = 0;
   int bufferMs = 0, queuedMs = 0;
+  final _audioClock = Stopwatch();
+  var _diagnostics = ListenAudioDiagnostics();
+  Map<String, dynamic> _nativeDiagnostics = const {};
+
+  /// Export on demand; never send packet traces/percentiles through the room's
+  /// per-frame UI bridge. The last 120 status samples cover about one minute.
+  Map<String, Object?> audioDiagnostics() => {
+        'schema': 1,
+        'listening': listening,
+        'audioConnected': audioConnected,
+        'source': audioSource,
+        'elapsedMs': _audioClock.elapsedMilliseconds,
+        'received': received,
+        'played': played,
+        'dropped': dropped,
+        'inFlightWrites': _writes,
+        'native': Map.of(_nativeDiagnostics),
+        ..._diagnostics.snapshot(),
+      };
 
   bool get signedIn => _client?.signedIn == true && snapshot != null;
   bool get hasControl => _lease != null;
@@ -243,7 +270,8 @@ class LaptopListenController extends ChangeNotifier {
         if (error.statusCode == 401) {
           if (_alive(session)) {
             await _endSession();
-            _changed('The laptop signed this iPad out (it may have restarted) · '
+            _changed(
+                'The laptop signed this iPad out (it may have restarted) · '
                 'sign in again.');
           }
           return;
@@ -406,7 +434,8 @@ class LaptopListenController extends ChangeNotifier {
           'Another device has control (the web page?). Try again when it is done.',
         'control_taken' =>
           'Someone at the laptop took control. Tap Take control to change things here.',
-        _ => 'Change not applied: ${code.replaceAll('_', ' ')}. Take control again.',
+        _ =>
+          'Change not applied: ${code.replaceAll('_', ' ')}. Take control again.',
       };
 
   /// A lock-screen or Control Center button.
@@ -428,8 +457,10 @@ class LaptopListenController extends ChangeNotifier {
     final type = switch (wanted) {
       // Not live yet: play starts the music and Live Transfer on the laptop.
       'play' when !live && capabilities['remoteLive'] == true => 'live.start',
-      'play' || 'pause' || 'next' || 'previous'
-          when capabilities['liveMedia'] == true =>
+      'play' ||
+      'pause' ||
+      'next' ||
+      'previous' when capabilities['liveMedia'] == true =>
         'media.$wanted',
       // No music-app control: the laptop's own player.
       'play' || 'pause' => wanted,
@@ -452,12 +483,18 @@ class LaptopListenController extends ChangeNotifier {
       await output.prepare();
     } catch (_) {
       busy = false;
-      _changed('Could not open iPad audio · close other audio apps and try again.');
+      _changed(
+          'Could not open iPad audio · close other audio apps and try again.');
       return;
     }
     listening = true;
     interrupted = false;
     received = dropped = played = underruns = bufferMs = queuedMs = 0;
+    _diagnostics = ListenAudioDiagnostics();
+    _nativeDiagnostics = const {};
+    _audioClock
+      ..reset()
+      ..start();
     _writes = 0;
     _nowPlayingKey = '';
     final generation = ++_listenGeneration;
@@ -482,6 +519,7 @@ class LaptopListenController extends ChangeNotifier {
   Future<void> stopListening({String? message}) async {
     if (!listening) return;
     listening = false;
+    _audioClock.stop();
     audioConnected = false;
     interrupted = false;
     ++_listenGeneration;
@@ -515,6 +553,7 @@ class LaptopListenController extends ChangeNotifier {
           return;
         }
         _audio = socket;
+        _diagnostics.connectionOpened();
         int? epoch, rate;
         await for (final message in socket) {
           if (!_listening(generation, session)) break;
@@ -535,9 +574,18 @@ class LaptopListenController extends ChangeNotifier {
               message is Uint8List ? message : Uint8List.fromList(message);
           final header = YnwPacketHeader.parse(packet);
           if (header == null) {
+            ++_diagnostics.invalidPackets;
             ++dropped;
             continue;
           }
+          _diagnostics.record(
+              epoch: header.epoch,
+              sequence: header.sequence,
+              firstFrame: header.firstFrame,
+              frames: header.frames,
+              sampleRate: header.sampleRate,
+              droppedChunks: header.droppedChunks,
+              nowUs: _audioClock.elapsedMicroseconds);
           socket.add(jsonEncode({'ack': header.sequence}));
           // A late packet from before a flush on the laptop.
           if (epoch != null && header.epoch < epoch) {
@@ -578,16 +626,32 @@ class LaptopListenController extends ChangeNotifier {
 
   void _write(Uint8List packet, int generation) {
     if (_writes >= 64 || interrupted) {
+      if (interrupted) {
+        ++_diagnostics.interruptedDrops;
+      } else {
+        ++_diagnostics.writeLimitDrops;
+      }
       ++dropped;
       return;
     }
     ++_writes;
+    final startedUs = _audioClock.elapsedMicroseconds;
     output.write(packet).then((accepted) {
-      if (!accepted && generation == _listenGeneration) ++dropped;
+      if (!accepted && generation == _listenGeneration) {
+        ++dropped;
+        ++_diagnostics.nativeRejected;
+      }
     }, onError: (Object _) {
-      if (generation == _listenGeneration) ++dropped;
+      if (generation == _listenGeneration) {
+        ++dropped;
+        ++_diagnostics.nativeRejected;
+      }
     }).whenComplete(() {
-      if (generation == _listenGeneration) --_writes;
+      if (generation == _listenGeneration) {
+        --_writes;
+        _diagnostics
+            .writeCompleted(_audioClock.elapsedMicroseconds - startedUs);
+      }
     });
   }
 
@@ -602,6 +666,38 @@ class LaptopListenController extends ChangeNotifier {
       underruns = number('underruns');
       bufferMs = number('bufferMs');
       queuedMs = number('queuedMs');
+      // Allowlist numeric/route telemetry; never export arbitrary native fields.
+      _nativeDiagnostics = {
+        for (final key in const [
+          'received',
+          'accepted',
+          'played',
+          'queued',
+          'ready',
+          'underruns',
+          'bufferMs',
+          'queuedMs',
+          'buffering',
+          'sampleRate',
+          'hardwareSampleRate',
+          'ioBufferMs',
+          'outputLatencyMs',
+          'presentationLatencyMs',
+          'outputRoute',
+          'capacityDrops',
+          'completionBacklogDrops',
+          'configurationChanges',
+          'maxRenderCheckGapMs',
+          'interrupted',
+        ])
+          if (value.containsKey(key)) key: value[key]
+      };
+      _diagnostics.sampleBuffer(
+          nowUs: _audioClock.elapsedMicroseconds,
+          queuedMs: queuedMs,
+          targetMs: bufferMs,
+          underruns: underruns,
+          dropped: dropped);
       final wasInterrupted = interrupted;
       interrupted = value['interrupted'] == true;
       if (value['ready'] == false && !interrupted) {
@@ -630,9 +726,8 @@ class LaptopListenController extends ChangeNotifier {
     final title = live
         ? _text(liveInfo['title'], 'Laptop music')
         : _text(track['title'], 'Yinwei laptop');
-    final source = live
-        ? _text(liveInfo['source'], '')
-        : _text(track['artist'], '');
+    final source =
+        live ? _text(liveInfo['source'], '') : _text(track['artist'], '');
     final artist = source.isEmpty ? 'Yinwei laptop' : '$source · Yinwei laptop';
     final playing = live
         ? liveInfo['playing'] == true

@@ -155,6 +155,29 @@ void main() {
   });
   tearDown(() => bridge.dispose());
 
+  test('copies bounded audio diagnostics locally without laptop commands',
+      () async {
+    final messenger =
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+    Map<String, dynamic>? copied;
+    messenger.setMockMethodCallHandler(SystemChannels.platform, (call) async {
+      if (call.method == 'Clipboard.setData') {
+        copied = jsonDecode((call.arguments as Map)['text'] as String)
+            as Map<String, dynamic>;
+      }
+      return null;
+    });
+    addTearDown(() =>
+        messenger.setMockMethodCallHandler(SystemChannels.platform, null));
+    await bridge.handle('{"t":"ready"}');
+    await bridge.handle('{"t":"copyAudioDiagnostics"}');
+    expect(copied?['schema'], 1);
+    expect(copied?['bufferHistory'], isEmpty);
+    expect(copied?.containsKey('snapshot'), isFalse);
+    expect(session.calls, isEmpty);
+    expect(toasts(), contains('Audio diagnostics copied'));
+  });
+
   group('native P3 additions', () {
     const player = MethodChannel(ReplayKitAudioProbe.channelName);
     const audio = MethodChannel(IosLaptopListenOutput.audioChannel);

@@ -169,6 +169,11 @@ void main() {
     expect(output.written, greaterThan(90));
     expect(output.rates, [48000]);
     expect(output.nowPlaying.last, contains('Yinwei laptop'));
+    final diagnostics = listen.audioDiagnostics();
+    expect((diagnostics['arrival'] as Map)['samples'], greaterThan(0));
+    expect((diagnostics['nativeWriteRoundTrip'] as Map)['p95Ms'], isNotNull);
+    expect(diagnostics['bufferHistory'], isNotEmpty);
+    expect(diagnostics.containsKey('snapshot'), isFalse);
 
     await listen.stopListening();
     expect(output.stopped, 1);
@@ -223,8 +228,10 @@ void main() {
     now = now.add(const Duration(seconds: 31));
     await Future<void>.delayed(const Duration(milliseconds: 800));
     expect(listen.hasControl, isTrue);
-    expect(await listen.command('point.set',
-        {'azimuthDeg': 40, 'elevationDeg': 0, 'distanceM': 2}), isTrue);
+    expect(
+        await listen.command(
+            'point.set', {'azimuthDeg': 40, 'elevationDeg': 0, 'distanceM': 2}),
+        isTrue);
 
     // Someone at the laptop takes over: no automatic re-take.
     coordinator.takeLocalControl();
@@ -244,7 +251,8 @@ void main() {
       expect(await listen.command('live.start'), isFalse);
       expect(listen.hasControl, isTrue, reason: code);
       expect(listen.notice, LaptopListenController.failureText(code));
-      expect(listen.notice, isNot(contains('_')), reason: 'explained, not a code');
+      expect(listen.notice, isNot(contains('_')),
+          reason: 'explained, not a code');
     }
   });
 

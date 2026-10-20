@@ -436,6 +436,7 @@ $("m-stop-listen").onclick = () => { closeMenus(); setLocal({ listening: "off" }
 $("m-signout").onclick = () => { closeMenus(); send({ t: "signOut" }); };
 $("m-close").onclick = () => { closeMenus(); send({ t: "close" }); }; // the app closes the room; listening carries on
 $("m-updates").onclick = () => { closeMenus(); send({ t: "checkUpdates" }); }; // the app checks and shows the result
+$("m-audio-diagnostics").onclick = () => { closeMenus(); send({ t: "copyAudioDiagnostics" }); };
 document.addEventListener("gesturestart", (e) => e.preventDefault()); // iPad: a pinch never zooms the page (and never shifts the header)
 
 // Where the AirPlay button sits, so the app can put iPadOS's real picker exactly over it (P3).

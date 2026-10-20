@@ -305,6 +305,13 @@ private final class YinweiRemoteReturnPlayer {
   private var listenMode = false
   private var listenVolume: Float = 1
   private var interrupted = false
+  private var listenBuffer = YinweiListenBuffer()
+  private var renderTimer: DispatchSourceTimer?
+  private var capacityDrops = 0
+  private var completionBacklogDrops = 0
+  private var configurationChanges = 0
+  private var lastRenderCheck: TimeInterval?
+  private var maxRenderCheckGapMs = 0.0
   // Thread-safe entry points (callers are the main and audio channels).
   var isReady: Bool { audio.sync { ready } }
   var status: [String: Any] { audio.sync { currentStatus } }
@@ -318,10 +325,27 @@ private final class YinweiRemoteReturnPlayer {
 
   private var ready: Bool { prepared && engine.isRunning }
   private var currentStatus: [String: Any] {
-    ["received": counters.received, "accepted": counters.accepted,
+    if listenMode { updateListenClock() }
+    var value: [String: Any] = ["received": counters.received, "accepted": counters.accepted,
      "played": counters.played, "queued": queued, "ready": ready,
      "underruns": underruns, "bufferMs": targetFrames / 48,
      "queuedMs": queuedFrames / 48, "interrupted": interrupted]
+    if listenMode {
+      let session = AVAudioSession.sharedInstance()
+      value.merge([
+        "underruns": listenBuffer.underruns, "bufferMs": listenBuffer.targetMs,
+        "queuedMs": listenBuffer.queuedMs, "buffering": !listenBuffer.playing,
+        "sampleRate": listenBuffer.sampleRate, "hardwareSampleRate": session.sampleRate,
+        "ioBufferMs": session.ioBufferDuration * 1000,
+        "outputLatencyMs": session.outputLatency * 1000,
+        "presentationLatencyMs": player.outputPresentationLatency * 1000,
+        "outputRoute": session.currentRoute.outputs.map { $0.portType.rawValue },
+        "capacityDrops": capacityDrops, "completionBacklogDrops": completionBacklogDrops,
+        "configurationChanges": configurationChanges,
+        "maxRenderCheckGapMs": maxRenderCheckGapMs,
+      ]) { _, new in new }
+    }
+    return value
   }
 
   private func _prepare(listen: Bool) throws {
@@ -333,6 +357,9 @@ private final class YinweiRemoteReturnPlayer {
     targetFrames = Self.initialTargetFrames
     underruns = 0
     stableSince = Date()
+    listenBuffer = YinweiListenBuffer()
+    capacityDrops = 0; completionBacklogDrops = 0; configurationChanges = 0
+    lastRenderCheck = nil; maxRenderCheckGapMs = 0
     let session = AVAudioSession.sharedInstance()
     // No .duckOthers: on device it did not stop the source app's original
     // audio and may lower the level ReplayKit captures for the laptop.
@@ -347,6 +374,14 @@ private final class YinweiRemoteReturnPlayer {
     prepared = true
     do { engine.prepare(); try engine.start() }
     catch { _stop(); throw error }
+    if listen {
+      let timer = DispatchSource.makeTimerSource(queue: audio)
+      timer.schedule(deadline: .now() + .milliseconds(10), repeating: .milliseconds(10),
+                     leeway: .milliseconds(2))
+      timer.setEventHandler { [weak self] in self?.updateListenClock() }
+      renderTimer = timer
+      timer.resume()
+    }
     // Do not silently restart a changed/interrupted output route with old PCM.
     // Listen mode drops the queued PCM and plays the live stream on.
     let center = NotificationCenter.default
@@ -358,6 +393,7 @@ private final class YinweiRemoteReturnPlayer {
       center.addObserver(forName: .AVAudioEngineConfigurationChange,
         object: engine, queue: observerQueue) { [weak self] _ in
         guard let self else { return }
+        if self.listenMode { self.configurationChanges += 1 }
         if !self.listenMode { self._stop() } else if !self.interrupted { self.restart() }
       },
     ]
@@ -409,6 +445,9 @@ private final class YinweiRemoteReturnPlayer {
   private func _newStream(sampleRate: Double) {
     _reset()
     epoch = nil
+    if listenMode, sampleRate >= 8_000, sampleRate <= 192_000 {
+      listenBuffer.reset(sampleRate: sampleRate)
+    }
     guard prepared, sampleRate >= 8_000, sampleRate <= 192_000,
           let current = format, current.sampleRate != sampleRate,
           let next = AVAudioFormat(standardFormatWithSampleRate: sampleRate, channels: 2)
@@ -416,6 +455,30 @@ private final class YinweiRemoteReturnPlayer {
     format = next
     engine.disconnectNodeOutput(player)
     engine.connect(player, to: engine.mainMixerNode, format: next)
+  }
+
+  private func listenRenderedFrame() -> AVAudioFramePosition? {
+    guard let nodeTime = player.lastRenderTime,
+          let time = player.playerTime(forNodeTime: nodeTime), time.isSampleTimeValid
+    else { return nil }
+    return time.sampleTime
+  }
+
+  /// Observe before every write as well as on a timer: a burst arriving after
+  /// starvation must not hide the empty render queue behind fresh packets.
+  private func updateListenClock() {
+    guard listenMode, ready, !interrupted else { return }
+    let now = ProcessInfo.processInfo.systemUptime
+    if let previous = lastRenderCheck {
+      maxRenderCheckGapMs = max(maxRenderCheckGapMs, (now - previous) * 1000)
+    }
+    lastRenderCheck = now
+    guard let frame = listenRenderedFrame(),
+          listenBuffer.observe(renderedFrame: frame, now: now) else { return }
+    player.pause()
+    // pause preserves the player timeline. Capture any render quantum that
+    // finished between the observation and pause before placing the refill.
+    if let pausedFrame = listenRenderedFrame() { listenBuffer.freeze(renderedFrame: pausedFrame) }
   }
 
   private func _accept(_ data: Data) -> Bool {
@@ -430,15 +493,23 @@ private final class YinweiRemoteReturnPlayer {
     }
     let frames = Int(u32(36))
     guard u32(0) == 0x31574e59, u32(4) == 1, Double(u32(32)) == format.sampleRate,
-          frames > 0, frames <= 512, data.count == 56 + frames * 8,
-          queuedFrames + frames <= Self.capacityFrames else { return false }
+          frames > 0, frames <= 512, data.count == 56 + frames * 8 else { return false }
+    if listenMode {
+      updateListenClock()
+      if listenBuffer.queuedFrames + Int64(frames) > listenBuffer.frames(milliseconds: YinweiListenBuffer.capacityMs) {
+        capacityDrops += 1; return false
+      }
+      // Separate memory bound for unusually delayed/missing played callbacks.
+      // This is not the usable jitter-buffer limit (Bluetooth is downstream).
+      if queued >= 2048 { completionBacklogDrops += 1; return false }
+    } else if queuedFrames + frames > Self.capacityFrames { return false }
     let value = u64(8)
     if let epoch, epoch != value { return false }
     self.epoch = value
     // No packet skipping here: queuedFrames falls only on .dataPlayedBack,
     // which lags by the output route's latency (~150-250 ms on Bluetooth),
     // so it overstates the backlog and skipping on it chopped the audio.
-    if player.isPlaying, targetFrames > Self.initialTargetFrames,
+    if !listenMode, player.isPlaying, targetFrames > Self.initialTargetFrames,
        Date().timeIntervalSince(stableSince) >= Self.stablePeriod {
       targetFrames = max(Self.initialTargetFrames, targetFrames - Self.decayStepFrames)
       stableSince = Date()
@@ -455,11 +526,16 @@ private final class YinweiRemoteReturnPlayer {
       }
     }
     buffer.frameLength = AVAudioFrameCount(frames)
+    var when: AVAudioTime?
+    if listenMode {
+      guard let start = listenBuffer.enqueue(frames: frames) else { return false }
+      when = AVAudioTime(sampleTime: start, atRate: format.sampleRate)
+    }
     let token = counters.generation
     counters.enqueue()
     queued += 1
     queuedFrames += frames
-    player.scheduleBuffer(buffer, completionCallbackType: .dataPlayedBack) { [weak self] _ in
+    player.scheduleBuffer(buffer, at: when, options: [], completionCallbackType: .dataPlayedBack) { [weak self] _ in
       self?.audio.async { [weak self] in
         guard let self, self.counters.generation == token else { return }
         self.counters.complete(token: token)
@@ -467,7 +543,7 @@ private final class YinweiRemoteReturnPlayer {
         self.queuedFrames = max(0, self.queuedFrames - frames)
         // Ran dry: pause and refill a larger cushion rather than playing
         // each late packet the moment it lands (audible stutter).
-        if self.queued == 0 && self.player.isPlaying {
+        if !self.listenMode && self.queued == 0 && self.player.isPlaying {
           self.player.pause()
           self.underruns += 1
           self.stableSince = Date()
@@ -476,19 +552,27 @@ private final class YinweiRemoteReturnPlayer {
         }
       }
     }
-    if queuedFrames >= targetFrames && !player.isPlaying { player.play() }
+    if listenMode {
+      if listenBuffer.canStart {
+        listenBuffer.start(now: ProcessInfo.processInfo.systemUptime)
+        player.play()
+      }
+    } else if queuedFrames >= targetFrames && !player.isPlaying { player.play() }
     return true
   }
 
   private func _reset() {
     counters.invalidate()
     queued = 0; queuedFrames = 0
+    listenBuffer.reset(sampleRate: format?.sampleRate ?? 48_000)
+    lastRenderCheck = nil
     guard prepared else { return }
     player.stop(); player.reset()
     if listenMode { player.volume = listenVolume }
   }
 
   private func _stop() {
+    renderTimer?.cancel(); renderTimer = nil
     for observer in observers { NotificationCenter.default.removeObserver(observer) }
     observers.removeAll()
     listenMode = false; interrupted = false

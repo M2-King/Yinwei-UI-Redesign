@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:yinwei_player/platform/ios_laptop_listen_output.dart';
 
 import 'laptop_listen_controller.dart';
@@ -316,6 +317,15 @@ class ListenRoomBridge {
         if (canClose) onClose?.call();
       case 'checkUpdates':
         onCheckUpdates?.call();
+      case 'copyAudioDiagnostics':
+        try {
+          await Clipboard.setData(ClipboardData(
+              text: const JsonEncoder.withIndent('  ')
+                  .convert(session.audioDiagnostics())));
+          await toast('Audio diagnostics copied');
+        } catch (_) {
+          await toast('Could not copy audio diagnostics');
+        }
       case 'rects':
         final r = m['airplay'];
         final valid = r is List &&
