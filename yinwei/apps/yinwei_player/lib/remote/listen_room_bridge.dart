@@ -81,6 +81,20 @@ class ListenRoomBridge {
   // This iPad asked the laptop to start (music + Live): shown as progress
   // until the laptop reports its own step.
   bool _startingLive = false;
+
+  /// The app is in the background: nothing is sent to the page. iPadOS
+  /// freezes the hidden WebView, and each update would wait on the main
+  /// thread, which also hands audio packets to the speaker.
+  bool get background => _background;
+  bool _background = false;
+  set background(bool value) {
+    _background = value;
+    if (value) {
+      _timer?.cancel();
+      _timer = null;
+    }
+  }
+
   Timer? _timer;
   DateTime _lastPush = DateTime.fromMillisecondsSinceEpoch(0);
   String? _lastJson;
@@ -242,7 +256,7 @@ class ListenRoomBridge {
   /// Sends the state soon: at once, or when [minInterval] has passed since
   /// the last send.
   void schedule() {
-    if (!_ready || _disposed || _timer != null) return;
+    if (!_ready || _disposed || _background || _timer != null) return;
     final wait = minInterval - DateTime.now().difference(_lastPush);
     _timer = Timer(wait.isNegative ? Duration.zero : wait, () {
       _timer = null;
@@ -252,7 +266,7 @@ class ListenRoomBridge {
 
   /// Sends the state now, if it changed (or always, with [force]).
   Future<void> push({bool force = false}) async {
-    if (!_ready || _disposed) return;
+    if (!_ready || _disposed || _background) return;
     final json = jsonEncode(state());
     if (!force && json == _lastJson) return;
     _lastJson = json;
@@ -261,7 +275,7 @@ class ListenRoomBridge {
   }
 
   Future<void> toast(String text) async {
-    if (!_ready || _disposed) return;
+    if (!_ready || _disposed || _background) return;
     await run('YinweiListen.toast(${jsonEncode(text)})');
   }
 

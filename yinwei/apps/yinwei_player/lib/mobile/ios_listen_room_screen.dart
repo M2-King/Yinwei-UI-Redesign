@@ -191,10 +191,13 @@ class _IosListenRoomScreenState extends State<IosListenRoomScreen>
     switch (state) {
       case AppLifecycleState.resumed:
         _session.resumed();
+        _bridge?.background = false;
         unawaited(_resumePage());
       case AppLifecycleState.hidden || AppLifecycleState.paused:
-        // Nothing renders while the room can't be seen; audio is unaffected.
+        // Nothing renders while the room can't be seen, and the page gets no
+        // updates (they would wait on the frozen WebView and delay audio).
         unawaited(_run('YinweiListen.suspend()'));
+        _bridge?.background = true;
       default:
         break;
     }

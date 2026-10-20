@@ -254,6 +254,35 @@ void main() {
     expect(find.byType(IosLaptopListenScreen), findsNothing);
   });
 
+  testWidgets('background: no page updates while audio keeps flowing',
+      (tester) async {
+    await show(tester);
+    driver.message!('{"t":"ready","v":1}');
+    await tester.pump();
+    int applies() =>
+        driver.scripts.where((s) => s.startsWith('YinweiListen.apply(')).length;
+    final binding = tester.binding;
+    binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+    binding.handleAppLifecycleStateChanged(AppLifecycleState.hidden);
+    binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+    await tester.pump(const Duration(milliseconds: 200));
+    final before = applies();
+    for (var i = 0; i < 5; i++) {
+      // Packets keep arriving: the state the page would show keeps changing.
+      session.set((s) => s.received += 100);
+      await tester.pump(const Duration(milliseconds: 150));
+    }
+    expect(applies(), before,
+        reason: 'the frozen WebView would hold up the main thread (and audio)');
+    binding.handleAppLifecycleStateChanged(AppLifecycleState.hidden);
+    binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+    binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await tester.pump();
+    await tester.pump();
+    expect(applies(), before + 1, reason: 'one full update on return');
+    await tester.pump(const Duration(seconds: 6));
+  });
+
   testWidgets('signing out from the room returns to the sign-in',
       (tester) async {
     await show(tester);
