@@ -1,0 +1,194 @@
+# Yinwei / 音围 — Windows installer (Inno Setup)
+#
+# Packages the Flutter desktop player + spatial_core.dll into
+# YinweiSetup-<version>-windows-x64.exe.
+#
+# Default source is tag v2026.09.26 (commit d2244df), the 26 Sep 2026
+# snapshot. workflow_dispatch can point at another tag/SHA.
+#
+# This job does not rewrite HRTF / playback / Live Transfer code. It only
+# builds and packages the already-committed Windows tree.
+
+name: Yinwei Windows installer
+
+on:
+  workflow_dispatch:
+    inputs:
+      source_ref:
+        description: Git ref to package (tag, branch, or SHA)
+        required: true
+        default: v2026.09.26
+        type: string
+      version:
+        description: Installer version (YinweiSetup-<version>-windows-x64.exe)
+        required: true
+        default: "0.1.0"
+        type: string
+      release_tag:
+        description: Existing GitHub Release tag to attach assets (empty = artifacts only)
+        required: false
+        default: v2026.09.26
+        type: string
+  pull_request:
+    paths:
+      - ".github/workflows/windows-installer.yml"
+
+permissions:
+  contents: write
+
+env:
+  FLUTTER_PIN: "3.47.2"
+
+jobs:
+  build_installer:
+    name: Build Windows installer
+    runs-on: windows-latest
+    timeout-minutes: 90
+    env:
+      SOURCE_REF: ${{ github.event.inputs.source_ref || 'v2026.09.26' }}
+      APP_VERSION: ${{ github.event.inputs.version || '0.1.0' }}
+      RELEASE_TAG: ${{ github.event.inputs.release_tag || 'v2026.09.26' }}
+
+    steps:
+      - name: Checkout packaging ref
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.SOURCE_REF }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      # Windows PowerShell 5.x reads UTF-8 scripts without a BOM as ANSI.
+      # The em-dash byte 0x94 is then a curly quote and the .ps1 fails to parse
+      # (same error as a local `powershell -File` on the 2026-09-26 source zip).
+      - name: Make PowerShell scripts Windows-PS5 safe
+        shell: pwsh
+        run: |
+          $map = @{
+            ([char]0x2014) = '--'
+            ([char]0x2013) = '-'
+            ([char]0x00B7) = '-'
+            ([char]0x201C) = '"'
+            ([char]0x201D) = '"'
+            ([char]0x2018) = "'"
+            ([char]0x2019) = "'"
+          }
+          Get-ChildItem -Path yinwei -Filter *.ps1 -Recurse | ForEach-Object {
+            $text = [System.Text.Encoding]::UTF8.GetString([System.IO.File]::ReadAllBytes($_.FullName))
+            foreach ($k in $map.Keys) { $text = $text.Replace([string]$k, [string]$map[$k]) }
+            $enc = New-Object System.Text.UTF8Encoding $true
+            [System.IO.File]::WriteAllText($_.FullName, $text, $enc)
+            Write-Host "Normalized $($_.FullName)"
+          }
+
+      - name: Setup MSVC
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+
+      - name: Install Flutter ${{ env.FLUTTER_PIN }}
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: "3.47.2"
+          channel: stable
+          cache: true
+
+      - name: Setup Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: yinwei -> yinwei/target
+
+      - name: Install Inno Setup
+        run: choco install innosetup --no-progress -y
+
+      - name: Enable Flutter Windows desktop
+        run: |
+          flutter config --enable-windows-desktop
+          flutter --version
+
+      - name: Build spatial_core.dll
+        working-directory: ${{ github.workspace }}/yinwei
+        shell: pwsh
+        run: pwsh -ExecutionPolicy Bypass -File tools/build_native_windows.ps1
+
+      - name: Flutter pub get
+        working-directory: ${{ github.workspace }}/yinwei/apps/yinwei_player
+        run: flutter pub get
+
+      - name: Flutter build windows --release
+        working-directory: ${{ github.workspace }}/yinwei/apps/yinwei_player
+        run: flutter build windows --release
+
+      - name: Copy rebuilt DLL into Release
+        working-directory: ${{ github.workspace }}/yinwei
+        shell: pwsh
+        run: pwsh -ExecutionPolicy Bypass -File tools/build_native_windows.ps1
+
+      - name: Verify wet-output export in Release DLL
+        shell: pwsh
+        run: |
+          $dll = Join-Path "${{ github.workspace }}" "yinwei\apps\yinwei_player\build\windows\x64\runner\Release\spatial_core.dll"
+          if (-not (Test-Path $dll)) { throw "Missing $dll" }
+          $exports = & dumpbin.exe /EXPORTS $dll | Out-String
+          $required = @(
+            "yinwei_live_start",
+            "yinwei_live_set_output_device",
+            "yinwei_live_default_output_device"
+          )
+          $missing = @()
+          foreach ($sym in $required) {
+            if ($exports -notmatch [regex]::Escape($sym)) { $missing += $sym }
+          }
+          if ($missing.Count -gt 0) {
+            throw "Release DLL missing: $($missing -join ', ')"
+          }
+          Write-Host "Release DLL exports OK -> $dll"
+
+      - name: Build Inno Setup installer
+        working-directory: ${{ github.workspace }}/yinwei/apps/yinwei_player
+        shell: pwsh
+        run: pwsh -ExecutionPolicy Bypass -File tool/build_windows_installer.ps1 -Version $env:APP_VERSION
+
+      - name: Package portable zip
+        working-directory: ${{ github.workspace }}/yinwei/apps/yinwei_player
+        shell: pwsh
+        run: pwsh -ExecutionPolicy Bypass -File tool/package_windows_release.ps1 -Version $env:APP_VERSION -Channel stable
+
+      - name: Stage dist and checksums
+        shell: pwsh
+        run: |
+          $src = Join-Path "${{ github.workspace }}" "yinwei\apps\yinwei_player\dist\windows"
+          $out = Join-Path "${{ github.workspace }}" "dist"
+          New-Item -ItemType Directory -Force -Path $out | Out-Null
+          $setup = Join-Path $src "YinweiSetup-$env:APP_VERSION-windows-x64.exe"
+          $zip = Join-Path $src "yinwei_player-$env:APP_VERSION-windows-x64.zip"
+          if (-not (Test-Path $setup)) { throw "Missing installer $setup" }
+          if (-not (Test-Path $zip)) { throw "Missing zip $zip" }
+          Copy-Item -Force $setup $out
+          Copy-Item -Force $zip $out
+          $dated = Join-Path $out "YinweiSetup-20260926-windows-x64.exe"
+          Copy-Item -Force $setup $dated
+          $sums = Join-Path $out "SHA256SUMS.txt"
+          Get-ChildItem $out -File | ForEach-Object {
+            $hash = (Get-FileHash -Algorithm SHA256 $_.FullName).Hash.ToLowerInvariant()
+            "{0}  {1}" -f $hash, $_.Name
+          } | Set-Content -Path $sums -Encoding ascii
+          Get-Content $sums
+          Get-ChildItem $out | Format-Table Name, Length
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: yinwei-windows-installer-20260926
+          path: dist/*
+          if-no-files-found: error
+
+      - name: Attach to GitHub Release
+        if: ${{ env.RELEASE_TAG != '' }}
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release upload $env:RELEASE_TAG dist/YinweiSetup-$env:APP_VERSION-windows-x64.exe dist/YinweiSetup-20260926-windows-x64.exe dist/yinwei_player-$env:APP_VERSION-windows-x64.zip dist/SHA256SUMS.txt --clobber --repo ${{ github.repository }}
