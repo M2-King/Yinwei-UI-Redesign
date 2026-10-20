@@ -9,12 +9,12 @@
 <link rel="stylesheet" href="ui.css">
 </head>
 <body>
-<div class="app" id="app">
+<div class="app intro" id="app">
   <div class="scene" id="scene">
     <canvas id="gl" role="img" aria-label="Your listening room. Drag the glowing sound to move it; drag elsewhere to look around. To place the sound exactly, use Place."></canvas>
     <div class="vignette"></div>
     <div class="labels" id="labels" aria-hidden="true"></div>
-    <div class="veil" id="veil" aria-hidden="true"><span class="wordmark">Yinwei</span><span class="veil-note" id="veil-note"></span></div>
+    <div class="veil" id="veil" aria-hidden="true"><div class="veil-mark"><i class="veil-moon"></i><span class="wordmark">Yinwei</span><i class="veil-line"></i></div><span class="veil-note" id="veil-note"></span></div>
     <div class="fallback" id="fallback" hidden><span>3D is off in this browser, so this is a still picture of the room. Everything else works.</span></div>
   </div>
 
@@ -32,6 +32,7 @@
   </header>
 
   <div class="notice glass" id="notice" role="status" hidden></div>
+  <div class="connect glass" id="connect" role="status" aria-live="polite" hidden></div>
   <div class="fps glass" id="fps" aria-live="off" hidden></div>
 
   <nav class="side glass needs-control" id="side" aria-label="Sound">

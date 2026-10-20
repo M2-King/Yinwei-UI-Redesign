@@ -1210,6 +1210,24 @@ function placeCamera() {
 const screenOf = (v) => [((v.x + 1) / 2) * W, ((1 - v.y) / 2) * H];
 
 let suspended = false; // YinweiListen.suspend() / resume()
+// Starting animation: the logo shows for at least INTRO_MIN ms from page start,
+// then the night lifts, the camera glides in and the controls arrive in turn.
+// A touch skips the wait.
+const INTRO_MIN = 1500;
+let revealed = 0;
+function revealRoom(now = false) {
+  if (revealed) return;
+  const go = () => {
+    if (revealed) return;
+    revealed = performance.now();
+    const veil = $("veil"), app = $("app");
+    veil.classList.add("gone"); setTimeout(() => { veil.hidden = true; }, 1300);
+    app.classList.add("intro-run"); app.classList.remove("intro");
+    setTimeout(() => app.classList.remove("intro-run"), 2200);
+  };
+  const wait = now ? 0 : INTRO_MIN - performance.now();
+  if (wait > 0) setTimeout(go, wait); else go();
+}
 let level = 0, levelTarget = 0, last = performance.now(), slow = 0, levelTick = 0, lastRender = 0, lastMode = null, camMoving = false;
 // Something on screen is moving: draw at full rate. Otherwise 30 fps.
 const isActive = () => !!bench || (!!entrance && !entrance.t0 && perf.texturesFrame > 0) || pointers.size > 0 || !!dragging || camMoving || !!snapAnim || S.listening === "connecting" ||
@@ -1241,7 +1259,7 @@ function frame(now) {
       if (!reduced) entrance = { t0: 0, yaw: cam.tYaw - 0.38, lift: Math.min(28 * DEG, cam.tLift + 9 * DEG), zoom: Math.min(1.25, cam.tZoom * 1.22) };
     }
     // a few full-rate frames after the warm-up, then the move
-    if (entrance && !entrance.t0 && ((perf.warmFrame && perf.frames > perf.warmFrame + 6) || now - t0Script > 6000)) { entrance.t0 = now; act("opening move"); }
+    if (entrance && !entrance.t0 && revealed && ((perf.warmFrame && perf.frames > perf.warmFrame + 6) || now - t0Script > 6000)) { entrance.t0 = now; act("opening move"); }
     if (entrance && (pointers.size || dragging || (entrance.t0 && now - entrance.t0 >= 2400))) entrance = null; // a touch takes over at once
     applyInput(now);
     if (dragging) perf.touchTime += dt;
@@ -1338,7 +1356,7 @@ function frame(now) {
       const t = performance.now(); three.renderer.compile(three.scene, three.camera); warmRender(); perf.compiled = performance.now() - t;
       perf.warmFrame = perf.frames;
     }
-    if (!perf.firstFrame) { perf.firstIndex = perf.frames; perf.firstFrame = now; perf.firstDone = performance.now(); $("veil").classList.add("gone"); setTimeout(() => { $("veil").hidden = true; }, 1000); send({ t: "ready", v: 1 }); }
+    if (!perf.firstFrame) { perf.firstIndex = perf.frames; perf.firstFrame = now; perf.firstDone = performance.now(); revealRoom(); send({ t: "ready", v: 1 }); }
 
     if (guides.visible || labelsShown) { // labels are written only while they show (or once to hide them)
       labelsShown = guides.visible;
@@ -1415,6 +1433,7 @@ function moveSourceTo(x, y, planeY) {
 function bindInput() {
   const gl = $("gl");
   gl.addEventListener("pointerdown", (e) => {
+    revealRoom(true); // a touch skips the starting animation
     try { gl.setPointerCapture(e.pointerId); } catch (err) { /* pointer already gone */ }
     glRect = gl.getBoundingClientRect(); // measured once per touch, not on every move
     const [x, y] = local(e);
@@ -1494,6 +1513,7 @@ function roomRestored() {
 function showStill() {
   $("scene").classList.add("still");
   const veil = $("veil"); veil.classList.add("gone"); veil.hidden = true;
+  $("app").classList.remove("intro", "intro-run"); revealed = revealed || performance.now(); // controls stay usable
   $("fallback").hidden = false;
 }
 $("gl").addEventListener("webglcontextlost", roomLost);

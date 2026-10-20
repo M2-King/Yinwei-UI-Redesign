@@ -147,10 +147,9 @@ function render() {
 
   const right = $("right");
   const progress = S.progress && !isLost ? S.progress : null;
+  once("connect", [progress, S.laptop, S.source, S.opens], () => drawConnect(progress));
   once("right", [S.listening, S.live, isLost, noApp, S.laptop, S.source, opens, progress], () => {
-    if (progress) {
-      right.innerHTML = progressHtml(progress);
-    } else if (listening) {
+    if (listening) {
       right.innerHTML = `<div class="vol">${ms("volume_up")}<input id="vol" type="range" min="0" max="1" step="0.01" value="${S.volume}" aria-label="Volume on this iPad"></div><button class="round" id="airplay" type="button" aria-label="Choose where this iPad plays">${ms("airplay")}</button>`;
       const vol = $("vol");
       const paint = () => vol.style.setProperty("--p", `${vol.value * 100}%`);
@@ -174,7 +173,7 @@ function render() {
     } else if (S.listening === "connecting") {
       right.innerHTML = `<div class="listen-cta"><button class="cta" type="button" disabled><span class="spin"></span>${S.live ? "Connecting" : "Starting on laptop"}</button><small>${S.live ? "Opening the audio stream…" : opens ? `Opening ${esc(opens)} on ${esc(S.laptop)}…` : `Playing ${esc(S.source)} on ${esc(S.laptop)}…`}</small></div>`;
     } else {
-      right.innerHTML = `<div class="listen-cta"><button class="cta" id="go" type="button" ${isLost || noApp ? "disabled" : ""}>${ms("headphones")}${S.live || noApp ? "Listen here" : "Start on laptop and listen"}</button><small>${noApp ? `Waiting for a music app on ${esc(S.laptop)}` : isLost ? `Waiting for ${esc(S.laptop)}` : S.live ? `${esc(cap(S.laptop))} is playing with spatial sound` : opens ? `Opens ${esc(opens)} on ${esc(S.laptop)}` : `${esc(S.source)} is paused on the laptop`}</small></div>`;
+      right.innerHTML = `<div class="listen-cta"><button class="cta" id="go" type="button" ${isLost || noApp || progress ? "disabled" : ""}>${ms("headphones")}${S.live || noApp ? "Listen here" : "Start on laptop and listen"}</button><small>${noApp ? `Waiting for a music app on ${esc(S.laptop)}` : isLost ? `Waiting for ${esc(S.laptop)}` : S.live ? `${esc(cap(S.laptop))} is playing with spatial sound` : opens ? `Opens ${esc(opens)} on ${esc(S.laptop)}` : `${esc(S.source)} is paused on the laptop`}</small></div>`;
       $("go").onclick = startListening;
     }
     reportRects();
@@ -359,22 +358,37 @@ $("seek").addEventListener("change", () => {
   drawScrub();
 });
 
-// Start progress: one line for the current step, and a dot per laptop step.
-const STEPS = ["opening", "pressing", "starting", "audio"];
-function progressHtml(step) {
+// ---------------------------------------------------------------- start progress
+// A window above the bar while the laptop starts: a row per step (done, now,
+// still to come), the seconds so far and a bar. Opening the music app is a step
+// only when it wasn't open ("Already open" otherwise).
+const STEPS = ["asking", "opening", "pressing", "starting", "audio"];
+const CHECK = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 8.5l3 3 6-7" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+let connectRun = null; // { t0, opened, width }
+function drawConnect(step) {
+  const el = $("connect");
+  if (!step) { if (connectRun) { connectRun = null; hideEl(el); } return; }
+  if (!connectRun) connectRun = { t0: performance.now(), opened: false, width: 0 };
+  if (step === "opening") connectRun.opened = true;
   const known = S.source && !/^(the Yinwei player|your music app)$/.test(S.source) ? S.source : "";
-  const app = esc(S.opens || known || "your music app");
-  const text = {
-    asking: `Asking ${esc(S.laptop)}…`,
-    opening: `Opening ${app} on ${esc(S.laptop)}…`,
-    pressing: `Pressing play in ${app}…`,
-    starting: "Starting spatial sound…",
-    audio: "Connecting audio…",
-  }[step];
+  const app = esc(S.opens || known || "your music app"), laptop = esc(S.laptop);
+  const label = { asking: `Reaching ${laptop}`, opening: `Opening ${app}`, pressing: `Pressing play in ${app}`, starting: "Starting spatial sound", audio: "Connecting audio" };
   const at = STEPS.indexOf(step);
-  const dots = STEPS.map((s, i) => `<i class="${i < at ? "done" : i === at ? "now" : ""}"></i>`).join("");
-  return `<div class="listen-cta"><div class="progress glass" role="status" aria-live="polite"><span class="spin" aria-hidden="true"></span><span>${text}</span></div><div class="steps" aria-hidden="true">${dots}</div></div>`;
+  const rows = STEPS.map((s, i) => {
+    const skipped = s === "opening" && i < at && !connectRun.opened;
+    const state = skipped ? "skip" : i < at ? "done" : i === at ? "now" : "next";
+    const icon = state === "done" ? CHECK : state === "now" ? '<span class="spin"></span>' : '<i class="dot"></i>';
+    return `<li class="${state}">${icon}<span>${label[s]}${skipped ? "<small>Already open</small>" : ""}</span></li>`;
+  }).join("");
+  const width = Math.round(((at + 0.5) / STEPS.length) * 100);
+  el.innerHTML = `<div class="connect-head"><b>Connecting to ${laptop}</b><span id="connect-time"></span></div><ol>${rows}</ol><div class="connect-bar"><i style="width:${connectRun.width}%"></i></div>`;
+  requestAnimationFrame(() => { const bar = el.querySelector(".connect-bar i"); if (bar) bar.style.width = `${width}%`; });
+  connectRun.width = width;
+  tickConnect();
+  if (!el.classList.contains("open")) showEl(el);
 }
+function tickConnect() { if (connectRun && $("connect-time")) setText($("connect-time"), `${Math.floor((performance.now() - connectRun.t0) / 1000)} s`); }
+setInterval(tickConnect, 500);
 
 // ---------------------------------------------------------------- actions (intents)
 function startListening() {
