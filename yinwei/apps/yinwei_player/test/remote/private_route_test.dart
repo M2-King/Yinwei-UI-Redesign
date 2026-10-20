@@ -352,6 +352,8 @@ void main() {
       'YINWEI_TAILSCALE_ENABLED': '1',
       'YINWEI_TAILSCALE_OWNER_LOGIN': ownerLogin,
       'YINWEI_TAILSCALE_IPAD_NODE_ID': nodeId,
+      'YINWEI_TAILSCALE_EXE':
+          File('${Directory.systemTemp.path}/tailscale-test').absolute.path,
       'LOCALAPPDATA': Directory.current.absolute.path
     };
     final normal = PrivateRouteHost.fromEnvironment(env, f.auth)!;
