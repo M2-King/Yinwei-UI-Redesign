@@ -9,6 +9,7 @@ import 'package:yinwei_player/bridge/app_audio_route.dart';
 import 'package:yinwei_player/bridge/engine_bootstrap.dart';
 import 'package:yinwei_player/bridge/live_source_follow.dart';
 import 'package:yinwei_player/bridge/live_transfer.dart';
+import 'package:yinwei_player/bridge/wet_output_policy.dart';
 import 'package:yinwei_player/bridge/system_media.dart';
 import 'package:yinwei_player/models/spatial_params.dart';
 import 'package:yinwei_player/runtime/spatial_runtime_adapter.dart';
@@ -302,15 +303,34 @@ class _PlayerScreenState extends State<PlayerScreen> {
     final routeGen = _routeGen;
     _live.markStarting();
 
-    var splitNote = '同一输出上仍可能干+湿叠听';
-    final split = _split ?? await _audioRoute.detectSplit();
+    // Honor the picker: empty = Windows default (Nahimic-compatible).
+    // Never copy detectSplit()'s Sony/WH- name onto wet output.
+    _live.refreshDevices();
+    _live.setOutputDevice(
+      WetOutputPolicy.wetNameAfterDetect(
+        selectedOutput: _live.selectedOutput,
+        detectedHeadphonesName: _split?.headphonesName,
+      ),
+    );
+    final detected = _split ?? await _audioRoute.detectSplit();
+    final plan = WetOutputPolicy.plan(
+      selectedOutput: _live.selectedOutput,
+      detectedHeadphonesName: detected?.headphonesName,
+      detectedSpeakersName: detected?.speakersName,
+      splitDetected: detected != null,
+      outputDevices: _live.outputDevices,
+      defaultDeviceName: _live.defaultOutputName,
+    );
+    var splitNote = WetOutputPolicy.transferNote(plan);
+    final split = plan.splitRoute ? detected : null;
     final holdWet =
         LiveSourceFollow.holdWetUntilPinned(splitDetected: split != null);
     var holdArmed = false;
     if (split != null) {
       _split = split;
-      _live.setOutputDevice(split.headphonesName);
       holdArmed = holdWet && _live.setOutputHold(true);
+    } else {
+      _split = null;
     }
     if (split != null && !holdArmed) {
       // Old DLL without hold: pin first so wet never opens on shared headphones.
@@ -318,7 +338,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
       await _live.start(processId: pid, params: params, array: array);
     } else {
       // Capture may start during the pin, but wet stays silent until speakers
-      // are muted (hold). No-split overlay-preview starts immediately.
+      // are muted (hold). Default-device / Nahimic path starts immediately.
       final startFuture = _live.start(processId: pid, params: params, array: array);
       if (split != null) {
         splitNote = await _routeSplit(pid, routeGen);
@@ -375,13 +395,52 @@ class _PlayerScreenState extends State<PlayerScreen> {
     int gen, {
     required bool keepSpeakerMute,
   }) async {
-    var splitNote = '同一输出上仍可能干+湿叠听';
-    if (gen != _routeGen) return splitNote;
+    if (gen != _routeGen) {
+      return WetOutputPolicy.transferNote(
+        WetOutputPolicy.plan(
+          selectedOutput: _live.selectedOutput,
+          splitDetected: false,
+          outputDevices: _live.outputDevices,
+          defaultDeviceName: _live.defaultOutputName,
+        ),
+      );
+    }
     final split = _split ?? await _audioRoute.detectSplit();
-    if (gen != _routeGen) return splitNote;
-    if (split == null) return splitNote;
+    if (gen != _routeGen) {
+      return WetOutputPolicy.transferNote(
+        WetOutputPolicy.plan(
+          selectedOutput: _live.selectedOutput,
+          splitDetected: false,
+          outputDevices: _live.outputDevices,
+          defaultDeviceName: _live.defaultOutputName,
+        ),
+      );
+    }
+    if (split == null) {
+      return WetOutputPolicy.transferNote(
+        WetOutputPolicy.plan(
+          selectedOutput: _live.selectedOutput,
+          splitDetected: false,
+          outputDevices: _live.outputDevices,
+          defaultDeviceName: _live.defaultOutputName,
+        ),
+      );
+    }
+    final plan = WetOutputPolicy.plan(
+      selectedOutput: _live.selectedOutput,
+      detectedHeadphonesName: split.headphonesName,
+      detectedSpeakersName: split.speakersName,
+      splitDetected: true,
+      outputDevices: _live.outputDevices,
+      defaultDeviceName: _live.defaultOutputName,
+    );
+    var splitNote = WetOutputPolicy.transferNote(plan);
+    if (!plan.splitRoute) {
+      _split = null;
+      return splitNote;
+    }
     _split = split;
-    _live.setOutputDevice(split.headphonesName);
+    _live.setOutputDevice(plan.wetDeviceName);
     if (gen != _routeGen) return splitNote;
     final routed = await _audioRoute.routeToSpeakers(
       rootPid: pid,
@@ -391,7 +450,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     );
     if (gen != _routeGen) return splitNote;
     if (routed) {
-      splitNote = '汽水→扬声器（已静音），湿声→${split.headphonesName}';
+      splitNote = WetOutputPolicy.transferNote(plan);
     }
     return splitNote;
   }
