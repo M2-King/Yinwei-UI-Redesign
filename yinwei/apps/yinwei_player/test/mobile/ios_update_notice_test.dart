@@ -118,6 +118,57 @@ void main() {
     expect(opened, hasLength(1));
     expect(find.byKey(const Key('ios-update-banner')), findsNothing);
   });
+
+  testWidgets('Check for updates always says what it found', (tester) async {
+    late BuildContext ctx;
+    await tester
+        .pumpWidget(MaterialApp(home: Scaffold(body: Builder(builder: (c) {
+      ctx = c;
+      return const SizedBox.expand();
+    }))));
+    Future<String> report(IosUpdateNotice notice) async {
+      await notice.checkAndReport(ctx);
+      await tester.pumpAndSettle();
+      final banner = find.byKey(const Key('ios-update-banner'));
+      if (banner.evaluate().isNotEmpty) {
+        ScaffoldMessenger.of(ctx).hideCurrentMaterialBanner();
+        await tester.pumpAndSettle();
+        return 'banner';
+      }
+      final text = tester
+          .widget<Text>(find.descendant(
+              of: find.byKey(const Key('ios-update-result')),
+              matching: find.byType(Text)))
+          .data!;
+      ScaffoldMessenger.of(ctx).hideCurrentSnackBar();
+      await tester.pumpAndSettle();
+      return text;
+    }
+
+    final ci = InstalledApp.currentIos(build: 50);
+    expect(
+        await report(IosUpdateNotice(
+            installed: ci,
+            service: FakeService((_) async => offer(release(build: 51))))),
+        'banner');
+    expect(
+        await report(IosUpdateNotice(
+            installed: ci,
+            service: FakeService((_) async => const UpdateDecision(
+                action: UpdateAction.none, reason: 'current')))),
+        'You have the newest build (50).');
+    expect(
+        await report(IosUpdateNotice(
+            installed: ci,
+            service:
+                FakeService((_) async => throw const HttpExceptionStub()))),
+        contains('Could not reach the update server'));
+    expect(
+        await report(IosUpdateNotice(
+            installed: InstalledApp.currentIos(build: 0),
+            service: FakeService((_) async => offer(release())))),
+        contains('local build'));
+  });
 }
 
 class HttpExceptionStub implements Exception {

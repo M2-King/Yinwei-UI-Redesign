@@ -77,6 +77,7 @@ class MobilePlayerScreen extends StatefulWidget {
 
 class _MobilePlayerScreenState extends State<MobilePlayerScreen> {
   SphericalV1? _lastLivePose;
+  IosUpdateNotice? _updateNotice;
 
   @override
   void initState() {
@@ -92,7 +93,7 @@ class _MobilePlayerScreenState extends State<MobilePlayerScreen> {
       'MobilePlayerScreen must not require Windows-only services',
     );
     // iPad: a newer published build is offered once a session.
-    final notice = widget.updateNotice ??
+    final notice = _updateNotice = widget.updateNotice ??
         (defaultTargetPlatform == TargetPlatform.iOS
             ? IosUpdateNotice()
             : null);
@@ -162,6 +163,11 @@ class _MobilePlayerScreenState extends State<MobilePlayerScreen> {
                         defaultTargetPlatform == TargetPlatform.iOS
                             ? () => openLaptopListen(context, c)
                             : null,
+                    // The automatic check runs once a session; this one
+                    // always reports what it found.
+                    onCheckForUpdates: _updateNotice == null
+                        ? null
+                        : () => _updateNotice!.checkAndReport(context),
                   ),
                   const SizedBox(height: 8),
                   IosRuntimeStatusBanner(

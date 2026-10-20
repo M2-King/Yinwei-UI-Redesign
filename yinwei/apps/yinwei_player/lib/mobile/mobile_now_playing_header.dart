@@ -12,6 +12,7 @@ class MobileNowPlayingHeader extends StatelessWidget {
     this.loadError,
     this.androidCaptureOnly = false,
     this.onListenToLaptop,
+    this.onCheckForUpdates,
   });
 
   final EngineController controller;
@@ -22,6 +23,9 @@ class MobileNowPlayingHeader extends StatelessWidget {
 
   /// Opens "Listen to laptop" (iPad only).
   final VoidCallback? onListenToLaptop;
+
+  /// iPad: the manual "Check for updates" (next to Listen to laptop).
+  final VoidCallback? onCheckForUpdates;
 
   @override
   Widget build(BuildContext context) {
@@ -50,6 +54,13 @@ class MobileNowPlayingHeader extends StatelessWidget {
                 onPressed: onListenToLaptop,
                 icon: const Icon(Icons.laptop_mac_rounded, size: 18),
                 label: const Text('Listen to laptop'),
+              ),
+            if (onCheckForUpdates != null)
+              IconButton(
+                key: const Key('yinwei-check-for-updates'),
+                tooltip: 'Check for updates',
+                onPressed: onCheckForUpdates,
+                icon: const Icon(Icons.system_update_alt, size: 20),
               ),
           ],
         ),
