@@ -11,9 +11,11 @@ import 'package:yinwei_player/remote/laptop_listen_controller.dart';
 /// session and survives route changes and interruptions), plus the lock
 /// screen and Control Center through `dev.yinwei/now_playing`.
 class IosLaptopListenOutput implements LaptopListenOutput {
-  IosLaptopListenOutput({MethodChannel? player, MethodChannel? nowPlaying})
+  IosLaptopListenOutput(
+      {MethodChannel? player, MethodChannel? audio, MethodChannel? nowPlaying})
       : _player =
             player ?? const MethodChannel(ReplayKitAudioProbe.channelName),
+        _audio = audio ?? const MethodChannel(audioChannel),
         _nowPlaying = nowPlaying ?? const MethodChannel(nowPlayingChannel) {
     _nowPlaying.setMethodCallHandler((call) async {
       final action = call.arguments;
@@ -23,7 +25,12 @@ class IosLaptopListenOutput implements LaptopListenOutput {
   }
 
   static const nowPlayingChannel = 'dev.yinwei/now_playing';
-  final MethodChannel _player, _nowPlaying;
+
+  /// Audio packets only, handled on a background queue on the iPad: about
+  /// 100 a second, they must not wait behind the main thread (the room's
+  /// WebView, the UI).
+  static const audioChannel = 'dev.yinwei/remote_return_audio';
+  final MethodChannel _player, _audio, _nowPlaying;
   void Function(String action)? _handler;
   bool _prepared = false;
   double _volume = 1;
@@ -111,7 +118,7 @@ class IosLaptopListenOutput implements LaptopListenOutput {
   Future<bool> write(Uint8List packet) async {
     final generation = _meterGeneration;
     try {
-      final result = await _player.invokeMapMethod<String, dynamic>(
+      final result = await _audio.invokeMapMethod<String, dynamic>(
           'writeRemoteReturn', packet);
       final accepted = result?['accepted'] == true;
       if (accepted && _prepared && generation == _meterGeneration) {

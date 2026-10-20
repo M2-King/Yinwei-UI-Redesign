@@ -157,6 +157,7 @@ void main() {
 
   group('native P3 additions', () {
     const player = MethodChannel(ReplayKitAudioProbe.channelName);
+    const audio = MethodChannel(IosLaptopListenOutput.audioChannel);
     final messenger =
         TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
     late IosLaptopListenOutput output;
@@ -165,10 +166,12 @@ void main() {
     setUp(() async {
       bridge.dispose();
       nativeCalls = [];
-      messenger.setMockMethodCallHandler(player, (call) async {
-        nativeCalls.add(call);
-        return call.method == 'writeRemoteReturn' ? {'accepted': true} : null;
-      });
+      for (final channel in [player, audio]) {
+        messenger.setMockMethodCallHandler(channel, (call) async {
+          nativeCalls.add(call);
+          return call.method == 'writeRemoteReturn' ? {'accepted': true} : null;
+        });
+      }
       output = IosLaptopListenOutput();
       session = FakeSession(output: output)
         ..snapshot = snapshot()
@@ -182,6 +185,7 @@ void main() {
       bridge.dispose();
       await output.stop();
       messenger.setMockMethodCallHandler(player, null);
+      messenger.setMockMethodCallHandler(audio, null);
     });
 
     testWidgets(

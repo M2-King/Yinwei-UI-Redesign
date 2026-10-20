@@ -19,6 +19,7 @@ import '../fixtures/listen_room_audio.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   const player = MethodChannel(ReplayKitAudioProbe.channelName);
+  const audio = MethodChannel(IosLaptopListenOutput.audioChannel);
   const nowPlaying = MethodChannel(IosLaptopListenOutput.nowPlayingChannel);
   final calls = <MethodCall>[];
   final messenger =
@@ -26,7 +27,7 @@ void main() {
 
   setUp(() {
     calls.clear();
-    for (final channel in [player, nowPlaying]) {
+    for (final channel in [player, audio, nowPlaying]) {
       messenger.setMockMethodCallHandler(channel, (call) async {
         calls.add(call);
         return switch (call.method) {
@@ -39,7 +40,27 @@ void main() {
   });
   tearDown(() {
     messenger.setMockMethodCallHandler(player, null);
+    messenger.setMockMethodCallHandler(audio, null);
     messenger.setMockMethodCallHandler(nowPlaying, null);
+  });
+
+  test('audio packets reach the iPad player off the main thread', () {
+    final swift =
+        File('ios/Runner/YinweiReplayKitProbe.swift').readAsStringSync();
+    expect(
+        swift,
+        contains(
+            'static let audioName = "${IosLaptopListenOutput.audioChannel}"'));
+    expect(swift, contains('taskQueue: messenger.makeBackgroundTaskQueue?()'));
+    final player = swift.substring(
+        swift.indexOf('private final class YinweiRemoteReturnPlayer'),
+        swift.indexOf('final class YinweiListenRoomRoutePickerFactory'));
+    expect(
+        player, contains('DispatchQueue(label: "dev.yinwei.remote-return")'));
+    expect(player, isNot(contains('DispatchQueue.main')),
+        reason: 'buffer bookkeeping stays on the audio queue');
+    expect(player, isNot(contains('queue: .main')),
+        reason: 'interruptions and route changes too');
   });
 
   test('uses the argument names the Swift player and lock screen read',
@@ -205,14 +226,14 @@ void main() {
     final output = IosLaptopListenOutput();
     await output.prepare();
     messenger.setMockMethodCallHandler(
-        player, (call) async => {'accepted': false});
+        audio, (call) async => {'accepted': false});
     for (var i = 0; i < 4; ++i) {
       expect(await output.write(listenRoomPacket([1, 1])), isFalse);
     }
     expect(output.level.value, 0);
     for (final stop in [false, true]) {
       final gate = Completer<void>();
-      messenger.setMockMethodCallHandler(player, (call) async {
+      messenger.setMockMethodCallHandler(audio, (call) async {
         if (call.method == 'writeRemoteReturn') await gate.future;
         return {'accepted': true};
       });

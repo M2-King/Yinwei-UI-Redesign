@@ -9,6 +9,8 @@ import UIKit
 /// Network authorization stays in the host; media is never written to storage.
 enum YinweiReplayKitProbeChannel {
   static let name = "dev.yinwei/replaykit_audio_probe"
+  /// Audio packets from the laptop, on a background queue (not the main thread).
+  static let audioName = "dev.yinwei/remote_return_audio"
   static let appGroup = YinweiCaptureGroup.current
   static let statusKey = "yinwei.replaykit.numeric-status.v1"
   static let extensionBundleIdentifier: String? = {
@@ -31,6 +33,15 @@ enum YinweiReplayKitProbeChannel {
     let controller = YinweiReplayKitProbeController()
     channel.setMethodCallHandler { call, result in
       controller.handle(call: call, result: result)
+    }
+    // About 100 packets a second: a busy main thread (the room's WebView, the
+    // UI) must not hold them up, so they get a background queue of their own.
+    let audioChannel = FlutterMethodChannel(
+      name: audioName, binaryMessenger: messenger,
+      codec: FlutterStandardMethodCodec.sharedInstance(),
+      taskQueue: messenger.makeBackgroundTaskQueue?())
+    audioChannel.setMethodCallHandler { call, result in
+      controller.handleAudio(call: call, result: result)
     }
     let nowPlayingChannel = FlutterMethodChannel(
       name: YinweiNowPlayingController.channelName, binaryMessenger: messenger)
@@ -81,14 +92,7 @@ final class YinweiReplayKitProbeController {
       catch { result(FlutterError(code: "return_output_failed",
         message: "Could not open iPad audio output", details: nil)) }
     case "writeRemoteReturn":
-      guard remoteReturn.isReady else {
-        result(FlutterError(code: "return_output_interrupted",
-          message: "iPad audio output interrupted. Start again explicitly.", details: nil))
-        return
-      }
-      if let typed = call.arguments as? FlutterStandardTypedData {
-        result(["accepted": remoteReturn.accept(typed.data)])
-      } else { result(["accepted": false]) }
+      write(call: call, result: result)
     case "getRemoteReturnStatus":
       result(remoteReturn.status)
     case "setRemoteReturnVolume":
@@ -118,6 +122,27 @@ final class YinweiReplayKitProbeController {
     default:
       result(FlutterMethodNotImplemented)
     }
+  }
+
+  /// The background audio channel: packets only.
+  func handleAudio(call: FlutterMethodCall, result: @escaping FlutterResult) {
+    if call.method == "writeRemoteReturn" {
+      write(call: call, result: result)
+    } else {
+      result(FlutterMethodNotImplemented)
+    }
+  }
+
+  private func write(call: FlutterMethodCall, result: @escaping FlutterResult) {
+    guard let typed = call.arguments as? FlutterStandardTypedData else {
+      result(["accepted": false]); return
+    }
+    guard let accepted = remoteReturn.write(typed.data) else {
+      result(FlutterError(code: "return_output_interrupted",
+        message: "iPad audio output interrupted. Start again explicitly.", details: nil))
+      return
+    }
+    result(["accepted": accepted])
   }
 
   private func availability() -> [String: Any] {
@@ -241,6 +266,16 @@ final class YinweiReplayKitProbeController {
 private final class YinweiRemoteReturnPlayer {
   private let engine = AVAudioEngine()
   private let player = AVAudioPlayerNode()
+  // Everything below runs on this serial queue, never the main thread: the
+  // room's WebView and the UI keep the main thread busy, and audio waiting
+  // on it ran dry ("stuck-stuck"). Packets arrive on a background channel.
+  private let audio = DispatchQueue(label: "dev.yinwei.remote-return")
+  private lazy var observerQueue: OperationQueue = {
+    let queue = OperationQueue()
+    queue.underlyingQueue = self.audio
+    queue.maxConcurrentOperationCount = 1
+    return queue
+  }()
   private var format: AVAudioFormat?
   // The return path crosses the internet twice (iPad → laptop → iPad), so
   // packets arrive in bursts. Buffer by time and grow the start threshold
@@ -270,16 +305,27 @@ private final class YinweiRemoteReturnPlayer {
   private var listenMode = false
   private var listenVolume: Float = 1
   private var interrupted = false
-  var isReady: Bool { prepared && engine.isRunning }
-  var status: [String: Any] {
+  // Thread-safe entry points (callers are the main and audio channels).
+  var isReady: Bool { audio.sync { ready } }
+  var status: [String: Any] { audio.sync { currentStatus } }
+  func prepare(listen: Bool = false) throws { try audio.sync { try _prepare(listen: listen) } }
+  func setVolume(_ volume: Double) { audio.sync { _setVolume(volume) } }
+  func newStream(sampleRate: Double) { audio.sync { _newStream(sampleRate: sampleRate) } }
+  func reset() { audio.sync { _reset() } }
+  func stop() { audio.sync { _stop() } }
+  /// A packet from the laptop: nil while the output isn't running.
+  func write(_ data: Data) -> Bool? { audio.sync { ready ? _accept(data) : nil } }
+
+  private var ready: Bool { prepared && engine.isRunning }
+  private var currentStatus: [String: Any] {
     ["received": counters.received, "accepted": counters.accepted,
-     "played": counters.played, "queued": queued, "ready": isReady,
+     "played": counters.played, "queued": queued, "ready": ready,
      "underruns": underruns, "bufferMs": targetFrames / 48,
      "queuedMs": queuedFrames / 48, "interrupted": interrupted]
   }
 
-  func prepare(listen: Bool = false) throws {
-    stop()
+  private func _prepare(listen: Bool) throws {
+    _stop()
     listenMode = listen
     // A previous listening gain must never carry into the capture route.
     player.volume = listen ? listenVolume : 1
@@ -300,25 +346,25 @@ private final class YinweiRemoteReturnPlayer {
     engine.connect(player, to: engine.mainMixerNode, format: format)
     prepared = true
     do { engine.prepare(); try engine.start() }
-    catch { stop(); throw error }
+    catch { _stop(); throw error }
     // Do not silently restart a changed/interrupted output route with old PCM.
     // Listen mode drops the queued PCM and plays the live stream on.
     let center = NotificationCenter.default
     observers = [
       center.addObserver(forName: AVAudioSession.interruptionNotification,
-        object: nil, queue: .main) { [weak self] note in
+        object: nil, queue: observerQueue) { [weak self] note in
         self?.interruption(note)
       },
       center.addObserver(forName: .AVAudioEngineConfigurationChange,
-        object: engine, queue: .main) { [weak self] _ in
+        object: engine, queue: observerQueue) { [weak self] _ in
         guard let self else { return }
-        if !self.listenMode { self.stop() } else if !self.interrupted { self.restart() }
+        if !self.listenMode { self._stop() } else if !self.interrupted { self.restart() }
       },
     ]
   }
 
   /// Local gain only; the capture route ignores this channel method.
-  func setVolume(_ volume: Double) {
+  private func _setVolume(_ volume: Double) {
     guard listenMode, volume.isFinite else { return }
     listenVolume = Float(min(1, max(0, volume)))
     player.volume = listenVolume
@@ -328,40 +374,40 @@ private final class YinweiRemoteReturnPlayer {
     guard let raw = note.userInfo?[AVAudioSessionInterruptionTypeKey] as? UInt,
           let type = AVAudioSession.InterruptionType(rawValue: raw) else { return }
     guard listenMode else {
-      if type == .began { stop() }
+      if type == .began { _stop() }
       return
     }
     switch type {
     case .began:
       // A call, Siri or another app's audio: wait for the end.
       interrupted = true
-      reset()
+      _reset()
     case .ended:
       let options = AVAudioSession.InterruptionOptions(
         rawValue: note.userInfo?[AVAudioSessionInterruptionOptionKey] as? UInt ?? 0)
       guard options.contains(.shouldResume),
             (try? AVAudioSession.sharedInstance().setActive(true)) != nil
-      else { stop(); return }
+      else { _stop(); return }
       interrupted = false
       restart()
     @unknown default:
-      stop()
+      _stop()
     }
   }
 
   /// Listen mode: play on from the current route (AirPods connected or
   /// removed, or an interruption ended) without giving up the session.
   private func restart() {
-    reset()
+    _reset()
     guard prepared else { return }
     engine.prepare()
-    do { try engine.start() } catch { stop() }
+    do { try engine.start() } catch { _stop() }
   }
 
   /// Listen mode: the laptop started a new stream (Live started or stopped,
   /// a seek). Drop queued audio and take its sample rate.
-  func newStream(sampleRate: Double) {
-    reset()
+  private func _newStream(sampleRate: Double) {
+    _reset()
     epoch = nil
     guard prepared, sampleRate >= 8_000, sampleRate <= 192_000,
           let current = format, current.sampleRate != sampleRate,
@@ -372,9 +418,9 @@ private final class YinweiRemoteReturnPlayer {
     engine.connect(player, to: engine.mainMixerNode, format: next)
   }
 
-  func accept(_ data: Data) -> Bool {
+  private func _accept(_ data: Data) -> Bool {
     counters.receive()
-    guard isReady, data.count >= 64, data.count <= 4152,
+    guard ready, data.count >= 64, data.count <= 4152,
           let format else { return false }
     func u32(_ offset: Int) -> UInt32 {
       data.withUnsafeBytes { $0.loadUnaligned(fromByteOffset: offset, as: UInt32.self).littleEndian }
@@ -414,7 +460,7 @@ private final class YinweiRemoteReturnPlayer {
     queued += 1
     queuedFrames += frames
     player.scheduleBuffer(buffer, completionCallbackType: .dataPlayedBack) { [weak self] _ in
-      DispatchQueue.main.async {
+      self?.audio.async { [weak self] in
         guard let self, self.counters.generation == token else { return }
         self.counters.complete(token: token)
         self.queued = max(0, self.queued - 1)
@@ -434,7 +480,7 @@ private final class YinweiRemoteReturnPlayer {
     return true
   }
 
-  func reset() {
+  private func _reset() {
     counters.invalidate()
     queued = 0; queuedFrames = 0
     guard prepared else { return }
@@ -442,11 +488,11 @@ private final class YinweiRemoteReturnPlayer {
     if listenMode { player.volume = listenVolume }
   }
 
-  func stop() {
+  private func _stop() {
     for observer in observers { NotificationCenter.default.removeObserver(observer) }
     observers.removeAll()
     listenMode = false; interrupted = false
-    reset(); epoch = nil
+    _reset(); epoch = nil
     guard prepared else { return }
     engine.stop(); engine.disconnectNodeOutput(player); engine.detach(player)
     format = nil; prepared = false
