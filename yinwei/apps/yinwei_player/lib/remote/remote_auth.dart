@@ -93,11 +93,14 @@ class RemoteAccount {
 }
 
 class RemoteSession {
-  RemoteSession(this.account, this.deviceId, this.csrf, this.expires);
+  RemoteSession(this.account, this.deviceId, this.csrf, this.expires,
+      {this.privateRoute = false, this.pairId});
   final RemoteAccount account;
   final String deviceId;
   final String csrf;
   final DateTime expires;
+  final bool privateRoute;
+  String? pairId;
 }
 
 class _Ticket {
@@ -188,6 +191,35 @@ class RemoteAuth {
 
   static String _tokenHash(String token) =>
       crypto.sha256.convert(utf8.encode(token)).toString();
+
+  /// Only a verified pairing may call this. It preserves the logical device
+  /// across routes, so leases and command IDs keep their existing authority.
+  ({String token, RemoteSession session}) pairedSession(
+      String device, String pairId,
+      {required bool privateRoute}) {
+    _purge();
+    if (_closed || !account.enabled) {
+      throw const RemoteFailure('pairing_unavailable', httpStatus: 401);
+    }
+    final existing = _sessions.values
+        .where((s) =>
+            s.deviceId == device &&
+            s.pairId == pairId &&
+            s.privateRoute == privateRoute)
+        .toList();
+    for (final session in existing) {
+      revoke(session);
+    }
+    if (_sessions.length >= 8) {
+      throw const RemoteFailure('pairing_unavailable', httpStatus: 401);
+    }
+    final token = remoteSecret();
+    final session = RemoteSession(
+        account, device, remoteSecret(), _now().add(const Duration(hours: 8)),
+        privateRoute: privateRoute, pairId: pairId);
+    _sessions[_tokenHash(token)] = session;
+    return (token: token, session: session);
+  }
 
   RemoteSession? authenticate(String? token) {
     _purge();

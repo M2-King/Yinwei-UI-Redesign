@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'package:yinwei_player/remote/private_route.dart';
 
 import 'package:desktop_drop/desktop_drop.dart';
 import 'package:file_picker/file_picker.dart';
@@ -1783,7 +1784,15 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
           ? GuestService(GuestStore(Directory(
               '${File(path).parent.path}${Platform.pathSeparator}guests')))
           : null;
+      PrivateRouteHost? privateRoute;
+      try {
+        privateRoute =
+            PrivateRouteHost.fromEnvironment(Platform.environment, auth);
+      } catch (_) {
+        debugPrint('[Remote] private route disabled: invalid configuration');
+      }
       final gateway = RemoteGateway(
+        privateRoute: privateRoute,
         guests: guests,
         auth: auth,
         coordinator: _appSession,

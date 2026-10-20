@@ -8,6 +8,7 @@ import 'package:yinwei_player/remote/remote_guest.dart';
 import 'package:yinwei_player/remote/listen_stream_source.dart';
 import 'package:yinwei_player/remote/native_output_tap.dart';
 import 'package:yinwei_player/remote/remote_protocol.dart';
+import 'package:yinwei_player/remote/private_route.dart';
 import 'package:yinwei_player/remote/remote_transform.dart';
 import 'package:yinwei_player/remote/remote_transform_socket.dart';
 import 'package:yinwei_player/state/app_session_coordinator.dart';
@@ -29,6 +30,7 @@ class RemoteGateway {
       bool? allowArrayFileAudio,
       this.transformAdapter,
       this.createOpusEncoder,
+      this.privateRoute,
       this.guests})
       : allowArrayFileAudio = allowArrayFileAudio ??
             Platform.environment['YINWEI_ARRAY_FILE_AUDIO_VERIFIED'] == '1';
@@ -54,6 +56,10 @@ class RemoteGateway {
   final RemoteOutputSource? liveAudioTap;
   final Uri? entryOrigin;
   final RemoteAuth auth;
+  final PrivateRouteHost? privateRoute;
+  final _privateSockets = <WebSocket, ({String address, String pairId})>{};
+  final _checkingPrivate = <WebSocket>{};
+  Timer? _privateChecks;
   final String hostToken = remoteSecret(32);
   final AppSessionCoordinator coordinator;
   final RemoteAssetLoader loadAsset;
@@ -62,6 +68,7 @@ class RemoteGateway {
   bool _secure = false;
   int _originEpoch = 0;
   int _active = 0;
+  int _privateActive = 0;
   int _upgrades = 0;
   final _prelogin = <String, DateTime>{};
   final _sockets = <WebSocket, RemoteSession>{};
@@ -118,13 +125,29 @@ class RemoteGateway {
     coordinator.browserLiveAudioAvailable = liveAudioTap != null;
     _server!.listen((request) => unawaited(_handle(request)),
         onError: (Object _) {});
+    if (privateRoute != null) {
+      try {
+        await privateRoute!.start((request) => _handle(request, private: true));
+        _privateChecks = Timer.periodic(const Duration(seconds: 2), (_) {
+          for (final entry in _privateSockets.entries.toList()) {
+            if (!_checkingPrivate.add(entry.key)) continue;
+            unawaited(_checkPrivateSocket(entry.key, entry.value));
+          }
+        });
+      } catch (_) {
+        // Invalid private configuration/storage never disables public access.
+        await privateRoute!.close();
+      }
+    }
     _audioTimer =
         Timer.periodic(const Duration(milliseconds: 10), (_) => _pumpAudio());
     _events = Timer.periodic(const Duration(milliseconds: 250), (_) {
       if (_sockets.isEmpty) return;
       for (final entry in _sockets.entries.toList()) {
         if (!auth.valid(entry.value)) {
-          coordinator.releaseDevice(entry.value.deviceId);
+          if (!auth.sessions.any((s) => s.deviceId == entry.value.deviceId)) {
+            coordinator.releaseDevice(entry.value.deviceId);
+          }
           unawaited(entry.key.close(1008, 'session_revoked'));
           _sockets.remove(entry.key);
         } else if (!_pendingAck.containsKey(entry.key)) {
@@ -159,19 +182,26 @@ class RemoteGateway {
     _origin = next;
     _prelogin.clear();
     _captureProbeReports.clear();
-    for (final session in auth.sessions) {
-      coordinator.releaseDevice(session.deviceId);
+    for (final session in auth.sessions.where((s) => !s.privateRoute)) {
+      if (!auth.sessions
+          .any((s) => s.privateRoute && s.deviceId == session.deviceId)) {
+        coordinator.releaseDevice(session.deviceId);
+      }
       auth.revoke(session);
     }
     for (final socket in _connections.toList()) {
+      if (_privateSockets.containsKey(socket)) continue;
       unawaited(socket.close(1001, 'origin_changed'));
       _forgetSocket(socket);
     }
   }
 
-  void _headers(HttpResponse response) {
-    final websocketOrigin = origin.replace(scheme: _secure ? 'wss' : 'ws');
-    if (_secure) {
+  void _headers(HttpResponse response, {bool private = false}) {
+    final secure = !private && _secure;
+    final requestOrigin = private ? privateRoute?.origin ?? origin : origin;
+    final websocketOrigin =
+        requestOrigin.replace(scheme: secure ? 'wss' : 'ws');
+    if (secure) {
       response.headers.set('Strict-Transport-Security', 'max-age=31536000');
     }
     response.headers
@@ -248,18 +278,73 @@ class RemoteGateway {
     entries.add(now);
   }
 
-  Future<void> _handle(HttpRequest request) async {
+  Map<String, dynamic> _snapshot(RemoteSession? session) => {
+        ...coordinator.snapshot(device: session?.deviceId),
+        if (privateRoute?.descriptor case final descriptor?)
+          'privateRoute': descriptor,
+      };
+
+  Future<void> _checkPrivateSocket(
+      WebSocket socket, ({String address, String pairId}) peer) async {
+    try {
+      await privateRoute!.verifyPeer(peer.address);
+      if (privateRoute!.hasPair(peer.pairId)) return;
+    } catch (_) {
+      /* Fail closed, including a lost LocalAPI connection. */
+    } finally {
+      _checkingPrivate.remove(socket);
+    }
+    unawaited(socket.close(1008, 'private_identity_unavailable'));
+    _forgetSocket(socket);
+  }
+
+  static const _privatePaths = {
+    '/remote/api/private/pair',
+    '/remote/api/private/resume',
+    '/remote/api/session',
+    '/remote/api/media',
+    '/remote/api/control/lease',
+    '/remote/api/commands',
+    '/remote/api/ws-ticket',
+    '/remote/api/auth/signout',
+    '/remote/ws/events',
+    '/remote/ws/audio',
+  };
+
+  bool _canMigrateAudio(RemoteSession session) =>
+      privateRoute?.hasPair(session.pairId) == true &&
+      session.deviceId == _audioSession?.deviceId;
+
+  Future<void> _handle(HttpRequest request, {bool private = false}) async {
     final response = request.response;
-    _headers(response);
-    if (_active >= 16) {
+    _headers(response, private: private);
+    if (private ? _privateActive >= 4 : _active >= 16) {
       await _json(response, {'error': 'host_busy'}, 503);
       return;
     }
-    ++_active;
+    if (private) {
+      ++_privateActive;
+    } else {
+      ++_active;
+    }
     final requestEpoch = _originEpoch;
     try {
+      final requestOrigin = private ? privateRoute?.origin : origin;
+      final cookieName = private ? 'yinwei_private' : _cookieName;
+      if (private) {
+        if (!_privatePaths.contains(request.uri.path)) {
+          throw const RemoteFailure('not_found', httpStatus: 404);
+        }
+        final address = request.connectionInfo?.remoteAddress.address;
+        if (address == null) {
+          throw const RemoteFailure('private_peer_denied', httpStatus: 403);
+        }
+        await privateRoute!.verifyPeer(address);
+      }
       // Do not trust forwarded headers or expose wildcard credentialed CORS.
-      if (request.headers.value(HttpHeaders.hostHeader) != origin.authority ||
+      if (requestOrigin == null ||
+          request.headers.value(HttpHeaders.hostHeader) !=
+              requestOrigin.authority ||
           request.uri.hasQuery) {
         throw const RemoteFailure('invalid_host', httpStatus: 403);
       }
@@ -268,10 +353,43 @@ class RemoteGateway {
       }
       if ((request.method == 'POST' ||
               WebSocketTransformer.isUpgradeRequest(request)) &&
-          request.headers.value('Origin') != origin.toString()) {
+          request.headers.value('Origin') != requestOrigin.toString()) {
         throw const RemoteFailure('invalid_origin', httpStatus: 403);
       }
       final path = request.uri.path;
+      if (request.method == 'POST' &&
+          privateRoute != null &&
+          (path == '/remote/api/private/pair' ||
+              path == '/remote/api/private/resume')) {
+        final data = await _body(request);
+        final id = request.headers.value('X-Yinwei-Pair-Id');
+        final key = request.headers.value('X-Yinwei-Pair-Key');
+        if (path.endsWith('/pair')) {
+          if (!private || data['ticket'] is! String || id == null) {
+            throw const RemoteFailure('invalid_pairing_ticket',
+                httpStatus: 401);
+          }
+          await privateRoute!.redeem(data['ticket'] as String, id);
+        }
+        final device = privateRoute!.verifyKey(id, key);
+        // Replacing this client's route credentials must not consume a new
+        // device slot or invalidate the other route's independent credentials.
+        final previous = auth.authenticate(_requestCookie(request, cookieName));
+        if (previous != null) auth.revoke(previous);
+        final paired = auth.pairedSession(device, id!, privateRoute: private);
+        response.cookies.add(Cookie(cookieName, paired.token)
+          ..httpOnly = true
+          ..secure = !private && _secure
+          ..sameSite = SameSite.strict
+          ..path = '/'
+          ..maxAge = 28800);
+        await _json(response, {
+          'hostId': privateRoute!.hostId,
+          'csrf': paired.session.csrf,
+          'snapshot': _snapshot(paired.session)
+        });
+        return;
+      }
       if (request.method == 'POST' && path == '/remote/internal/origin') {
         if (!allowOriginRotation ||
             request.connectionInfo?.remoteAddress.isLoopback != true ||
@@ -328,7 +446,20 @@ class RemoteGateway {
         ));
         return;
       }
-      final session = auth.authenticate(_requestCookie(request, _cookieName));
+      final session = auth.authenticate(_requestCookie(request, cookieName));
+      if (private) {
+        final id = request.headers.value('X-Yinwei-Pair-Id');
+        final device = privateRoute!
+            .verifyKey(id, request.headers.value('X-Yinwei-Pair-Key'));
+        if (session == null ||
+            !session.privateRoute ||
+            session.pairId != id ||
+            session.deviceId != device) {
+          throw const RemoteFailure('pairing_required', httpStatus: 401);
+        }
+      } else if (session?.privateRoute == true) {
+        throw const RemoteFailure('unauthorized', httpStatus: 401);
+      }
       if (request.method == 'GET' && path == '/remote/health') {
         await _json(
             response, {'service': 'yinwei-remote', 'protocolVersion': 1});
@@ -464,7 +595,7 @@ class RemoteGateway {
             return;
           case '/remote/api/session':
             await _json(response, {
-              'snapshot': coordinator.snapshot(device: session.deviceId),
+              'snapshot': _snapshot(session),
               'csrf': session.csrf,
               'owner': session.account.username,
               'entryLink': entryOrigin?.toString(),
@@ -489,7 +620,7 @@ class RemoteGateway {
           case '/remote/ws/audio':
             final selected = _selectedAudioTap;
             if (selected == null ||
-                _audioSocket != null ||
+                (_audioSocket != null && !_canMigrateAudio(session)) ||
                 !WebSocketTransformer.isUpgradeRequest(request) ||
                 _connections.length + _upgrades >= 5) {
               throw const RemoteFailure('audio_unavailable');
@@ -515,8 +646,20 @@ class RemoteGateway {
         final data = await _body(request);
         switch (path) {
           case '/remote/api/auth/signout':
+            if (privateRoute?.hasPair(session.pairId) == true) {
+              await privateRoute!.revoke();
+            }
+            for (final related
+                in auth.sessions.where((s) => s.deviceId == session.deviceId)) {
+              _revoke(related);
+            }
             _revoke(session);
-            response.cookies.add(_cookie(_cookieName, '', maxAge: 0));
+            response.cookies.add(private
+                ? (Cookie(cookieName, '')
+                  ..httpOnly = true
+                  ..path = '/'
+                  ..maxAge = 0)
+                : _cookie(cookieName, '', maxAge: 0));
             await _json(response, {'signedOut': true});
             return;
           case '/remote/api/control/lease':
@@ -538,7 +681,12 @@ class RemoteGateway {
             }
             return;
           case '/remote/api/ws-ticket':
-            if (data['purpose'] == 'audio' && _audioSocket != null) {
+            if (private && !['events', 'audio'].contains(data['purpose'])) {
+              throw const RemoteFailure('unsupported_stream', httpStatus: 400);
+            }
+            if (data['purpose'] == 'audio' &&
+                _audioSocket != null &&
+                !_canMigrateAudio(session)) {
               throw const RemoteFailure('audio_busy', httpStatus: 409);
             }
             if (!['events', 'audio', 'transform'].contains(data['purpose']) ||
@@ -551,7 +699,24 @@ class RemoteGateway {
             await _json(response,
                 {'ticket': auth.ticket(session, data['purpose'] as String)});
             return;
+          case '/remote/api/private/pair-ticket':
+            if (private || privateRoute == null) {
+              throw const RemoteFailure('not_found', httpStatus: 404);
+            }
+            await _json(response, privateRoute!.issueTicket(session));
+            return;
+          case '/remote/api/private/revoke':
+            if (privateRoute == null) {
+              throw const RemoteFailure('not_found', httpStatus: 404);
+            }
+            await privateRoute!.revoke();
+            await _json(response, {'revoked': true});
+            return;
           case '/remote/api/owner/revoke-devices':
+            if (privateRoute != null &&
+                !privateRoute!.hasPair(session.pairId)) {
+              await privateRoute!.revoke();
+            }
             for (final other
                 in auth.sessions.where((s) => !identical(s, session))) {
               _revoke(other);
@@ -580,7 +745,11 @@ class RemoteGateway {
         await _json(response, {'error': 'request_failed'}, 503);
       } catch (_) {}
     } finally {
-      --_active;
+      if (private) {
+        --_privateActive;
+      } else {
+        --_active;
+      }
     }
   }
 
@@ -739,12 +908,20 @@ class RemoteGateway {
       --_upgrades;
     }
     if (_connections.length >= 5 ||
-        (purpose == 'audio' && _audioSocket != null)) {
+        (purpose == 'audio' &&
+            _audioSocket != null &&
+            !_canMigrateAudio(session))) {
       await socket.close(1008, 'socket_limit');
       return;
     }
     _connections.add(socket);
-    if (purpose == 'audio') _audioSocket = socket;
+    if (purpose == 'audio' && _audioSocket == null) _audioSocket = socket;
+    if (session.privateRoute) {
+      _privateSockets[socket] = (
+        address: request.connectionInfo!.remoteAddress.address,
+        pairId: session.pairId!
+      );
+    }
     socket.pingInterval = const Duration(seconds: 10);
     var authorized = false;
     final deadline = Timer(const Duration(seconds: 5), () {
@@ -759,6 +936,10 @@ class RemoteGateway {
         final data = jsonDecode(message);
         if (authorized) {
           if (purpose == 'audio') {
+            if (!identical(socket, _audioSocket)) {
+              unawaited(socket.close(1000, 'route_migrated'));
+              return;
+            }
             if (data is Map && data.containsKey('quality')) {
               final quality = ListenQuality.parse(data['quality']);
               final stream = _audioStream;
@@ -801,6 +982,18 @@ class RemoteGateway {
         authorized = true;
         deadline.cancel();
         if (purpose == 'audio') {
+          final previous = _audioSocket;
+          if (previous != null && !identical(previous, socket)) {
+            if (!_canMigrateAudio(session)) {
+              unawaited(socket.close(1008, 'audio_busy'));
+              return;
+            }
+            // Transfer only after ticket authorization, synchronously between
+            // pump ticks. A late onDone from the old socket cannot clear this one.
+            _forgetSocket(previous);
+            unawaited(previous.close(1000, 'route_migrated'));
+          }
+          _audioSocket = socket;
           if (!identical(selectedTap, _selectedAudioTap) ||
               selectedTap == null) {
             unawaited(socket.close(1008, 'audio_source_changed'));
@@ -851,11 +1044,12 @@ class RemoteGateway {
     socket.add(jsonEncode({
       'type': 'snapshot',
       'sequence': sequence,
-      'snapshot': coordinator.snapshot(device: _sockets[socket]?.deviceId)
+      'snapshot': _snapshot(_sockets[socket])
     }));
   }
 
   void _forgetSocket(WebSocket socket) {
+    _privateSockets.remove(socket);
     if (identical(socket, _transformSocket)) {
       coordinator.setRemoteTransformRunning(false);
       _transformSocket = null;
@@ -883,6 +1077,8 @@ class RemoteGateway {
   }
 
   Future<void> close() async {
+    _privateChecks?.cancel();
+    await privateRoute?.close();
     _events?.cancel();
     _audioTimer?.cancel();
     _transformStream?.close('host_closed');

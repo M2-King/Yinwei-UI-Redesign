@@ -4,8 +4,10 @@ import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:yinwei_player/mobile/ios_listen_room_screen.dart';
 import 'package:yinwei_player/platform/ios_laptop_listen_output.dart';
+import 'package:yinwei_player/platform/listen_network_changes.dart';
 import 'package:yinwei_player/remote/laptop_listen_controller.dart';
 import 'package:yinwei_player/remote/saved_sign_in.dart';
+import 'package:yinwei_player/remote/private_pair_store.dart';
 import 'package:yinwei_player/state/engine_controller.dart';
 import 'package:yinwei_player/theme/yinwei_theme.dart';
 
@@ -17,6 +19,8 @@ LaptopListenController sharedLaptopListen() =>
     _shared ??= LaptopListenController(
         output: IosLaptopListenOutput(),
         signInStore: KeychainSignInStore(),
+        pairStore: KeychainPrivatePairStore(),
+        networkChanges: listenNetworkChanges(),
         loadSoundQuality: () async {
           final file = await _soundQualityFile();
           return await file.exists() ? (await file.readAsString()).trim() : null;

@@ -14,18 +14,20 @@ enum YinweiSignInKeychainChannel {
   static func register(messenger: FlutterBinaryMessenger) {
     let channel = FlutterMethodChannel(name: name, binaryMessenger: messenger)
     channel.setMethodCallHandler { call, result in
+      let pair = ["loadPair", "savePair", "clearPair"].contains(call.method)
+      let itemAccount = pair ? "laptop-private-route" : account
       switch call.method {
-      case "load":
-        result(load())
-      case "save":
+      case "load", "loadPair":
+        result(load(itemAccount))
+      case "save", "savePair":
         guard let value = call.arguments as? String, let data = value.data(using: .utf8),
               data.count <= 4_096
         else { result(FlutterError(code: "bad_value", message: nil, details: nil)); return }
-        let status = save(data)
+        let status = save(data, itemAccount)
         result(status == errSecSuccess ? nil
           : FlutterError(code: "keychain", message: "Keychain status \(status)", details: nil))
-      case "clear":
-        SecItemDelete(query() as CFDictionary)
+      case "clear", "clearPair":
+        SecItemDelete(query(itemAccount) as CFDictionary)
         result(nil)
       default:
         result(FlutterMethodNotImplemented)
@@ -33,14 +35,14 @@ enum YinweiSignInKeychainChannel {
     }
   }
 
-  private static func query() -> [String: Any] {
+  private static func query(_ itemAccount: String) -> [String: Any] {
     [kSecClass as String: kSecClassGenericPassword,
      kSecAttrService as String: service,
-     kSecAttrAccount as String: account]
+     kSecAttrAccount as String: itemAccount]
   }
 
-  private static func load() -> String? {
-    var request = query()
+  private static func load(_ itemAccount: String) -> String? {
+    var request = query(itemAccount)
     request[kSecReturnData as String] = true
     request[kSecMatchLimit as String] = kSecMatchLimitOne
     var item: CFTypeRef?
@@ -49,9 +51,9 @@ enum YinweiSignInKeychainChannel {
     return String(data: data, encoding: .utf8)
   }
 
-  private static func save(_ data: Data) -> OSStatus {
-    SecItemDelete(query() as CFDictionary)
-    var item = query()
+  private static func save(_ data: Data, _ itemAccount: String) -> OSStatus {
+    SecItemDelete(query(itemAccount) as CFDictionary)
+    var item = query(itemAccount)
     item[kSecValueData as String] = data
     item[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
     return SecItemAdd(item as CFDictionary, nil)

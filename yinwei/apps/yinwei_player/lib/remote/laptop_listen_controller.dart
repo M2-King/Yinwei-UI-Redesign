@@ -10,6 +10,8 @@ import 'remote_entry.dart';
 import 'remote_owner_client.dart';
 import 'saved_sign_in.dart';
 import 'listen_audio_diagnostics.dart';
+import 'private_pair_store.dart';
+import 'routed_owner_client.dart';
 
 /// Plays the laptop's processed stereo on this device: the iPad's native
 /// player in the app, a fake in tests.
@@ -106,6 +108,12 @@ class LaptopListenController extends ChangeNotifier {
     Future<String?> Function()? loadSoundQuality,
     this.saveSoundQuality,
     this.signInStore,
+    this.pairStore,
+    this.privateClientFor,
+    this.routeProbeInterval = const Duration(seconds: 3),
+    this.routeSwitchbackDelay = const Duration(seconds: 10),
+    this.privateLoopbackForTesting = false,
+    this.networkChanges,
   })  : _resolveEntry = resolveEntry ?? resolveRemoteEntry,
         _clientFor =
             clientFor ?? ((origin) => RemoteOwnerClient(origin: origin)) {
@@ -123,6 +131,31 @@ class LaptopListenController extends ChangeNotifier {
   /// "Remember me on this iPad" (the Keychain in the app; null in tests
   /// that do not need it).
   final SignInStore? signInStore;
+  final PrivatePairStore? pairStore;
+  final RemoteOwnerClient Function(PrivatePair)? privateClientFor;
+  final Duration routeProbeInterval, routeSwitchbackDelay;
+  final bool privateLoopbackForTesting;
+  final Stream<void>? networkChanges;
+  int _transportGeneration = 0;
+  final _nativeWrites = <Future<void>>{};
+  int? _lastPacketUs;
+  int? _routeChangeUs, _lastAudioRecoveryMs;
+
+  void _routeChanged() {
+    final routed = _client;
+    if (routed is! RoutedOwnerClient) return;
+    _transportGeneration = routed.generation;
+    if (listening) _routeChangeUs = _audioClock.elapsedMicroseconds;
+    final events = _events, audio = _audio;
+    _events = _audio = null;
+    unawaited(events?.close(1000, 'route_migrated'));
+    unawaited(audio?.close(1000, 'route_migrated'));
+    resumed();
+  }
+
+  int _socketGeneration(WebSocket socket) => _client is RoutedOwnerClient
+      ? (_client! as RoutedOwnerClient).generationOf(socket)
+      : _transportGeneration;
 
   /// Keep the next successful sign-in (the sign-in card's switch).
   bool rememberSignIn = true;
@@ -194,6 +227,16 @@ class LaptopListenController extends ChangeNotifier {
         'dropped': dropped,
         'inFlightWrites': _writes,
         'native': Map.of(_nativeDiagnostics),
+        'network': _client is RoutedOwnerClient
+            ? {
+                ...(_client! as RoutedOwnerClient).routeDiagnostics,
+                'lastAudioRecoveryMs': _lastAudioRecoveryMs
+              }
+            : {
+                'route': 'cloudflare-websocket',
+                'switches': 0,
+                'transportGeneration': _transportGeneration
+              },
         ..._diagnostics.snapshot(),
       };
 
@@ -210,11 +253,46 @@ class LaptopListenController extends ChangeNotifier {
     await _endSession();
     final session = ++_session;
     try {
-      final origin = await _resolveEntry(entry);
+      // A previously enrolled device may resume its private route even while
+      // the public tunnel is unavailable. First enrollment always uses entry.
+      RoutedOwnerClient routed(RemoteOwnerClient publicClient) =>
+          RoutedOwnerClient(
+              publicClient: publicClient,
+              entry: entry,
+              store: pairStore!,
+              privateClientFor: privateClientFor,
+              loopbackForTesting: privateLoopbackForTesting,
+              probeInterval: routeProbeInterval,
+              switchbackDelay: routeSwitchbackDelay,
+              allowEnrollment: !_autoSigningIn,
+              reconnectPublic: () async =>
+                  _clientFor(await _resolveEntry(entry)),
+              onMigration: _routeChanged,
+              networkChanges: networkChanges,
+              onNetworkChange: resumed);
+      Map<String, dynamic>? resumedPair;
+      RemoteOwnerClient? restored;
+      if (_autoSigningIn && pairStore != null) {
+        // This placeholder is never contacted. Public recovery resolves entry.
+        final candidate = routed(
+            RemoteOwnerClient(origin: Uri.parse('https://unresolved.invalid')));
+        _client = candidate;
+        resumedPair = await candidate.restorePrivate();
+        if (resumedPair != null) {
+          restored = candidate;
+        } else {
+          candidate.close();
+          _client = null;
+        }
+      }
+      final origin = resumedPair == null ? await _resolveEntry(entry) : null;
       if (session != _session) return;
-      final client = _clientFor(origin);
+      final client = restored ??
+          (pairStore == null
+              ? _clientFor(origin!)
+              : routed(_clientFor(origin!)));
       _client = client;
-      final value = await client.signIn(username, password);
+      final value = resumedPair ?? await client.signIn(username, password);
       if (session != _session) return;
       _applySnapshot(value['snapshot'] as Map<String, dynamic>);
       final store = signInStore;
@@ -277,6 +355,7 @@ class LaptopListenController extends ChangeNotifier {
   Future<void> forgetSavedSignIn() async {
     try {
       await signInStore?.clear();
+      await pairStore?.clear();
     } catch (_) {}
   }
 
@@ -333,6 +412,10 @@ class LaptopListenController extends ChangeNotifier {
       if (!wake.isCompleted) wake.complete();
     }
     _wakes.clear();
+    // Actual probes are already serialized; resuming never changes VPN settings.
+    if (_client case final RoutedOwnerClient routed) {
+      unawaited(routed.probeNow(force: true));
+    }
   }
 
   Future<void> _endSession() async {
@@ -345,6 +428,7 @@ class LaptopListenController extends ChangeNotifier {
     unawaited(events?.close(1000, 'signed_out'));
     _client?.close();
     _client = null;
+    _transportGeneration = 0;
     snapshot = null;
     connected = false;
     _lease = null;
@@ -366,16 +450,23 @@ class LaptopListenController extends ChangeNotifier {
   Future<void> _eventsLoop(int session) async {
     var attempt = 0;
     while (_alive(session)) {
+      var iterationRoute = _transportGeneration;
       try {
         final socket = await _client!.openSocket('events');
+        final route = _socketGeneration(socket);
+        iterationRoute = route;
         if (!_alive(session)) {
           unawaited(socket.close());
           return;
         }
+        if (route != _transportGeneration) {
+          unawaited(socket.close());
+          continue;
+        }
         _events = socket;
         var sequence = 0;
         await for (final message in socket) {
-          if (!_alive(session)) break;
+          if (!_alive(session) || route != _transportGeneration) break;
           if (message is! String) continue;
           final data = jsonDecode(message);
           if (data is! Map ||
@@ -412,10 +503,14 @@ class LaptopListenController extends ChangeNotifier {
         // Network drop or laptop restart: retry below.
       }
       if (!_alive(session)) return;
+      if (iterationRoute != _transportGeneration) continue;
       _events = null;
       if (connected) {
         connected = false;
-        _lease = null;
+        if (_client is! RoutedOwnerClient ||
+            !(_client! as RoutedOwnerClient).hasPair) {
+          _lease = null;
+        }
         _changed('Laptop connection lost · reconnecting…');
       }
       await _pause(attempt++);
@@ -424,6 +519,9 @@ class LaptopListenController extends ChangeNotifier {
 
   void _applySnapshot(Map<String, dynamic> value) {
     snapshot = value;
+    if (_client case final RoutedOwnerClient routed) {
+      routed.observeSnapshot(value);
+    }
     if (value['controlOwned'] != true && _lease != null) {
       // Either the laptop took over or this snapshot predates the lease. An
       // automatic re-take tells them apart: the laptop refuses it after a
@@ -631,6 +729,7 @@ class LaptopListenController extends ChangeNotifier {
     interrupted = false;
     received = dropped = played = underruns = bufferMs = queuedMs = 0;
     _diagnostics = ListenAudioDiagnostics();
+    _lastPacketUs = _routeChangeUs = _lastAudioRecoveryMs = null;
     _nativeDiagnostics = const {};
     _audioClock
       ..reset()
@@ -685,6 +784,7 @@ class LaptopListenController extends ChangeNotifier {
   Future<void> _audioLoop(int generation, int session) async {
     var attempt = 0;
     while (_listening(generation, session)) {
+      var iterationRoute = _transportGeneration;
       String? reason;
       try {
         if (_nativeOpus == null) {
@@ -698,15 +798,24 @@ class LaptopListenController extends ChangeNotifier {
         // laptops ignore it and keep sending uncompressed audio.
         final socket = await _client!.openSocket('audio',
             hello: _nativeOpus == true ? {'quality': soundQuality.name} : null);
+        final route = _socketGeneration(socket);
+        iterationRoute = route;
         if (!_listening(generation, session)) {
           unawaited(socket.close());
           return;
+        }
+        if (route != _transportGeneration) {
+          unawaited(socket.close());
+          continue;
         }
         _audio = socket;
         _diagnostics.connectionOpened();
         int? epoch, rate;
         await for (final message in socket) {
-          if (!_listening(generation, session)) break;
+          if (!_listening(generation, session) ||
+              route != _transportGeneration) {
+            break;
+          }
           if (message is String) {
             final data = jsonDecode(message);
             if (data is Map && data['type'] == 'audioReady') {
@@ -750,11 +859,29 @@ class LaptopListenController extends ChangeNotifier {
           if (header.epoch != epoch || header.sampleRate != rate) {
             epoch = header.epoch;
             rate = header.sampleRate;
+            // Drain submitted native writes before flushing for the new route.
+            // Old callbacks cannot enqueue audio after the new stream reset.
+            if (_client is RoutedOwnerClient &&
+                (_client! as RoutedOwnerClient).hasPair) {
+              await Future.wait(_nativeWrites.toList());
+            }
+            if (!_listening(generation, session) ||
+                route != _transportGeneration) {
+              break;
+            }
             await output.newStream(header.sampleRate);
-            if (!_listening(generation, session)) break;
+            if (!_listening(generation, session) ||
+                route != _transportGeneration) {
+              break;
+            }
           }
           ++received;
-          _write(packet, generation);
+          _lastPacketUs = _audioClock.elapsedMicroseconds;
+          if (_routeChangeUs != null) {
+            _lastAudioRecoveryMs = (_lastPacketUs! - _routeChangeUs!) ~/ 1000;
+            _routeChangeUs = null;
+          }
+          _write(packet, generation, route);
         }
         reason = socket.closeReason;
         streamQuality = null;
@@ -764,6 +891,7 @@ class LaptopListenController extends ChangeNotifier {
       } catch (_) {
         // Network drop: retry below.
       }
+      if (iterationRoute != _transportGeneration) continue;
       _audio = null;
       if (!_listening(generation, session)) return;
       audioConnected = false;
@@ -800,7 +928,8 @@ class LaptopListenController extends ChangeNotifier {
     _changed();
   }
 
-  void _write(Uint8List packet, int generation) {
+  void _write(Uint8List packet, int generation, int route) {
+    if (route != _transportGeneration) return;
     if (_writes >= 64 || interrupted) {
       if (interrupted) {
         ++_diagnostics.interruptedDrops;
@@ -812,7 +941,8 @@ class LaptopListenController extends ChangeNotifier {
     }
     ++_writes;
     final startedUs = _audioClock.elapsedMicroseconds;
-    output.write(packet).then((accepted) {
+    late final Future<void> writing;
+    writing = output.write(packet).then((accepted) {
       if (!accepted && generation == _listenGeneration) {
         ++dropped;
         ++_diagnostics.nativeRejected;
@@ -823,12 +953,14 @@ class LaptopListenController extends ChangeNotifier {
         ++_diagnostics.nativeRejected;
       }
     }).whenComplete(() {
+      _nativeWrites.remove(writing);
       if (generation == _listenGeneration) {
         --_writes;
         _diagnostics
             .writeCompleted(_audioClock.elapsedMicroseconds - startedUs);
       }
     });
+    _nativeWrites.add(writing);
   }
 
   Future<void> _pollOutput(int generation) async {
@@ -837,6 +969,21 @@ class LaptopListenController extends ChangeNotifier {
     try {
       final value = await output.status();
       if (!listening || generation != _listenGeneration) return;
+      if (_client case final RoutedOwnerClient routed) {
+        final transport = _map(snapshot?['transport']);
+        final live = _map(snapshot?['live']);
+        final playing = snapshot?['liveRunning'] == true
+            ? live['playing'] == true
+            : transport['playing'] == true;
+        if (routed.hasPair &&
+            audioConnected &&
+            playing &&
+            _lastPacketUs != null &&
+            _audioClock.elapsedMicroseconds - _lastPacketUs! > 2500000) {
+          _lastPacketUs = _audioClock.elapsedMicroseconds;
+          unawaited(routed.recover(_transportGeneration));
+        }
+      }
       int number(String key) => value[key] is int ? value[key] as int : 0;
       played = number('played');
       underruns = number('underruns');
