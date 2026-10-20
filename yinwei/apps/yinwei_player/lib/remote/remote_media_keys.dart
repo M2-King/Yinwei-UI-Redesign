@@ -34,29 +34,46 @@ class RemoteMediaKeys {
     if (!actions.contains(action)) {
       throw ArgumentError.value(action, 'action');
     }
-    final run = _queue.then((_) => _send(action));
+    return _enqueue(() => _send('Send-YinweiKey $action',
+        fallbackAction: () => fallback(action)));
+  }
+
+  /// Jumps to [seconds] in the current song. The music app may refuse it
+  /// (ProcessException); there is no one-off command to fall back to.
+  Future<void> seek(double seconds) {
+    if (!seconds.isFinite || seconds < 0) {
+      throw ArgumentError.value(seconds, 'seconds');
+    }
+    return _enqueue(() => _send('Send-YinweiSeek ${seconds.toStringAsFixed(3)}',
+        fallbackAction: () async =>
+            throw StateError('media helper unavailable')));
+  }
+
+  Future<void> _enqueue(Future<void> Function() job) {
+    final run = _queue.then((_) => job());
     _queue = run.then((_) {}, onError: (_) {});
     return run;
   }
 
-  Future<void> _send(String action) async {
+  Future<void> _send(String line,
+      {required Future<void> Function() fallbackAction}) async {
     String reply;
     try {
       final lines = await _ready();
-      _process!.stdin.write('Send-YinweiKey $action\r\n');
+      _process!.stdin.write('$line\r\n');
       await _process!.stdin.flush();
       if (!await lines.moveNext().timeout(timeout)) throw StateError('closed');
       reply = lines.current.trim();
     } catch (_) {
       _reset();
-      return fallback(action);
+      return fallbackAction();
     }
     if (reply == 'ok') return;
     if (reply == 'refused' || reply == 'nosession') {
-      throw ProcessException('media', [action], reply, 2);
+      throw ProcessException('media', [line], reply, 2);
     }
     _reset();
-    return fallback(action);
+    return fallbackAction();
   }
 
   Future<StreamIterator<String>> _ready() async {
@@ -102,7 +119,7 @@ class RemoteMediaKeys {
   }
 
   static final _scriptPath = '${Directory.systemTemp.path}'
-      '${Platform.pathSeparator}yinwei_media_keys_v2.ps1';
+      '${Platform.pathSeparator}yinwei_media_keys_v3.ps1';
 
   static Future<Process> _startHelper() async {
     // UTF-8 BOM so Windows PowerShell 5.1 reads the script as UTF-8.
@@ -151,6 +168,22 @@ function Send-YinweiKey([string]$line) {
       elseif (Await ($best.$method()) ([bool])) { $reply = 'ok' }
       else { $reply = 'refused' }
     }
+  } catch { $reply = 'error' }
+  [Console]::Out.WriteLine($reply); [Console]::Out.Flush()
+}
+function Send-YinweiSeek([double]$seconds) {
+  $reply = 'error'
+  try {
+    $best = $null; $bestScore = 0
+    foreach ($s in $mgr.GetSessions()) {
+      $st = [string]$s.GetPlaybackInfo().PlaybackStatus
+      $score = 1
+      if ($st -eq 'Playing') { $score = 3 } elseif ($st -eq 'Paused') { $score = 2 }
+      if ($score -gt $bestScore) { $bestScore = $score; $best = $s }
+    }
+    if (-not $best) { $reply = 'nosession' }
+    elseif (Await ($best.TryChangePlaybackPositionAsync([long]($seconds * 10000000))) ([bool])) { $reply = 'ok' }
+    else { $reply = 'refused' }
   } catch { $reply = 'error' }
   [Console]::Out.WriteLine($reply); [Console]::Out.Flush()
 }

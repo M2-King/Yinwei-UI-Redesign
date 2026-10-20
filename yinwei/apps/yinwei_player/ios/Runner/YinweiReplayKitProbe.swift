@@ -246,8 +246,10 @@ private final class YinweiRemoteReturnPlayer {
   // packets arrive in bursts. Buffer by time and grow the start threshold
   // after each underrun so a jittery link settles instead of stuttering.
   // Underruns also happen when the source pauses, so the threshold must come
-  // back down: after 10 s without an underrun it shrinks by 25 ms.
-  private static let initialTargetFrames = 7_680  // 160 ms at 48 kHz
+  // back down: after 10 s without an underrun it shrinks by 25 ms. It starts
+  // (and settles) at 120 ms: 40 ms less delay on a steady link, and a jittery
+  // one still grows it after its first underrun.
+  private static let initialTargetFrames = 5_760  // 120 ms at 48 kHz
   private static let targetStepFrames = 2_400     // +50 ms per underrun
   private static let decayStepFrames = 1_200      // -25 ms per stable period
   private static let stablePeriod: TimeInterval = 10

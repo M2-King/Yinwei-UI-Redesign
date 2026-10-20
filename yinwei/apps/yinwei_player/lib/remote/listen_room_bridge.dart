@@ -137,6 +137,19 @@ class ListenRoomBridge {
             : transport['playing'] == true
                 ? _num(_map(snap['telemetry'])['azimuthDeg'])
                 : null;
+    // Song progress (seconds): the music app's over Live, else the file's.
+    final hasFile = track['hasFile'] == true;
+    final pos = liveRunning
+        ? _num(live['positionSec']) ?? 0
+        : hasFile
+            ? (_num(transport['positionMs']) ?? 0) / 1000
+            : 0.0;
+    final dur = liveRunning
+        ? _num(live['durationSec']) ?? 0
+        : hasFile
+            ? (_num(track['durationMs']) ?? 0) / 1000
+            : 0.0;
+    final seekable = dur > 0 && (!liveRunning || caps['liveSeek'] == true);
     // Start progress: the laptop's step while it starts, else this iPad's.
     final stage = _text(live['startStage']);
     final progress = stage.isNotEmpty
@@ -195,6 +208,9 @@ class ListenRoomBridge {
       // A command is on its way: the page keeps what you tapped until then.
       'pending': s.pending,
       'progress': progress,
+      'pos': dur > 0 ? pos.clamp(0.0, dur) : 0,
+      'dur': dur > 0 ? dur : 0,
+      'seekable': seekable,
       'stats': {
         'received': s.received,
         'bufferMs': s.bufferMs,
@@ -359,6 +375,19 @@ class ListenRoomBridge {
         final hz = (_num(m['orbitHz']) ?? 0.4).clamp(0.05, 2.0);
         await _command('motion.set',
             {'motion': motion, if (motion == 'orbit') 'orbitHz': hz});
+      case 'seek':
+        final sec = _num(m['sec']);
+        if (sec == null || sec < 0) return;
+        if (snap['liveRunning'] == true) {
+          if (caps['liveSeek'] != true) {
+            await toast('This laptop can’t jump within the song yet.');
+            await push(force: true);
+            return;
+          }
+          await _command('media.seek', {'positionSec': sec});
+        } else {
+          await _command('seek', {'positionMs': (sec * 1000).round()});
+        }
       case 'place':
         final az = _num(m['az']), el = _num(m['el']), dist = _num(m['dist']);
         if (az == null || el == null || dist == null) return;

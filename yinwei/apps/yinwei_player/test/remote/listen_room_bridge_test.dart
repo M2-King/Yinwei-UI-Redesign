@@ -435,6 +435,49 @@ void main() {
       expect(bridge.state()['progress'], isNull);
     });
 
+    test('song progress: the music app over Live, else the file', () {
+      session.snapshot = snapshot()
+        ..['capabilities'] = {'remoteLive': true, 'liveSeek': true}
+        ..['live'] = {
+          'source': '汽水音乐',
+          'title': '晴天',
+          'positionSec': 83.4,
+          'durationSec': 269.0,
+        };
+      var st = bridge.state();
+      expect([st['pos'], st['dur'], st['seekable']], [83.4, 269.0, true]);
+      session.snapshot = snapshot()
+        ..['capabilities'] = {'remoteLive': true}
+        ..['live'] = {'source': '汽水音乐', 'positionSec': 10, 'durationSec': 200};
+      expect(bridge.state()['seekable'], isFalse, reason: 'an older laptop');
+      session.snapshot = snapshot(liveRunning: false, hasFile: true)
+        ..['transport'] = {'playing': true, 'positionMs': 30500}
+        ..['track'] = {
+          'title': 'Demo.wav',
+          'hasFile': true,
+          'durationMs': 90000
+        };
+      st = bridge.state();
+      expect([st['pos'], st['dur'], st['seekable']], [30.5, 90.0, true]);
+      session.snapshot = snapshot(liveRunning: false);
+      expect([bridge.state()['dur'], bridge.state()['seekable']], [0, false],
+          reason: 'nothing to show: no bar');
+    });
+
+    test('seek: the music app over Live, the file player otherwise', () async {
+      session.control = true;
+      session.snapshot = snapshot()
+        ..['capabilities'] = {'remoteLive': true, 'liveSeek': true};
+      await bridge.handle('{"t":"seek","sec":83.5}');
+      session.snapshot = snapshot(liveRunning: false, hasFile: true);
+      await bridge.handle('{"t":"seek","sec":30.25}');
+      await bridge.handle('{"t":"seek","sec":-3}');
+      expect(session.calls.where((c) => c.contains('seek')), [
+        'media.seek {"positionSec":83.5}',
+        'seek {"positionMs":30250}',
+      ]);
+    });
+
     test('pending: a command on its way keeps what you tapped', () {
       expect(bridge.state()['pending'], isFalse);
       session.pending = true;

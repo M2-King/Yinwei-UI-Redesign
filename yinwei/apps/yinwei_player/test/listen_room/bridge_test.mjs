@@ -127,3 +127,16 @@ test('progress and pending: known steps only, booleans only', () => {
   assert.equal(S.progress, null);
   assert.equal(S.pending, false);
 });
+
+test('song progress: seconds clamped, a jump held until the laptop agrees', () => {
+  const S = base(), held = {};
+  B.merge(S, {v: 1, pos: 83.4, dur: 269, seekable: true}, held, 0);
+  assert.deepEqual([S.pos, S.dur, S.seekable], [83.4, 269, true]);
+  B.merge(S, {v: 1, pos: -5, dur: 1e9, seekable: 'yes'}, held, 1);
+  assert.deepEqual([S.pos, S.dur, S.seekable], [0, 86400, true], 'clamped; a non-boolean is ignored');
+  B.hold(held, 'pos', 120, 2);
+  B.merge(S, {v: 1, pos: 83}, held, 3);
+  assert.notEqual(S.pos, 83, 'the old position does not snap the bar back');
+  B.merge(S, {v: 1, pos: 121.5}, held, 4);
+  assert.equal(S.pos, 121.5, 'within 2.5 s of the jump: confirmed');
+});

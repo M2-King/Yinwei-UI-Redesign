@@ -209,6 +209,9 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
         'title': _smtc.state.title,
         'captureHealthy': _live.captureHealthy,
         'playing': _smtc.state.playing,
+        // The song's position and length, for the iPad's progress bar.
+        'positionSec': _smtc.state.positionSec,
+        'durationSec': _smtc.state.durationSec,
         'openApp': _musicApp?.name ?? '',
         // Where the sound is now (Orbit moves it), read from the Live engine
         // as the laptop's own screen does; null while Live is off.
@@ -227,6 +230,11 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
         await _ctrl.setMode(mode);
       },
       liveMedia: _caps.systemMedia ? _remoteMediaKey : null,
+      liveSeek: _caps.systemMedia
+          ? (seconds) => _mediaKeys != null
+              ? _mediaKeys!.seek(seconds)
+              : Future<void>.error(StateError('no media helper'))
+          : null,
       startLive: _caps.liveTransfer ? _startLiveFromRemote : null,
       stopLive: _caps.liveTransfer ? _stopLiveHrtf : null,
       // Same steps as _onArrayMode, minus takeLocalControl().

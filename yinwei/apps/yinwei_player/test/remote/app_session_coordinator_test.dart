@@ -198,6 +198,7 @@ void main() {
     final liveCalls = <String>[];
     final arrayModes = <ArrayMode>[];
     Object? startFailure;
+    var seekRefused = false;
     var commandSeq = 0;
 
     setUp(() {
@@ -207,6 +208,7 @@ void main() {
       liveCalls.clear();
       arrayModes.clear();
       startFailure = null;
+      seekRefused = false;
       live = true;
       liveCoordinator = AppSessionCoordinator(
           controller: controller,
@@ -219,6 +221,10 @@ void main() {
           },
           applyLiveMode: (mode) async => liveModes.add(mode),
           liveMedia: (action) async => mediaActions.add(action),
+          liveSeek: (seconds) async {
+            if (seekRefused) throw StateError('refused');
+            mediaActions.add('seek $seconds');
+          },
           startLive: () async {
             liveCalls.add('start');
             if (startFailure != null) throw startFailure!;
@@ -250,6 +256,25 @@ void main() {
         'payload': payload
       };
     }
+
+    test('jump within the music app song (seconds), during Live', () async {
+      expect((liveCoordinator.snapshot()['capabilities'] as Map)['liveSeek'],
+          isTrue);
+      await liveCoordinator.command(
+          'ipad', command('media.seek', {'positionSec': 83.5}));
+      expect(mediaActions, ['seek 83.5']);
+      await expectLater(
+          liveCoordinator.command(
+              'ipad', command('media.seek', {'positionSec': -4})),
+          throwsA(isA<RemoteFailure>()
+              .having((f) => f.code, 'code', 'invalid_payload')));
+      seekRefused = true;
+      await expectLater(
+          liveCoordinator.command(
+              'ipad', command('media.seek', {'positionSec': 10})),
+          throwsA(isA<RemoteFailure>()
+              .having((f) => f.code, 'code', 'media_command_failed')));
+    });
 
     test('advertise live control and route position into the live engine',
         () async {

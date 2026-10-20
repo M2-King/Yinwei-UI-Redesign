@@ -23,6 +23,7 @@ class AppSessionCoordinator {
     this.applyLiveParams,
     this.applyLiveMode,
     this.liveMedia,
+    this.liveSeek,
     this.startLive,
     this.stopLive,
     this.applyArrayMode,
@@ -53,6 +54,7 @@ class AppSessionCoordinator {
     'live.stop',
     'array.mode',
     'motion.set',
+    'media.seek',
   };
 
   /// Start/stop Live Transfer from the remote, through the same path as the
@@ -75,6 +77,10 @@ class AppSessionCoordinator {
     'media.next': 'next',
     'media.previous': 'previous',
   };
+
+  /// Jump within the Live source app's song (seconds), through Windows
+  /// media controls; the music app decides whether it allows it.
+  final Future<void> Function(double seconds)? liveSeek;
   final DateTime Function() _now;
   final String hostSessionId = remoteSecret();
   final _results = <String, Future<Map<String, dynamic>>>{};
@@ -209,7 +215,8 @@ class AppSessionCoordinator {
         'liveControl': liveControl,
         'liveMedia': liveMedia != null,
         'remoteLive': remoteLive,
-        'remoteArray': applyArrayMode != null
+        'remoteArray': applyArrayMode != null,
+        'liveSeek': liveSeek != null
       },
       'track': {
         'title': controller.track.title,
@@ -265,6 +272,10 @@ class AppSessionCoordinator {
         // The music app a remote "Start on laptop" opens when none is open
         // (the laptop picks it); '' when it can't open one.
         'openApp': liveInfo['openApp'] is String ? liveInfo['openApp'] : '',
+        // The music app's song position and length (seconds), as Windows
+        // media controls report them; 0 when unknown.
+        'positionSec': _seconds(liveInfo['positionSec']),
+        'durationSec': _seconds(liveInfo['durationSec']),
         // Where the sound is now (Orbit moves it); null while Live is off.
         'azimuthDeg': liveInfo['azimuthDeg'] is num &&
                 (liveInfo['azimuthDeg'] as num).isFinite
@@ -380,6 +391,16 @@ class AppSessionCoordinator {
               throw const RemoteFailure('unsupported_command', httpStatus: 400);
             }
             if (live) await stopLive!();
+          case 'media.seek':
+            if (liveSeek == null) {
+              throw const RemoteFailure('unsupported_command', httpStatus: 400);
+            }
+            final seconds = remoteNumber(payload, 'positionSec', 0, 24 * 3600);
+            try {
+              await liveSeek!(seconds.toDouble());
+            } catch (_) {
+              throw const RemoteFailure('media_command_failed');
+            }
           case 'media.play':
           case 'media.pause':
           case 'media.next':
@@ -553,4 +574,7 @@ class AppSessionCoordinator {
     takeLocalControl();
     await _commands;
   }
+
+  static double _seconds(Object? value) =>
+      value is num && value.isFinite && value >= 0 ? value.toDouble() : 0;
 }

@@ -450,6 +450,23 @@ SHA-256 as today.
    spinner and the step ("Opening 汽水音乐 on your laptop…", "Pressing play…", "Starting spatial sound…",
    "Connecting audio…") and four step marks. Previewed in the review stand-in ("Start progress").
 
+## 9c. Song progress and delay (2026-10-20, laptop w18 + next IPA)
+
+- **Song progress bar** under the transport: elapsed, a bar you drag to jump, time left. Over Live it
+  shows the music app's position and length from Windows media controls (`live.positionSec`,
+  `live.durationSec`); the jump goes through the ready PowerShell (`TryChangePlaybackPositionAsync`, the
+  new `media.seek` command, advertised as `capabilities.liveSeek`); the music app may refuse it. For a
+  file in the Yinwei player it uses the existing `seek`. Between the laptop's reports the page's own
+  clock moves the bar; a jump is held until the laptop agrees (within 2.5 s).
+- **Delay:** the iPad's audio buffer starts and settles at 120 ms instead of 160 ms (still +50 ms after
+  each underrun, up to 400 ms). Not changed, and why:
+  - Bluetooth headphones (0.15–0.25 s) can't be helped.
+  - The internet path (iPad ↔ Cloudflare ↔ laptop, also at home) would need a direct home-network path:
+    a bigger, security-sensitive change, not started.
+  - The laptop notices play / pause / song changes 0.5–1.5 s late because its media poll rescans all
+    processes every round (0.45–0.7 s). Caching the music app's process would cut that, but it is the
+    code Live Transfer uses to find the app: needs your OK.
+
 ## 10. Order of work and approvals
 
 Your order (2026-10-19): **iPad and mobile first, then Windows, Mac last.** Each stage ends with a

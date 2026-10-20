@@ -26,7 +26,7 @@ const S = {
   laptop: "", connection: "connected", source: "", live: false, playing: false, listening: "off",
   control: "mine", notice: "none", mode: "point", motion: "fixed", orbitHz: 0.4,
   az: 0, el: 0, dist: 2, track: null, volume: 1, level: 0, stats: { received: 0, bufferMs: 0, underruns: 0 }, opens: null,
-  pending: false, progress: null,
+  pending: false, progress: null, pos: 0, dur: 0, seekable: false,
   screen: "room", view: "3d", panel: null,
 };
 const held = {}; // values you just set, kept until the app confirms them
@@ -52,6 +52,7 @@ function apply(next) {
     placing: typeof dragging !== "undefined" && dragging === "source",
     orbiting: S.mode === "point" && S.motion === "orbit",
   });
+  if (changed.includes("pos")) posAt = now; // the song clock restarts from each report
   if (changed.length || Object.keys(held).join() !== heldBefore) render();
 }
 
@@ -117,6 +118,7 @@ function render() {
   ["prev", "play", "next"].forEach((id) => { $(id).disabled = noApp; });
   setText($("play-icon"), S.playing ? "pause" : "play_arrow");
   $("play").classList.toggle("waiting", !!held.playing); // a ring until the laptop confirms
+  drawScrub();
   $("play").setAttribute("aria-label", S.playing ? "Pause" : "Play");
 
   const listening = S.listening === "on";
@@ -319,6 +321,40 @@ function commitPlace() {
   if (snapAnim) S.az = snapAnim.from; // the snap animation finishes the move on screen
   send({ t: "place", az, el: S.el, dist: S.dist });
 }
+
+// ---------------------------------------------------------------- song progress
+// The laptop reports the song's position about once a second (the music app
+// may report it less often); between reports the page's own clock moves it.
+let posAt = performance.now(), seekDragging = false;
+const clock = (s) => { s = Math.max(0, Math.floor(s)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`; };
+const songPos = () => Math.min(S.dur, Math.max(0, S.pos + (S.playing && !lost() ? (performance.now() - posAt) / 1000 : 0)));
+function paintScrub(p) {
+  const seek = $("seek");
+  seek.style.setProperty("--p", `${S.dur ? (p / S.dur) * 100 : 0}%`);
+  setText($("t-pos"), clock(p)); setText($("t-left"), `-${clock(S.dur - p)}`);
+}
+function drawScrub() {
+  const show = S.dur > 0 && S.notice !== "noapp";
+  $("scrub").hidden = !show;
+  if (!show) return;
+  const seek = $("seek");
+  seek.disabled = !S.seekable || otherHasControl() || lost();
+  if (seekDragging) return; // your finger owns it
+  if (Number(seek.max) !== S.dur) seek.max = S.dur;
+  const p = songPos();
+  seek.value = p;
+  paintScrub(p);
+}
+setInterval(drawScrub, 250);
+$("seek").addEventListener("pointerdown", () => { seekDragging = true; });
+$("seek").addEventListener("input", () => { seekDragging = true; paintScrub(Number($("seek").value)); });
+$("seek").addEventListener("change", () => {
+  seekDragging = false;
+  const sec = Number($("seek").value);
+  setLocal({ pos: sec }); posAt = performance.now();
+  send({ t: "seek", sec });
+  drawScrub();
+});
 
 // Start progress: one line for the current step, and a dot per laptop step.
 const STEPS = ["opening", "pressing", "starting", "audio"];

@@ -15,7 +15,7 @@ const ListenBridge = (() => {
   const VERSION = 1, HOLD_MS = 2500;
   const FIELDS = ["laptop", "connection", "source", "live", "playing", "listening", "control", "notice",
     "mode", "motion", "orbitHz", "az", "el", "dist", "track", "volume", "level", "stats", "opens",
-    "pending", "progress"];
+    "pending", "progress", "pos", "dur", "seekable"];
   const wrap = (a) => { a = ((a + 180) % 360 + 360) % 360 - 180; return a === -180 ? 180 : a; };
   // Values the app may send, so a bad message can't put the page in a state it can't draw.
   const ENUMS = {
@@ -23,11 +23,13 @@ const ListenBridge = (() => {
     notice: ["none", "busy", "interrupted", "lost", "taken", "noapp"], mode: ["point", "stereo2"], motion: ["fixed", "orbit"],
   };
   const PROGRESS = ["asking", "opening", "pressing", "starting", "audio"];
-  const RANGES = { orbitHz: [0.05, 2], az: [-180, 180], el: [-90, 90], dist: [0.5, 10], volume: [0, 1], level: [0, 1] };
+  // Song progress, in seconds.
+  const SONG = { pos: [0, 86400], dur: [0, 86400] };
+  const RANGES = { ...SONG, orbitHz: [0.05, 2], az: [-180, 180], el: [-90, 90], dist: [0.5, 10], volume: [0, 1], level: [0, 1] };
   function clean(k, v) {
     if (ENUMS[k]) return ENUMS[k].includes(v) ? v : undefined;
     if (RANGES[k]) { const n = Number(v); return Number.isFinite(n) ? Math.min(RANGES[k][1], Math.max(RANGES[k][0], n)) : undefined; }
-    if (k === "live" || k === "playing" || k === "pending") return typeof v === "boolean" ? v : undefined;
+    if (k === "live" || k === "playing" || k === "pending" || k === "seekable") return typeof v === "boolean" ? v : undefined;
     // Start progress: asking (this iPad), opening / pressing / starting (the laptop), audio; null when idle.
     if (k === "progress") return PROGRESS.includes(v) ? v : null;
     if (k === "laptop" || k === "source") return typeof v === "string" ? v.slice(0, 80) : undefined;
@@ -38,7 +40,7 @@ const ListenBridge = (() => {
     return undefined;
   }
   const same = (k, a, b) => (k === "az" ? Math.abs(wrap(a - b)) < 0.5 : k === "el" ? Math.abs(a - b) < 0.5
-    : k === "dist" ? Math.abs(a - b) < 0.051 : k === "orbitHz" || k === "volume" ? Math.abs(a - b) < 0.011 : a === b);
+    : k === "dist" ? Math.abs(a - b) < 0.051 : k === "pos" ? Math.abs(a - b) < 2.5 : k === "orbitHz" || k === "volume" ? Math.abs(a - b) < 0.011 : a === b);
   // Keep a value the person just set. ok(appValue) says when the app has confirmed it.
   function hold(held, k, v, now, ok, ms = HOLD_MS) { held[k] = { v, until: now + ms, ok: ok || ((x) => same(k, x, v)) }; }
   // Merge one state message into the page state S. Returns the fields that changed.

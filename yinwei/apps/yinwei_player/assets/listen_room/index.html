@@ -63,10 +63,17 @@
         <div class="liveline"><i id="live-dot"></i><span id="live-text"></span><canvas id="level" aria-hidden="true"></canvas></div>
       </div>
     </div>
+    <div class="mid">
     <div class="transport needs-control">
       <button class="round tb" id="prev" type="button" aria-label="Previous track"><span class="ms fill" aria-hidden="true">skip_previous</span></button>
       <button class="round tb play" id="play" type="button" aria-label="Pause"><span class="ms fill" id="play-icon" aria-hidden="true">pause</span></button>
       <button class="round tb" id="next" type="button" aria-label="Next track"><span class="ms fill" aria-hidden="true">skip_next</span></button>
+    </div>
+    <div class="scrub" id="scrub" hidden>
+      <span id="t-pos">0:00</span>
+      <input id="seek" type="range" min="0" max="1" step="0.1" value="0" aria-label="Song position">
+      <span id="t-left">-0:00</span>
+    </div>
     </div>
     <div class="right" id="right"></div>
   </footer>

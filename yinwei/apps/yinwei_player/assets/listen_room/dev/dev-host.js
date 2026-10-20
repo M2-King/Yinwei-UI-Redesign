@@ -18,6 +18,7 @@
     listening: "on", control: "mine", notice: "none", mode: "point", motion: "fixed", orbitHz: 0.4,
     az: 35, el: 20, dist: 3.2, track: { ...tracks[0] }, volume: 0.72, level: 0,
     stats: { received: 18240, bufferMs: 160, underruns: 0 }, opens: null, pending: false, progress: null,
+    pos: 42, dur: 245, seekable: true,
   };
   const later = (ms, f) => setTimeout(f, ms);
   const say = (t) => YinweiListen.toast(t);
@@ -51,6 +52,7 @@
       case "motion": later(200, () => { M.motion = i.motion; M.orbitHz = i.orbitHz; applied(); }); break;
       case "place": later(200, () => { Object.assign(M, { az: i.az, el: i.el, dist: i.dist }); applied(); }); break;
       case "volume": M.volume = i.v; break;
+      case "seek": later(400, () => { M.pos = Math.min(M.dur, Math.max(0, i.sec)); }); break;
       case "signOut": say("The app goes back to its own sign-in screen"); break;
       case "airplay": say("In the app, iPadOS's AirPlay picker opens here"); break;
       case "close": say("In the app, the room closes and listening carries on"); break;
@@ -64,6 +66,8 @@
     const dt = 0.1, lost = M.notice === "lost";
     if (M.mode === "point" && M.motion === "orbit" && !lost) M.az = wrap(M.az + 360 * M.orbitHz * dt);
     const sounding = M.live && M.playing && !lost && M.notice !== "noapp";
+    // The music app reports its position about once a second, like the laptop.
+    if (M.live && M.playing && !lost) { M.clock = (M.clock || 0) + dt; if (M.clock >= 1) { M.clock = 0; M.pos = (M.pos + 1) % M.dur; } }
     M.level = sounding && M.listening === "on" ? 0.35 + Math.random() * 0.6 : 0;
     if (sounding && M.listening === "on") M.stats.received += 9;
     YinweiListen.apply(JSON.parse(JSON.stringify(M)));

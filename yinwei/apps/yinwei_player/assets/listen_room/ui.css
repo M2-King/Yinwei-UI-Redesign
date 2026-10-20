@@ -185,7 +185,16 @@ input[type="range"]:disabled { opacity: 0.4; }
 .liveline i.off { background: var(--text-3); box-shadow: none; }
 .liveline span { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .liveline canvas { flex: 1; min-width: 40px; height: 18px; }
+.mid { display: flex; flex-direction: column; align-items: center; gap: 6px; }
 .transport { display: flex; align-items: center; gap: 28px; }
+/* Song progress under the transport: elapsed, the bar, time left. */
+.scrub { display: flex; align-items: center; gap: 10px; width: min(380px, 36vw); font-size: var(--t-cap); color: var(--text-3); font-variant-numeric: tabular-nums; }
+.scrub[hidden] { display: none; }
+.scrub span { flex: none; min-width: 38px; }
+.scrub span:last-child { text-align: right; }
+.scrub input { flex: 1; height: 22px; }
+.scrub input::-webkit-slider-thumb { width: 12px; height: 12px; margin-top: -4px; }
+.scrub input:disabled { opacity: 0.55; }
 .tb { width: 54px; height: 54px; }
 .tb .ms { font-size: 30px; }
 .tb.play { width: 88px; height: 88px; border: 1.5px solid rgba(170, 195, 255, 0.75); background: rgba(40, 60, 120, 0.22); box-shadow: 0 0 26px rgba(111, 155, 255, 0.35), inset 0 0 18px rgba(111, 155, 255, 0.18); }
