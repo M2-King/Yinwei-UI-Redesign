@@ -27,6 +27,7 @@ const S = {
   control: "mine", notice: "none", mode: "point", motion: "fixed", orbitHz: 0.4,
   az: 0, el: 0, dist: 2, track: null, volume: 1, level: 0, stats: { received: 0, bufferMs: 0, underruns: 0 }, opens: null,
   pending: false, progress: null, pos: 0, dur: 0, seekable: false,
+  canClose: true, updates: false, // the room as the whole app: no way back; updates checked here
   screen: "room", view: "3d", panel: null,
 };
 const held = {}; // values you just set, kept until the app confirms them
@@ -185,6 +186,8 @@ function render() {
   setText($("sv-motion"), S.mode === "stereo2" ? "Off in 2.0" : S.motion === "orbit" ? `Orbit ${S.orbitHz.toFixed(2)}` : "Fixed");
   setText($("sv-place"), S.mode === "point" ? fmtDist(S.dist) : "Speakers");
   $("m-stop-listen").disabled = !listening;
+  $("m-close").hidden = !S.canClose;
+  $("m-updates").hidden = !S.updates;
   setText($("d-recv"), Number(S.stats.received || 0).toLocaleString());
   setText($("d-buffer"), S.stats.bufferMs ? `${Math.round(S.stats.bufferMs)} ms` : "–");
   if (S.panel) renderPop();
@@ -418,6 +421,7 @@ document.addEventListener("click", (e) => {
 $("m-stop-listen").onclick = () => { closeMenus(); setLocal({ listening: "off" }); send({ t: "stopListening" }); render(); };
 $("m-signout").onclick = () => { closeMenus(); send({ t: "signOut" }); };
 $("m-close").onclick = () => { closeMenus(); send({ t: "close" }); }; // the app closes the room; listening carries on
+$("m-updates").onclick = () => { closeMenus(); send({ t: "checkUpdates" }); }; // the app checks and shows the result
 document.addEventListener("gesturestart", (e) => e.preventDefault()); // iPad: a pinch never zooms the page (and never shifts the header)
 
 // Where the AirPlay button sits, so the app can put iPadOS's real picker exactly over it (P3).

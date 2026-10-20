@@ -5,6 +5,7 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:yinwei_player/mobile/ios_laptop_listen_screen.dart';
+import 'package:yinwei_player/mobile/ios_update_notice.dart';
 import 'package:yinwei_player/mobile/listen_room_sign_in.dart';
 import 'package:yinwei_player/platform/macos_webview_host.dart';
 import 'package:yinwei_player/remote/laptop_listen_controller.dart';
@@ -28,6 +29,12 @@ final listenRoomFpsOverlay = ValueNotifier<bool>(false);
 ///   web process meanwhile, the page is reloaded and the state sent again.
 /// - If the page reports an error (no WebGL) or is not ready within
 ///   [readyTimeout], the classic [IosLaptopListenScreen] is shown instead.
+/// iPad: the room is the whole app (no player page behind it). A build with
+/// `--dart-define=YINWEI_IOS_ROOM_HOME=false` opens the previous player page
+/// instead (rollback; that page and its code are kept).
+const bool kIosRoomIsHome =
+    bool.fromEnvironment('YINWEI_IOS_ROOM_HOME', defaultValue: true);
+
 class IosListenRoomScreen extends StatefulWidget {
   const IosListenRoomScreen({
     super.key,
@@ -36,7 +43,16 @@ class IosListenRoomScreen extends StatefulWidget {
     this.driverFactory,
     this.loadHtml,
     this.readyTimeout = const Duration(seconds: 5),
+    this.home = false,
+    this.updateNotice,
   });
+
+  /// The room is the whole app (iPad): nothing to go back to, and updates
+  /// are checked here (automatically once a session, and from the ••• menu).
+  final bool home;
+
+  /// Defaults to the update channel when [home] on iOS.
+  final IosUpdateNotice? updateNotice;
 
   /// The iPad's own file player; listening waits until it is paused.
   final EngineController? player;
@@ -65,6 +81,10 @@ class _IosListenRoomScreenState extends State<IosListenRoomScreen>
   String? _html;
   Timer? _readyTimer;
   bool _booting = false, _pageReady = false, _classic = false;
+  late final IosUpdateNotice? _updates = widget.updateNotice ??
+      (widget.home && defaultTargetPlatform == TargetPlatform.iOS
+          ? IosUpdateNotice()
+          : null);
 
   @override
   void initState() {
@@ -73,6 +93,14 @@ class _IosListenRoomScreenState extends State<IosListenRoomScreen>
     _session.addListener(_sessionChanged);
     listenRoomFpsOverlay.addListener(_applyFps);
     _sessionChanged();
+    // A newer published build is offered once a session.
+    final updates = _updates;
+    if (updates != null && updates.enabled) {
+      WidgetsBinding.instance.addPostFrameCallback((_) async {
+        final release = await updates.check();
+        if (release != null && mounted) updates.showBanner(context, release);
+      });
+    }
   }
 
   @override
@@ -104,6 +132,7 @@ class _IosListenRoomScreenState extends State<IosListenRoomScreen>
         await driver.execute(script);
       },
       localPlayerPlaying: () => widget.player?.playing == true,
+      canClose: !widget.home,
     )
       ..onReady = _pageIsReady
       ..onAirplayRectChanged = () {
@@ -114,7 +143,12 @@ class _IosListenRoomScreenState extends State<IosListenRoomScreen>
       }
       ..onClose = () {
         unawaited(Navigator.of(context).maybePop());
-      };
+      }
+      ..onCheckUpdates = _updates == null
+          ? null
+          : () {
+              if (mounted) unawaited(_updates.checkAndReport(context));
+            };
     _driver = driver;
     _bridge = bridge;
     bool current() => mounted && identical(driver, _driver);
@@ -240,7 +274,7 @@ class _IosListenRoomScreenState extends State<IosListenRoomScreen>
     if (!_session.signedIn) {
       return ListenRoomSignIn(
         session: _session,
-        onClose: () => Navigator.of(context).maybePop(),
+        onClose: widget.home ? null : () => Navigator.of(context).maybePop(),
       );
     }
     return AnnotatedRegion<SystemUiOverlayStyle>(

@@ -467,6 +467,21 @@ SHA-256 as today.
     processes every round (0.45–0.7 s). Caching the music app's process would cut that, but it is the
     code Live Transfer uses to find the app: needs your OK.
 
+## 9d. The room is the whole iPad app (2026-10-20, your decision)
+
+- On iPad the app opens straight into the Moonlight Room (`PlayerScreen` → `IosListenRoomScreen(home:
+  true)`); the previous player page is no longer shown. Its code stays, so a build with
+  `--dart-define=YINWEI_IOS_ROOM_HOME=false` brings it back (rollback). Android, Windows and Mac are
+  unchanged.
+- No way back from the room: "Back to the player" is gone from the ••• menu and the sign-in, and a close
+  request is ignored.
+- Updates moved into the room: checked once a session (banner), and **Check for updates** in the •••
+  menu (icon: info, already in the bundled icon subset).
+- The classic listen screen remains only as the automatic fallback when the room can't start (no WebGL,
+  or not ready in 5 s).
+- No longer reachable on iPad: the local file player and library, the ReplayKit capture panel, and the
+  developer diagnostics page (with the Listen Room FPS meter switch).
+
 ## 10. Order of work and approvals
 
 Your order (2026-10-19): **iPad and mobile first, then Windows, Mac last.** Each stage ends with a

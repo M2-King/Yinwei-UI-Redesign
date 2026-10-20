@@ -7,7 +7,11 @@ import 'package:yinwei_player/mobile/ios_laptop_listen_screen.dart';
 import 'package:yinwei_player/mobile/ios_listen_room_screen.dart';
 import 'package:yinwei_player/platform/macos_webview_host.dart';
 
+import 'package:yinwei_player/mobile/ios_update_notice.dart';
+import 'package:yinwei_player/update/release_manifest.dart';
+
 import '../remote/listen_room_bridge_test.dart' show FakeSession, snapshot;
+import 'ios_update_notice_test.dart' show FakeService, offer, release;
 
 /// A WebView that records what the screen does with it.
 class FakeDriver implements MacOSWebViewDriver {
@@ -176,6 +180,51 @@ void main() {
     expect(find.byType(UiKitView), findsNothing);
     expect(find.byType(IosLaptopListenScreen), findsOneWidget);
     expect(session.calls, isEmpty);
+  });
+
+  testWidgets('the whole app: no way back, updates offered and checkable',
+      (tester) async {
+    final service = FakeService((_) async => offer(release(build: 52)));
+    final notice = IosUpdateNotice(
+        service: service, installed: InstalledApp.currentIos(build: 51));
+    session.signed = false;
+    await tester.pumpWidget(MaterialApp(
+      home: IosListenRoomScreen(
+        session: session,
+        driverFactory: () => driver,
+        loadHtml: () async => '<html><body>room</body></html>',
+        home: true,
+        updateNotice: notice,
+      ),
+    ));
+    await tester.pumpAndSettle();
+    expect(find.byTooltip('Back to the player'), findsNothing,
+        reason: 'the sign-in has nothing to go back to');
+    expect(find.byKey(const Key('ios-update-banner')), findsOneWidget,
+        reason: 'checked once on start');
+    expect(service.asked, hasLength(1));
+    ScaffoldMessenger.of(tester.element(find.byType(IosListenRoomScreen)))
+        .hideCurrentMaterialBanner();
+    await tester.pumpAndSettle();
+
+    session.set((s) => s.signed = true);
+    await tester.pump();
+    await tester.pump();
+    driver.message!('{"t":"ready","v":1}');
+    await tester.pump();
+    final state =
+        driver.scripts.lastWhere((s) => s.startsWith('YinweiListen.apply('));
+    expect(state, contains('"canClose":false'));
+    expect(state, contains('"updates":true'));
+    driver.message!('{"t":"close"}');
+    await tester.pump();
+    expect(find.byType(IosListenRoomScreen), findsOneWidget,
+        reason: 'a close request is ignored');
+    driver.message!('{"t":"checkUpdates"}');
+    await tester.pumpAndSettle();
+    expect(service.asked, hasLength(2), reason: 'the menu checks again');
+    expect(find.byKey(const Key('ios-update-banner')), findsOneWidget);
+    await tester.pump(const Duration(seconds: 6));
   });
 
   testWidgets('signed out: the native sign-in, no WebView', (tester) async {

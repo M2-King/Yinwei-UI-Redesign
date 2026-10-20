@@ -482,6 +482,23 @@ void main() {
       ]);
     });
 
+    test('the room as the whole app: no way back; updates from the menu',
+        () async {
+      var closed = 0, checks = 0;
+      final home =
+          ListenRoomBridge(session: session, run: (_) async {}, canClose: false)
+            ..onClose = (() => closed++)
+            ..onCheckUpdates = (() => checks++);
+      expect(home.state()['canClose'], isFalse);
+      expect(home.state()['updates'], isTrue);
+      await home.handle('{"t":"close"}');
+      await home.handle('{"t":"checkUpdates"}');
+      expect([closed, checks], [0, 1]);
+      expect(bridge.state()['canClose'], isTrue, reason: 'opened from a page');
+      expect(bridge.state()['updates'], isFalse);
+      home.dispose();
+    });
+
     test('pending: a command on its way keeps what you tapped', () {
       expect(bridge.state()['pending'], isFalse);
       session.pending = true;

@@ -29,7 +29,15 @@ class ListenRoomBridge {
     this.localPlayerPlaying,
     this.minInterval = const Duration(milliseconds: 100),
     this.laptopLabel = 'your laptop',
+    this.canClose = true,
   });
+
+  /// False when the room is the whole app: the page hides "Back to the
+  /// player" and a close request is ignored.
+  final bool canClose;
+
+  /// The page's "Check for updates" (shown only when set).
+  VoidCallback? onCheckUpdates;
 
   final LaptopListenController session;
 
@@ -221,6 +229,8 @@ class ListenRoomBridge {
       'opens': opens.isEmpty ? null : opens,
       // A command is on its way: the page keeps what you tapped until then.
       'pending': s.pending,
+      'canClose': canClose,
+      'updates': onCheckUpdates != null,
       'progress': progress,
       'pos': dur > 0 ? pos.clamp(0.0, dur) : 0,
       'dur': dur > 0 ? dur : 0,
@@ -303,7 +313,9 @@ class ListenRoomBridge {
       case 'error':
         onPageError?.call(_text(m['msg']));
       case 'close':
-        onClose?.call();
+        if (canClose) onClose?.call();
+      case 'checkUpdates':
+        onCheckUpdates?.call();
       case 'rects':
         final r = m['airplay'];
         final valid = r is List &&

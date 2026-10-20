@@ -4,6 +4,7 @@ import 'dart:io';
 
 import 'package:desktop_drop/desktop_drop.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:flutter/foundation.dart' show defaultTargetPlatform;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:window_manager/window_manager.dart';
@@ -32,6 +33,7 @@ import 'package:yinwei_player/state/app_session_coordinator.dart';
 import 'package:yinwei_player/remote/remote_gateway.dart';
 import 'package:yinwei_player/remote/remote_protocol.dart';
 import 'package:yinwei_player/remote/remote_guest.dart';
+import 'package:yinwei_player/mobile/ios_listen_room_screen.dart';
 import 'package:yinwei_player/remote/remote_media_keys.dart';
 import 'package:yinwei_player/remote/remote_music_app.dart';
 import 'package:yinwei_player/remote/remote_deployment.dart';
@@ -1070,6 +1072,10 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
   @override
   Widget build(BuildContext context) {
     if (_caps.usesMobilePlayer) {
+      // iPad: the Moonlight Room is the whole app.
+      if (kIosRoomIsHome && defaultTargetPlatform == TargetPlatform.iOS) {
+        return IosListenRoomScreen(player: _ctrl, home: true);
+      }
       return MobilePlayerScreen(
         controller: _ctrl,
         backend: _backend,
