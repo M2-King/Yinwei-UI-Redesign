@@ -88,7 +88,8 @@ final class YinweiReplayKitProbeController {
     case "prepareRemoteReturn":
       // listen: "Listen to laptop" (no iPad source app is playing).
       let listen = (call.arguments as? [String: Any])?["listen"] as? Bool == true
-      do { returnTone.stop(); try remoteReturn.prepare(listen: listen); result(["ok": true]) }
+      let catchUp = (call.arguments as? [String: Any])?["catchUp"] as? Bool == true
+      do { returnTone.stop(); try remoteReturn.prepare(listen: listen, catchUp: catchUp); result(["ok": true]) }
       catch { result(FlutterError(code: "return_output_failed",
         message: "Could not open iPad audio output", details: nil)) }
     case "writeRemoteReturn":
@@ -97,6 +98,16 @@ final class YinweiReplayKitProbeController {
       result(YinweiOpusDecoder() != nil)
     case "getRemoteReturnStatus":
       result(remoteReturn.status)
+    case "configureListenLatency":
+      let args = call.arguments as? [String: Any]
+      remoteReturn.configureListen(privateRoute: args?["privateRoute"] as? Bool == true,
+        catchUp: args?["catchUp"] as? Bool == true)
+      result(nil)
+    case "setListenTransportGain":
+      if let gain = (call.arguments as? [String: Any])?["gain"] as? Double {
+        remoteReturn.setTransportGain(gain)
+      }
+      result(nil)
     case "setRemoteReturnVolume":
       if let volume = (call.arguments as? [String: Any])?["volume"] as? Double {
         remoteReturn.setVolume(volume)
@@ -271,6 +282,10 @@ final class YinweiReplayKitProbeController {
 private final class YinweiRemoteReturnPlayer {
   private let engine = AVAudioEngine()
   private let player = AVAudioPlayerNode()
+  private var listenTimePitch: AVAudioUnitTimePitch?
+  private var catchUpEnabled = false
+  private var transportGain: Float = 1
+  private var fadeGeneration: UInt64 = 0
   // Everything below runs on this serial queue, never the main thread: the
   // room's WebView and the UI keep the main thread busy, and audio waiting
   // on it ran dry ("stuck-stuck"). Packets arrive on a background channel.
@@ -326,8 +341,34 @@ private final class YinweiRemoteReturnPlayer {
   // Thread-safe entry points (callers are the main and audio channels).
   var isReady: Bool { audio.sync { ready } }
   var status: [String: Any] { audio.sync { currentStatus } }
-  func prepare(listen: Bool = false) throws { try audio.sync { try _prepare(listen: listen) } }
+  func prepare(listen: Bool = false, catchUp: Bool = false) throws {
+    try audio.sync { try _prepare(listen: listen, catchUp: catchUp) }
+  }
   func setVolume(_ volume: Double) { audio.sync { _setVolume(volume) } }
+  func configureListen(privateRoute: Bool, catchUp: Bool) {
+    audio.sync {
+      guard listenMode else { return }
+      listenBuffer.configure(privateRoute: privateRoute)
+      catchUpEnabled = catchUp && listenTimePitch != nil
+      if !catchUp { listenTimePitch?.rate = 1 }
+    }
+  }
+  func setTransportGain(_ value: Double) {
+    audio.async { [weak self] in
+      guard let self, self.listenMode, value.isFinite else { return }
+      self.fadeGeneration &+= 1
+      let generation = self.fadeGeneration
+      let start = self.transportGain
+      let end = Float(min(1, max(0, value)))
+      for step in 1...6 {
+        self.audio.asyncAfter(deadline: .now() + .milliseconds(step * 5)) { [weak self] in
+          guard let self, self.listenMode, self.fadeGeneration == generation else { return }
+          self.transportGain = start + (end - start) * Float(step) / 6
+          self.player.volume = self.listenVolume * self.transportGain
+        }
+      }
+    }
+  }
   func newStream(sampleRate: Double) { audio.sync { _newStream(sampleRate: sampleRate) } }
   func reset() { audio.sync { _reset() } }
   func stop() { audio.sync { _stop() } }
@@ -363,14 +404,22 @@ private final class YinweiRemoteReturnPlayer {
         "configurationChanges": configurationChanges,
         "maxRenderCheckGapMs": maxRenderCheckGapMs,
         "opusPackets": opusPackets, "opusFailures": opusFailures,
+        "routeMinimumMs": listenBuffer.routeMinimumMs,
+        "catchUpRate": listenTimePitch?.rate ?? 1,
+        "catchUpEnabled": catchUpEnabled,
+        "catchUpLatencyMs": (listenTimePitch?.latency ?? 0) * 1000,
+        "transportGain": transportGain,
+        "silenceTrimmedFrames": listenBuffer.silenceTrimmedFrames,
       ]) { _, new in new }
     }
     return value
   }
 
-  private func _prepare(listen: Bool) throws {
+  private func _prepare(listen: Bool, catchUp: Bool = false) throws {
     _stop()
     listenMode = listen
+    transportGain = 1
+    catchUpEnabled = listen && catchUp
     // A previous listening gain must never carry into the capture route.
     player.volume = listen ? listenVolume : 1
     counters.begin()
@@ -391,7 +440,16 @@ private final class YinweiRemoteReturnPlayer {
     else { throw YinweiReplayKitToneError.bufferAllocationFailed }
     self.format = format
     engine.attach(player)
-    engine.connect(player, to: engine.mainMixerNode, format: format)
+    if listen && catchUp {
+      let pitch = AVAudioUnitTimePitch()
+      pitch.rate = 1; pitch.pitch = 0
+      listenTimePitch = pitch
+      engine.attach(pitch)
+      engine.connect(player, to: pitch, format: format)
+      engine.connect(pitch, to: engine.mainMixerNode, format: format)
+    } else {
+      engine.connect(player, to: engine.mainMixerNode, format: format)
+    }
     prepared = true
     do { engine.prepare(); try engine.start() }
     catch { _stop(); throw error }
@@ -424,7 +482,7 @@ private final class YinweiRemoteReturnPlayer {
   private func _setVolume(_ volume: Double) {
     guard listenMode, volume.isFinite else { return }
     listenVolume = Float(min(1, max(0, volume)))
-    player.volume = listenVolume
+    player.volume = listenVolume * transportGain
   }
 
   private func interruption(_ note: Notification) {
@@ -476,7 +534,13 @@ private final class YinweiRemoteReturnPlayer {
     format = next
     opusDecoder = nil // made for the old format
     engine.disconnectNodeOutput(player)
-    engine.connect(player, to: engine.mainMixerNode, format: next)
+    if let pitch = listenTimePitch, listenMode {
+      engine.disconnectNodeOutput(pitch)
+      engine.connect(player, to: pitch, format: next)
+      engine.connect(pitch, to: engine.mainMixerNode, format: next)
+    } else {
+      engine.connect(player, to: engine.mainMixerNode, format: next)
+    }
   }
 
   private func listenRenderedFrame() -> AVAudioFramePosition? {
@@ -495,8 +559,11 @@ private final class YinweiRemoteReturnPlayer {
       maxRenderCheckGapMs = max(maxRenderCheckGapMs, (now - previous) * 1000)
     }
     lastRenderCheck = now
+    listenBuffer.updateRate(now: now)
+    listenTimePitch?.rate = catchUpEnabled ? listenBuffer.playbackRate : 1
     guard let frame = listenRenderedFrame(),
-          listenBuffer.observe(renderedFrame: frame, now: now) else { return }
+          listenBuffer.observe(renderedFrame: frame, now: now,
+            expectedSilence: transportGain < 0.999) else { return }
     player.pause()
     // pause preserves the player timeline. Capture any render quantum that
     // finished between the observation and pause before placing the refill.
@@ -573,6 +640,14 @@ private final class YinweiRemoteReturnPlayer {
       pcmBuffer.frameLength = AVAudioFrameCount(frames)
       buffer = pcmBuffer
     }
+    if listenMode && !catchUpEnabled {
+      let trim = listenBuffer.silenceTrim(count: frames, peak: YinweiOpusDecoder.peak(buffer),
+        now: ProcessInfo.processInfo.systemUptime)
+      if trim > 0 {
+        frames -= trim
+        buffer.frameLength = AVAudioFrameCount(frames)
+      }
+    }
     var when: AVAudioTime?
     if listenMode {
       guard let start = listenBuffer.enqueue(frames: frames) else { return false }
@@ -612,14 +687,16 @@ private final class YinweiRemoteReturnPlayer {
     counters.invalidate()
     queued = 0; queuedFrames = 0
     listenBuffer.reset(sampleRate: format?.sampleRate ?? 48_000)
+    listenTimePitch?.rate = 1
     opusDecoder?.reset()
     lastRenderCheck = nil
     guard prepared else { return }
     player.stop(); player.reset()
-    if listenMode { player.volume = listenVolume }
+    if listenMode { player.volume = listenVolume * transportGain }
   }
 
   private func _stop() {
+    fadeGeneration &+= 1
     renderTimer?.cancel(); renderTimer = nil
     for observer in observers { NotificationCenter.default.removeObserver(observer) }
     observers.removeAll()
@@ -627,6 +704,8 @@ private final class YinweiRemoteReturnPlayer {
     _reset(); epoch = nil
     guard prepared else { return }
     engine.stop(); engine.disconnectNodeOutput(player); engine.detach(player)
+    if let pitch = listenTimePitch { engine.detach(pitch) }
+    listenTimePitch = nil
     format = nil; prepared = false
     try? AVAudioSession.sharedInstance().setActive(false, options: [.notifyOthersOnDeactivation])
   }

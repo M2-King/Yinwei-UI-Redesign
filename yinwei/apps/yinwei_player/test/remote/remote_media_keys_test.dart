@@ -83,6 +83,9 @@ void main() {
     expect(started.length, 1);
     await k.send('play');
     expect(started.length, 1);
+    expect(k.lastTiming['warm'], isTrue);
+    expect(k.lastTiming['fallback'], isFalse);
+    expect(k.lastTiming['ackMs'], isNonNegative);
   });
 
   test('the app refusing, or no session, throws like the one-off command',

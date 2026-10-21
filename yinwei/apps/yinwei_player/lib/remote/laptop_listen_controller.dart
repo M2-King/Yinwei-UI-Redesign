@@ -46,6 +46,12 @@ abstract class LaptopListenOutput {
   void setRemoteCommandHandler(void Function(String action)? handler);
 }
 
+/// Optional additive receiver controls; old/test outputs retain their behavior.
+abstract interface class LowLatencyListenOutput {
+  Future<void> configureLatency({required bool privateRoute});
+  Future<void> setTransportGain(double gain);
+}
+
 /// The header fields of one laptop audio packet: YNW1 (float PCM) or YNO1
 /// (the same header, then one 20 ms Opus packet).
 class YnwPacketHeader {
@@ -140,11 +146,43 @@ class LaptopListenController extends ChangeNotifier {
   final _nativeWrites = <Future<void>>{};
   int? _lastPacketUs;
   int? _routeChangeUs, _lastAudioRecoveryMs;
+  int _feedbackGeneration = 0;
+  Timer? _feedbackWatchdog;
+  final _commandClock = Stopwatch()..start();
+  final _commandTimings = <Map<String, Object?>>[];
+  double? _pageTapMs;
+  void recordPageTap(Object? value) {
+    _pageTapMs =
+        value is num && value.isFinite && value >= 0 ? value.toDouble() : null;
+  }
+
+  Future<void> _configureLatency() async {
+    final receiver = output;
+    if (receiver is! LowLatencyListenOutput) return;
+    try {
+      await (receiver as LowLatencyListenOutput).configureLatency(
+          privateRoute: _client is RoutedOwnerClient &&
+              (_client! as RoutedOwnerClient).route == 'tailscale-websocket');
+    } catch (_) {/* Older receiver: keep its 120 ms policy. */}
+  }
+
+  void _restoreFeedback() {
+    ++_feedbackGeneration;
+    _feedbackWatchdog?.cancel();
+    _feedbackWatchdog = null;
+    final receiver = output;
+    if (receiver is LowLatencyListenOutput) {
+      unawaited((receiver as LowLatencyListenOutput)
+          .setTransportGain(1)
+          .catchError((Object _) {}));
+    }
+  }
 
   void _routeChanged() {
     final routed = _client;
     if (routed is! RoutedOwnerClient) return;
     _transportGeneration = routed.generation;
+    _restoreFeedback();
     if (listening) _routeChangeUs = _audioClock.elapsedMicroseconds;
     final events = _events, audio = _audio;
     _events = _audio = null;
@@ -238,6 +276,8 @@ class LaptopListenController extends ChangeNotifier {
                 'transportGeneration': _transportGeneration
               },
         ..._diagnostics.snapshot(),
+        'commands':
+            _commandTimings.map((row) => Map<String, Object?>.of(row)).toList(),
       };
 
   bool get signedIn => _client?.signedIn == true && snapshot != null;
@@ -527,6 +567,7 @@ class LaptopListenController extends ChangeNotifier {
       // automatic re-take tells them apart: the laptop refuses it after a
       // takeover.
       _lease = null;
+      _restoreFeedback();
       if (_wantControl) unawaited(_renewLease());
     }
     _updateNowPlaying();
@@ -593,11 +634,63 @@ class LaptopListenController extends ChangeNotifier {
   }
 
   Future<bool> command(String type,
-          [Map<String, dynamic> payload = const {}]) =>
-      _command(type, payload, false);
+      [Map<String, dynamic> payload = const {}]) async {
+    final tapped = _commandClock.elapsedMicroseconds;
+    final row = <String, Object?>{
+      'action': type,
+      'intentReceivedUs': tapped,
+      'pageTapMs': _pageTapMs,
+      'transportGeneration': _transportGeneration,
+      'firstChangedAudioMs': null,
+      'audioAttribution': 'unavailable',
+      'tapToBridgeMs': null
+    };
+    if (_commandTimings.length == 32) _commandTimings.removeAt(0);
+    _commandTimings.add(row);
+    _pageTapMs = null;
+    _restoreFeedback();
+    final feedback = listening &&
+        hasControl &&
+        !pending &&
+        const ['pause', 'media.pause', 'media.next', 'media.previous']
+            .contains(type);
+    final receiver = output;
+    final token = ++_feedbackGeneration;
+    if (feedback && receiver is LowLatencyListenOutput) {
+      unawaited((receiver as LowLatencyListenOutput)
+          .setTransportGain(0)
+          .catchError((Object _) {}));
+      _feedbackWatchdog?.cancel();
+      _feedbackWatchdog = Timer(const Duration(milliseconds: 900), () {
+        if (token == _feedbackGeneration) _restoreFeedback();
+      });
+    } else if (type == 'play' || type == 'media.play' || type == 'live.start') {
+      _restoreFeedback();
+    }
+    var applied = false;
+    try {
+      final ok = await _command(type, payload, false, row);
+      applied = ok;
+      row['result'] = ok ? 'accepted' : 'refused_or_unknown';
+      return ok;
+    } finally {
+      row['completedMs'] = (_commandClock.elapsedMicroseconds - tapped) / 1000;
+      if (token == _feedbackGeneration) {
+        if (applied && feedback) {
+          _feedbackWatchdog?.cancel();
+          _feedbackWatchdog = Timer(
+              Duration(milliseconds: (queuedMs + 60).clamp(120, 500)), () {
+            if (token == _feedbackGeneration) _restoreFeedback();
+          });
+        } else {
+          _restoreFeedback();
+        }
+      }
+    }
+  }
 
-  Future<bool> _command(
-      String type, Map<String, dynamic> payload, bool retried) async {
+  Future<bool> _command(String type, Map<String, dynamic> payload, bool retried,
+      [Map<String, Object?>? timing]) async {
     final client = _client, state = snapshot, lease = _lease;
     if (client == null ||
         state == null ||
@@ -608,7 +701,30 @@ class LaptopListenController extends ChangeNotifier {
     pending = true;
     _changed();
     try {
+      timing?['requestSentUs'] = _commandClock.elapsedMicroseconds;
       final result = await client.command(state, lease, type, payload);
+      timing?['snapshotBackUs'] = _commandClock.elapsedMicroseconds;
+      if (result['timing'] is Map) {
+        final host = result['timing'] as Map;
+        timing?['host'] = {
+          for (final key in [
+            'queueMs',
+            'applyMs',
+            'acceptedAfterMs',
+            'appliedAfterMs'
+          ])
+            if (host[key] is num) key: host[key]
+        };
+        if (host['mediaHelper'] is Map) {
+          final helper = host['mediaHelper'] as Map;
+          timing?['mediaHelper'] = {
+            for (final key in ['readyMs', 'ackMs', 'totalMs'])
+              if (helper[key] is num) key: helper[key],
+            for (final key in ['warm', 'fallback'])
+              if (helper[key] is bool) key: helper[key],
+          };
+        }
+      }
       if (result['snapshot'] is Map<String, dynamic>) {
         _applySnapshot(result['snapshot'] as Map<String, dynamic>);
       }
@@ -629,7 +745,7 @@ class LaptopListenController extends ChangeNotifier {
           }
           _applySnapshot(
               (await client.session())['snapshot'] as Map<String, dynamic>);
-          return await _command(type, payload, true);
+          return await _command(type, payload, true, timing);
         } catch (_) {
           // Report the original failure below.
         }
@@ -698,6 +814,8 @@ class LaptopListenController extends ChangeNotifier {
           'The music app opened on the laptop but has no song ready. Choose a song there once.',
         'live_start_failed' =>
           'Live Transfer did not start on the laptop. Check the laptop.',
+        'audio_route_restore_failed' =>
+          'A running music process could not be restored to its normal audio output. Close that music app on the laptop, then try again.',
         'media_command_failed' =>
           'The laptop music app did not accept that command.',
         'array_active' => 'Orbit is off in 2.0 mode.',
@@ -760,6 +878,7 @@ class LaptopListenController extends ChangeNotifier {
       return;
     }
     listening = true;
+    await _configureLatency();
     interrupted = false;
     received = dropped = played = underruns = bufferMs = queuedMs = 0;
     _diagnostics = ListenAudioDiagnostics();
@@ -791,6 +910,7 @@ class LaptopListenController extends ChangeNotifier {
 
   Future<void> stopListening({String? message}) async {
     if (!listening) return;
+    _restoreFeedback();
     listening = false;
     _audioClock.stop();
     audioConnected = false;
@@ -843,6 +963,11 @@ class LaptopListenController extends ChangeNotifier {
           continue;
         }
         _audio = socket;
+        await _configureLatency();
+        if (!_listening(generation, session) || route != _transportGeneration) {
+          unawaited(socket.close());
+          continue;
+        }
         _diagnostics.connectionOpened();
         int? epoch, rate;
         await for (final message in socket) {
@@ -964,6 +1089,17 @@ class LaptopListenController extends ChangeNotifier {
 
   void _write(Uint8List packet, int generation, int route) {
     if (route != _transportGeneration) return;
+    if (_commandTimings.isNotEmpty) {
+      final timing = _commandTimings.last;
+      final back = timing['snapshotBackUs'];
+      if (back is int &&
+          timing['transportGeneration'] == route &&
+          !timing.containsKey('firstPacketAfterSnapshotMs')) {
+        timing['firstPacketAfterSnapshotMs'] =
+            (_commandClock.elapsedMicroseconds - back) / 1000;
+        // Arrival only; never claim the content changed or was heard.
+      }
+    }
     if (_writes >= 64 || interrupted) {
       if (interrupted) {
         ++_diagnostics.interruptedDrops;
@@ -1045,6 +1181,12 @@ class LaptopListenController extends ChangeNotifier {
           'completionBacklogDrops',
           'configurationChanges',
           'maxRenderCheckGapMs',
+          'routeMinimumMs',
+          'catchUpRate',
+          'catchUpEnabled',
+          'catchUpLatencyMs',
+          'transportGain',
+          'silenceTrimmedFrames',
           'interrupted',
         ])
           if (value.containsKey(key)) key: value[key]
@@ -1109,6 +1251,7 @@ class LaptopListenController extends ChangeNotifier {
 
   @override
   void dispose() {
+    _restoreFeedback();
     unawaited(_endSession());
     _disposed = true;
     super.dispose();

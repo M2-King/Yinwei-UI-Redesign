@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
 
+import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:yinwei_player/bridge/wet_output_policy.dart';
 
@@ -184,7 +185,29 @@ class RouteHelperClient {
 }
 
 class AppAudioRouter {
-  AppAudioRouter({RouteHelperClient? helper}) : _helper = helper;
+  AppAudioRouter({RouteHelperClient? helper})
+      : _helper = helper,
+        _enabled = Platform.isWindows,
+        _command = null,
+        _recoveryFile = null,
+        _log = debugPrint;
+
+  @visibleForTesting
+  AppAudioRouter.forTesting({
+    required Future<List<String>> Function(List<String>) command,
+    required File recoveryFile,
+    void Function(String)? log,
+  })  : _enabled = true,
+        _command = command,
+        _recoveryFile = recoveryFile,
+        _log = log ?? ((_) {});
+
+  final bool _enabled;
+  final Future<List<String>> Function(List<String>)? _command;
+  final File? _recoveryFile;
+  final void Function(String) _log;
+  Future<void>? _recovering;
+  AudioRouteRecoveryException? lastRecoveryFailure;
 
   RouteHelperClient? _helper;
   String? _speakersId;
@@ -208,7 +231,7 @@ class AppAudioRouter {
   /// [wetName] is the resolved wet device; a silent sink equal to it is
   /// skipped (muting it would silence wet).
   Future<AppAudioSplit?> detectSplit({String wetName = ''}) async {
-    if (!Platform.isWindows) return null;
+    if (!_enabled) return null;
     return AppAudioRouter.parseSplit(await _run(['list']), wetName: wetName);
   }
 
@@ -269,7 +292,7 @@ class AppAudioRouter {
     required String speakersId,
     bool keepSpeakerMute = false,
   }) async {
-    if (!Platform.isWindows || rootPid <= 0) return false;
+    if (!_enabled || rootPid <= 0) return false;
     if (shouldSkipPin(
       rootPid: rootPid,
       routedRootPid: _routedRootPid,
@@ -279,12 +302,21 @@ class AppAudioRouter {
     }
     final preserveUnmute = _unmuteSpeakersOnRestore;
     if (keepSpeakerMute && _speakersId == speakersId) {
-      await _run(['clear', _routedPids.join(',')]);
+      final previous = AudioRouteRecoveryState.parse(await _readDirty());
+      for (final pid in _routedPids) {
+        final identity =
+            previous?.processes.where((p) => p.pid == pid).firstOrNull;
+        if (identity == null) throw AudioRouteRecoveryException([pid]);
+        await _run(['clear', '$pid', jsonEncode(identity.toJson())]);
+      }
       _routedPids.clear();
       _routedRootPid = 0;
     } else {
       await restore();
       keepSpeakerMute = false;
+      // Non-routing failures do not block Live, but must not let a new pin
+      // overwrite an outstanding speaker restoration or unreadable journal.
+      if (await _readDirty() != null) return false;
     }
     if (!keepSpeakerMute) {
       final rows = await _run(['mute-state', speakersId]);
@@ -298,18 +330,32 @@ class AppAudioRouter {
       if (wasMuted != 0 && wasMuted != 1) return false;
       _unmuteSpeakersOnRestore = wasMuted == 0;
       _speakersId = speakersId;
-      // The recovery record must exist before any persistent route or mute.
-      await _setDirty(true,
-          state: AudioRouteRecoveryState(
-            speakersId,
-            wasMuted == 0,
-            rootPid: rootPid,
-            routedPids: [rootPid],
-          ));
     }
+    final processes = (await _run(['processes', '$rootPid']))
+        .where((line) => line.startsWith('PROCESS '))
+        .map((line) =>
+            AudioRouteProcessIdentity.parse(jsonDecode(line.substring(8))))
+        .whereType<AudioRouteProcessIdentity>()
+        .toList();
+    if (processes.isEmpty) return false;
+    // Journal the exact candidates before apply. The helper only routes these
+    // identities, so a crash cannot leave unrecorded same-exe children behind.
+    final record = AudioRouteRecoveryState(
+      speakersId,
+      keepSpeakerMute ? preserveUnmute : _unmuteSpeakersOnRestore,
+      rootPid: rootPid,
+      routedPids: processes.map((p) => p.pid).toList(),
+      processes: processes,
+    );
+    await _setDirty(true, state: record);
     late final List<String> rows;
     try {
-      rows = await _run(['apply', '$rootPid', speakersId]);
+      rows = await _run([
+        'apply',
+        '$rootPid',
+        speakersId,
+        jsonEncode(processes.map((p) => p.toJson()).toList())
+      ]);
     } catch (_) {
       await restore();
       rethrow;
@@ -338,37 +384,17 @@ class AppAudioRouter {
           _unmuteSpeakersOnRestore,
           rootPid: rootPid,
           routedPids: _routedPids,
+          processes:
+              processes.where((p) => _routedPids.contains(p.pid)).toList(),
         ));
     return _routedPids.isNotEmpty;
   }
 
   Future<void> restore() async {
-    if (!Platform.isWindows) return;
+    if (!_enabled) return;
     final dirty = await _readDirty();
     if (!isRouted && dirty == null) return;
-    final state = AudioRouteRecoveryState.parse(dirty);
-    if (state == null && dirty?.trim() == '1' && _speakersId == null) {
-      await recoverIfDirty();
-      return;
-    }
-    final speakers = _speakersId ?? state?.speakersId;
-    final unmute = _unmuteSpeakersOnRestore || (state?.unmute ?? false);
-    final pids = _routedPids.isNotEmpty
-        ? _routedPids
-        : (state?.routedPids ?? const <int>[]);
-    Object? clearError;
-    try {
-      if (pids.isNotEmpty) {
-        await _run(['clear', pids.join(',')]);
-      } else if (dirty?.trim() == '1') {
-        await _run(['clear-all']);
-      }
-    } catch (error) {
-      clearError = error;
-    }
-    if (speakers != null && unmute) await _run(['unmute', speakers]);
-    if (clearError != null) throw clearError;
-    await _setDirty(false);
+    await recoverIfDirty();
     _speakersId = null;
     _unmuteSpeakersOnRestore = false;
     _routedRootPid = 0;
@@ -376,43 +402,124 @@ class AppAudioRouter {
   }
 
   /// Undo a route left by a previous process, including its endpoint mute.
-  Future<void> recoverIfDirty() async {
-    if (!Platform.isWindows) return;
+  Future<void> recoverIfDirty() =>
+      _recovering ??= _recoverDirty().whenComplete(() => _recovering = null);
+
+  /// A failed startup attempt must not latch Live off until the next restart.
+  Future<bool> recoverBeforeLive(Future<bool> startupRecovery) async {
+    try {
+      await startupRecovery;
+    } catch (_) {/* Retry current state below. */}
+    try {
+      await recoverIfDirty();
+      return true;
+    } on AudioRouteRecoveryException {
+      return false;
+    }
+  }
+
+  Future<AudioRouteProcessIdentity?> _inspect(int pid) async {
+    final rows = await _run(['inspect', '$pid']);
+    if (rows.contains('MISSING')) return null;
+    for (final line in rows) {
+      if (line.startsWith('PROCESS ')) {
+        final process =
+            AudioRouteProcessIdentity.parse(jsonDecode(line.substring(8)));
+        if (process != null && process.pid == pid) return process;
+      }
+    }
+    throw const FormatException('Missing process identity');
+  }
+
+  Future<void> _recoverDirty() async {
+    if (!_enabled) return;
+    lastRecoveryFailure = null;
     final dirty = await _readDirty();
     if (dirty == null) return;
     final state = AudioRouteRecoveryState.parse(dirty);
-    if (state == null && dirty.trim() != '1') {
-      throw const FormatException('Invalid audio route recovery state');
-    }
-    Object? clearError;
+    var stale = 0;
+    final blocked = <int>[];
+    var pending = false;
     try {
       if (state != null) {
-        await _run(['clear', state.routedPids.join(',')]);
-      } else {
+        for (final pid in state.routedPids) {
+          final current = await _inspect(pid);
+          final expected =
+              state.processes.where((p) => p.pid == pid).firstOrNull;
+          if (current == null ||
+              (expected != null && !expected.matches(current))) {
+            stale++;
+            continue;
+          }
+          // Old PID-only journals cannot identify a surviving process safely.
+          // A process born after the journal is certainly a reused PID.
+          if (expected == null) {
+            final modified = await (await _dirtyFile()).lastModified();
+            if (current.startedAfter(modified)) {
+              stale++;
+              continue;
+            }
+            blocked.add(pid);
+            continue;
+          }
+          try {
+            final rows =
+                await _run(['clear', '$pid', jsonEncode(expected.toJson())]);
+            if (rows.contains('STALE $pid')) stale++;
+          } catch (_) {
+            // The process can exit between the check and AudioPolicyConfig.
+            final after = await _inspect(pid);
+            if (after == null || !expected.matches(after)) {
+              stale++;
+            } else {
+              blocked.add(pid);
+            }
+          }
+        }
+      } else if (dirty.trim() == '1') {
+        // Compatibility with the oldest marker-only journal.
         await _run(['clear-all']);
       }
     } catch (error) {
-      clearError = error;
+      pending = true;
+      _log('[AudioRoute] recovery pending: ${error.runtimeType}');
     }
-    if (state != null) {
-      if (state.unmute) await _run(['unmute', state.speakersId]);
-    } else if (dirty.trim() == '1') {
-      // Older builds stored only '1'. They always muted the detected speaker
-      // but did not record its previous state; repair the stuck-silent case.
-      final speakersId = await _detectSpeakersId();
-      if (speakersId == null) {
-        throw StateError('Cannot find the speaker muted by an older Yinwei');
+    // Always attempt recorded unmute, even if a live PID could not be cleared.
+    try {
+      final speakerState = state ?? AudioRouteRecoveryState.speakerOnly(dirty);
+      if (speakerState != null) {
+        if (speakerState.unmute) {
+          await _run(['unmute', speakerState.speakersId]);
+        }
+      } else if (dirty.trim() == '1') {
+        final speakersId = await _detectSpeakersId();
+        if (speakersId == null) {
+          throw StateError('Recorded speaker unavailable');
+        }
+        await _run(['unmute', speakersId]);
       }
-      await _run(['unmute', speakersId]);
+    } catch (error) {
+      pending = true;
+      _log('[AudioRoute] unmute pending: ${error.runtimeType}');
     }
-    if (clearError != null) throw clearError;
-    await _setDirty(false);
+    if (blocked.isNotEmpty) {
+      lastRecoveryFailure = AudioRouteRecoveryException(blocked);
+      throw lastRecoveryFailure!;
+    }
+    if (!pending) {
+      try {
+        await _setDirty(false);
+        _log('[AudioRoute] recovered: $stale stale pids');
+      } catch (error) {
+        _log('[AudioRoute] journal cleanup pending: ${error.runtimeType}');
+      }
+    }
   }
 
   /// Start the warm helper ahead of time so the first Live Transfer does not
   /// pay PowerShell start-up and C# compilation.
   Future<void> warmUp() async {
-    if (!Platform.isWindows) return;
+    if (!_enabled) return;
     try {
       await _helperClient().run(['ping']);
     } catch (error) {
@@ -424,6 +531,7 @@ class AppAudioRouter {
       RouteHelperClient(() async => connectRouteHelper(await _ensureScript()));
 
   Future<List<String>> _run(List<String> args) async {
+    if (_command != null) return _command(args);
     final helper = _helperClient();
     if (!helper.abandoned) {
       ({int code, List<String> lines})? result;
@@ -473,6 +581,7 @@ class AppAudioRouter {
   }
 
   Future<File> _dirtyFile() async {
+    if (_recoveryFile != null) return _recoveryFile;
     final dir = await getApplicationSupportDirectory();
     return File('${dir.path}\\yinwei_audio_route.dirty');
   }
@@ -497,21 +606,87 @@ class AppAudioRouter {
   }
 }
 
+class AudioRouteRecoveryException implements Exception {
+  AudioRouteRecoveryException(Iterable<int> pids)
+      : pids = List<int>.unmodifiable(pids);
+  final List<int> pids;
+  @override
+  String toString() =>
+      'Cannot safely restore audio for running PID(s): ${pids.join(', ')}';
+}
+
+class AudioRouteProcessIdentity {
+  const AudioRouteProcessIdentity(this.pid, this.name, this.startTime);
+  final int pid;
+  final String name;
+
+  /// UTC Windows ticks, serialized as a string without JSON number rounding.
+  final String startTime;
+
+  Map<String, Object> toJson() =>
+      {'pid': pid, 'name': name, 'startTime': startTime};
+  bool matches(AudioRouteProcessIdentity other) =>
+      pid == other.pid &&
+      name.toLowerCase() == other.name.toLowerCase() &&
+      startTime == other.startTime;
+  bool startedAfter(DateTime time) =>
+      int.parse(startTime) >
+      time.toUtc().microsecondsSinceEpoch * 10 + 621355968000000000;
+
+  static AudioRouteProcessIdentity? parse(Object? value) {
+    if (value is! Map ||
+        value['pid'] is! int ||
+        (value['pid'] as int) <= 0 ||
+        value['name'] is! String ||
+        (value['name'] as String).trim().isEmpty ||
+        value['startTime'] is! String) {
+      return null;
+    }
+    final time = value['startTime'] as String;
+    if (!RegExp(r'^[0-9]{1,19}$').hasMatch(time) ||
+        (int.tryParse(time) ?? 0) <= 0) {
+      return null;
+    }
+    return AudioRouteProcessIdentity(
+        value['pid'] as int, value['name'] as String, time);
+  }
+}
+
 class AudioRouteRecoveryState {
   const AudioRouteRecoveryState(this.speakersId, this.unmute,
-      {required this.rootPid, required this.routedPids});
+      {required this.rootPid,
+      required this.routedPids,
+      this.processes = const []});
 
   final String speakersId;
   final bool unmute;
   final int rootPid;
   final List<int> routedPids;
+  final List<AudioRouteProcessIdentity> processes;
 
   String encode() => jsonEncode({
         'speakersId': speakersId,
         'unmute': unmute,
         'rootPid': rootPid,
         'routedPids': routedPids,
+        'processes': processes.map((p) => p.toJson()).toList(),
       });
+
+  /// Salvage a valid speaker obligation even when other fields are damaged.
+  static AudioRouteRecoveryState? speakerOnly(String raw) {
+    try {
+      final value = jsonDecode(raw);
+      if (value is Map &&
+          value['speakersId'] is String &&
+          (value['speakersId'] as String).isNotEmpty &&
+          value['unmute'] is bool) {
+        return AudioRouteRecoveryState(
+            value['speakersId'] as String, value['unmute'] as bool,
+            rootPid: 0, routedPids: const []);
+      }
+    } catch (_) {/* No trustworthy speaker information. */}
+    return null;
+  }
 
   static AudioRouteRecoveryState? parse(String? raw) {
     if (raw == null) return null;
@@ -525,13 +700,27 @@ class AudioRouteRecoveryState {
           value['routedPids'] is! List) {
         return null;
       }
-      final pids = (value['routedPids'] as List).whereType<int>().toList();
-      if (pids.isEmpty || pids.any((pid) => pid <= 0)) return null;
+      final rawPids = value['routedPids'] as List;
+      if (rawPids.length > 1024 ||
+          rawPids.any((pid) => pid is! int || pid <= 0)) {
+        return null;
+      }
+      final pids = rawPids.cast<int>().toSet().toList();
+      final processes = <AudioRouteProcessIdentity>[];
+      if (value['processes'] is List) {
+        for (final entry in value['processes'] as List) {
+          final process = AudioRouteProcessIdentity.parse(entry);
+          if (process != null && pids.contains(process.pid)) {
+            processes.add(process);
+          }
+        }
+      }
       return AudioRouteRecoveryState(
         value['speakersId'] as String,
         value['unmute'] as bool,
         rootPid: value['rootPid'] as int,
         routedPids: pids,
+        processes: processes,
       );
     } catch (_) {
       return null;
@@ -689,6 +878,39 @@ function Classify([string]$name) {
   return 'other'
 }
 
+function Get-RouteProcess([int]$processId) {
+  try {
+    $process = [System.Diagnostics.Process]::GetProcessById($processId)
+  } catch [System.ArgumentException] { return $null }
+  # Hold the native process handle throughout the identity check and command.
+  # A recycled PID must never redirect cleanup to a different process.
+  try {
+    [void]$process.Handle
+    if ($process.HasExited) { $process.Dispose(); return $null }
+    [void]$process.StartTime
+    return $process
+  } catch {
+    $exited = $false
+    try { $exited = $process.HasExited } catch {}
+    $process.Dispose()
+    if ($exited) { return $null }
+    throw
+  }
+}
+
+function Route-Identity($process) {
+  [pscustomobject]@{
+    pid = $process.Id
+    name = $process.ProcessName
+    startTime = $process.StartTime.ToUniversalTime().Ticks.ToString([System.Globalization.CultureInfo]::InvariantCulture)
+  }
+}
+
+function Same-RouteProcess($process, $expected) {
+  $actual = Route-Identity $process
+  return ($actual.pid -eq $expected.pid -and $actual.name -ieq $expected.name -and $actual.startTime -ceq $expected.startTime)
+}
+
 function Invoke-YinweiAction([string]$Action, [string]$Arg1, [string]$Arg2, [string]$Arg3, [string]$Arg4) {
   if ($Action -eq 'ping') { Write-Output 'PONG'; $script:YwCode = 0; return }
   if ($Action -eq 'list') {
@@ -731,21 +953,47 @@ function Invoke-YinweiAction([string]$Action, [string]$Arg1, [string]$Arg2, [str
     @(Get-CimInstance Win32_Process | Where-Object { $_.Name -eq $exe } | ForEach-Object { [int]$_.ProcessId })
   }
 
+  if ($Action -eq 'inspect' -or $Action -eq 'processes') {
+    $targets = @([int]$Arg1)
+    if ($Action -eq 'processes') { $targets = @(Pids-ForRoot ([int]$Arg1)) }
+    foreach ($p in $targets) {
+      $process = Get-RouteProcess $p
+      if ($null -eq $process) {
+        if ($Action -eq 'inspect') { Write-Output 'MISSING' }
+        continue
+      }
+      try { Write-Output ('PROCESS ' + ((Route-Identity $process) | ConvertTo-Json -Compress)) }
+      finally { $process.Dispose() }
+    }
+    $script:YwCode = 0; return
+  }
+
   if ($Action -eq 'apply') {
     $root = [int]$Arg1
     $dev = [string]$Arg2
     $routed = 0
     $applied = @()
-    foreach ($p in (Pids-ForRoot $root)) {
-      $hr = [YinweiPolicy]::Set([uint32]$p, $dev)
-      if ($hr -eq 0) { Write-Output "PID $p"; $routed++; $applied += $p }
+    $candidates = @()
+    if ($Arg3) { $candidates = @($Arg3 | ConvertFrom-Json) }
+    foreach ($candidate in $candidates) {
+      $p = [int]$candidate.pid
+      $process = Get-RouteProcess $p
+      if ($null -eq $process) { continue }
+      try {
+        if (-not (Same-RouteProcess $process $candidate)) { continue }
+        $hr = [YinweiPolicy]::Set([uint32]$p, $dev)
+        if ($hr -eq 0) { Write-Output "PID $p"; $routed++; $applied += $p }
+      } finally { $process.Dispose() }
     }
     if ($routed -eq 0) { $script:YwCode = 2; return }
     $hr = [YinweiPolicy]::SetMuted($dev, $true)
     # SetMute returns S_FALSE (1) when the device already had that state;
     # only negative HRESULTs (and -1: device missing) are failures.
     if ($hr -lt 0) {
-      foreach ($p in $applied) { [void][YinweiPolicy]::Clear([uint32]$p) }
+      foreach ($p in $applied) {
+        $expected = $candidates | Where-Object { [int]$_.pid -eq $p } | Select-Object -First 1
+        Invoke-YinweiAction 'clear' "$p" ($expected | ConvertTo-Json -Compress) '' ''
+      }
       $script:YwCode = 3; return
     }
     $script:YwCode = 0; return
@@ -763,8 +1011,21 @@ function Invoke-YinweiAction([string]$Action, [string]$Arg1, [string]$Arg2, [str
     foreach ($textPid in $Arg1.Split(',')) {
       $parsedPid = 0
       if (-not [int]::TryParse($textPid, [ref]$parsedPid) -or $parsedPid -le 0) { continue }
-      $hr = [YinweiPolicy]::Clear([uint32]$parsedPid)
-      if ($hr -ne 0) { $bad++ }
+      $process = Get-RouteProcess $parsedPid
+      if ($null -eq $process) { Write-Output "STALE $parsedPid"; continue }
+      try {
+        if ($Arg2 -and -not (Same-RouteProcess $process ($Arg2 | ConvertFrom-Json))) {
+          Write-Output "STALE $parsedPid"; continue
+        }
+        try {
+          $hr = [YinweiPolicy]::Clear([uint32]$parsedPid)
+          if ($hr -lt 0) {
+            if ($process.HasExited) { Write-Output "STALE $parsedPid" } else { $bad++ }
+          }
+        } catch {
+          if ($process.HasExited) { Write-Output "STALE $parsedPid" } else { $bad++ }
+        }
+      } finally { $process.Dispose() }
     }
     if ($bad -gt 0) { $script:YwCode = 5; return }
     $script:YwCode = 0; return

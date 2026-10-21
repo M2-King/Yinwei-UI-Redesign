@@ -23,6 +23,7 @@ class AppSessionCoordinator {
     this.applyLiveParams,
     this.applyLiveMode,
     this.liveMedia,
+    this.liveMediaTiming,
     this.libraryPlay,
     this.libraryList,
     this.liveSeek,
@@ -35,6 +36,7 @@ class AppSessionCoordinator {
   }) : _now = now ?? DateTime.now;
 
   final EngineController controller;
+  final Map<String, Object> Function()? liveMediaTiming;
   final SpatialRuntimeAdapter spatial;
   final bool nativeBackend;
   final bool Function() liveRunning;
@@ -409,6 +411,7 @@ class AppSessionCoordinator {
       throw const RemoteFailure('command_cache_full', httpStatus: 429);
     }
     final localGeneration = _localGeneration;
+    final commandClock = Stopwatch()..start();
     final result = _commands.catchError((Object _) {}).then((_) async {
       if (_closed) throw const RemoteFailure('host_closed');
       snapshot();
@@ -427,6 +430,7 @@ class AppSessionCoordinator {
         throw const RemoteFailure('stale_state');
       }
       final live = liveRunning();
+      final acceptedUs = commandClock.elapsedMicroseconds;
       if ((live && !liveControl) || remoteTransformRunning || controller.busy) {
         throw const RemoteFailure('local_busy');
       }
@@ -695,6 +699,14 @@ class AppSessionCoordinator {
             : 'superseded';
         return {
           'commandId': id,
+          'timing': {
+            'queueMs': acceptedUs / 1000,
+            'acceptedAfterMs': acceptedUs / 1000,
+            'applyMs': (commandClock.elapsedMicroseconds - acceptedUs) / 1000,
+            'appliedAfterMs': commandClock.elapsedMicroseconds / 1000,
+            if (media != null && liveMediaTiming != null)
+              'mediaHelper': liveMediaTiming!(),
+          },
           'status': lastCommandStatus,
           'snapshot': snapshot(device: device)
         };

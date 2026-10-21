@@ -63,6 +63,35 @@ void main() {
         reason: 'interruptions and route changes too');
   });
 
+  test('route configuration and transport fade do not change user volume',
+      () async {
+    final output = IosLaptopListenOutput();
+    await output.prepare();
+    await output.setVolume(0.4);
+    await output.configureLatency(privateRoute: true);
+    await output.setTransportGain(0);
+    await output.setTransportGain(1);
+    expect(output.volume, 0.4);
+    expect(
+        calls
+            .where((c) => c.method == 'configureListenLatency')
+            .single
+            .arguments,
+        {
+          'privateRoute': true,
+          'catchUp': IosLaptopListenOutput.experimentalCatchUp
+        });
+    expect(
+        calls
+            .where((c) => c.method == 'setListenTransportGain')
+            .map((c) => c.arguments),
+        [
+          {'gain': 0.0},
+          {'gain': 1.0}
+        ]);
+    await output.stop();
+  });
+
   test('uses the argument names the Swift player and lock screen read',
       () async {
     final output = IosLaptopListenOutput();
@@ -100,7 +129,7 @@ void main() {
       'case "setRemoteReturnVolume"',
       'guard listenMode, volume.isFinite else { return }',
       'player.volume = listen ? listenVolume : 1',
-      'if listenMode { player.volume = listenVolume }',
+      'if listenMode { player.volume = listenVolume * transportGain }',
       '"dev.yinwei/now_playing"',
       'case "update"',
       'case "clear"',

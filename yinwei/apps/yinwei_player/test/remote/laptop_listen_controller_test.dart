@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
@@ -39,7 +40,14 @@ class _MemoryStore implements SignInStore {
   Future<void> clear() async => value = null;
 }
 
-class FakeListenOutput implements LaptopListenOutput {
+class FakeListenOutput implements LaptopListenOutput, LowLatencyListenOutput {
+  final gains = <double>[];
+  final privateRoutes = <bool>[];
+  @override
+  Future<void> setTransportGain(double gain) async => gains.add(gain);
+  @override
+  Future<void> configureLatency({required bool privateRoute}) async =>
+      privateRoutes.add(privateRoute);
   int prepared = 0, stopped = 0, written = 0;
   bool opus = false;
   final magics = <int>[];
@@ -103,6 +111,8 @@ void main() {
   var live = false, livePlaying = true, liveSource = 'Music';
   final media = <String>[];
   final liveCalls = <String>[];
+  Completer<void>? mediaGate;
+  bool refuseMedia = false;
   RemoteFailure? startFailure;
 
   setUp(() async {
@@ -113,6 +123,8 @@ void main() {
     liveSource = 'Music';
     media.clear();
     liveCalls.clear();
+    mediaGate = null;
+    refuseMedia = false;
     now = DateTime.now();
     final salt = List<int>.generate(16, (i) => i);
     final key = await Pbkdf2.hmacSha256(iterations: 10, bits: 256)
@@ -132,7 +144,11 @@ void main() {
       },
       applyLiveParams: (p) => engine.setParamsAcknowledged(p),
       applyLiveMode: (m) async => engine.setMode(m),
-      liveMedia: (action) async => media.add(action),
+      liveMedia: (action) async {
+        media.add(action);
+        await mediaGate?.future;
+        if (refuseMedia) throw StateError('refused');
+      },
       startLive: () async {
         liveCalls.add('start');
         if (startFailure != null) throw startFailure!;
@@ -184,6 +200,87 @@ void main() {
     await listen.signIn('https://entry.example/', 'fixture-owner', 'wrong');
     expect(listen.signedIn, isFalse);
     expect(listen.status, contains('rejected'));
+  });
+
+  test(
+      'local fade starts before host acknowledgement and rolls back on refusal',
+      () async {
+    await signIn();
+    await listen.startListening();
+    mediaGate = Completer<void>();
+    refuseMedia = true;
+    final pendingCommand = listen.command('media.next');
+    await until(() => media.contains('next'));
+    expect(output.gains.last, 0);
+    mediaGate!.complete();
+    expect(await pendingCommand, isFalse);
+    expect(output.gains.last, 1);
+    expect(output.privateRoutes, everyElement(isFalse));
+  });
+
+  test('feedback watchdog restores audio without resending an unresolved skip',
+      () async {
+    await signIn();
+    await listen.startListening();
+    mediaGate = Completer<void>();
+    final pendingCommand = listen.command('media.next');
+    await until(() => media.contains('next'));
+    expect(output.gains.last, 0);
+    await until(() => output.gains.last == 1);
+    expect(media, ['next']);
+    mediaGate!.complete();
+    await pendingCommand;
+    expect(output.gains.last, 1);
+    final rows = listen.audioDiagnostics()['commands'] as List;
+    expect(rows.last['firstChangedAudioMs'], isNull);
+    expect(rows.last['host']['applyMs'], isNonNegative);
+  });
+
+  test('new play intent cancels fade and late next reply cannot remute audio',
+      () async {
+    await signIn();
+    await listen.startListening();
+    mediaGate = Completer<void>();
+    final next = listen.command('media.next');
+    await until(() => media.contains('next'));
+    await listen.command('media.play'); // busy: local feedback still cancels
+    expect(output.gains.last, 1);
+    mediaGate!.complete();
+    await next;
+    expect(output.gains.last, 1);
+  });
+
+  test('no control lease means no optimistic mute', () async {
+    await signIn();
+    output.gains.clear();
+    expect(await listen.command('media.pause'), isFalse);
+    expect(output.gains, isNot(contains(0)));
+  });
+
+  test('laptop takeover restores local gain before a late command reply',
+      () async {
+    await signIn();
+    await listen.startListening();
+    mediaGate = Completer<void>();
+    final pendingCommand = listen.command('media.next');
+    await until(() => media.contains('next'));
+    expect(output.gains.last, 0);
+    coordinator.takeLocalControl();
+    await until(() => !listen.hasControl);
+    expect(output.gains.last, 1);
+    mediaGate!.complete();
+    await pendingCommand;
+    expect(output.gains.last, 1);
+  });
+
+  test('command diagnostic history is bounded and never includes payload data',
+      () async {
+    for (var i = 0; i < 40; i++) {
+      await listen.command('media.pause', {'secret': 'not-for-diagnostics'});
+    }
+    final diagnostics = listen.audioDiagnostics();
+    expect((diagnostics['commands'] as List).length, 32);
+    expect(jsonEncode(diagnostics), isNot(contains('not-for-diagnostics')));
   });
 
   test('plays the laptop stream, acknowledging it, and shows now playing',
@@ -300,7 +397,8 @@ void main() {
     expect(media, ['next']);
   });
 
-  test('an Opus iPad gets High from the laptop and switches without reconnecting',
+  test(
+      'an Opus iPad gets High from the laptop and switches without reconnecting',
       () async {
     laptopOpus = true;
     output.opus = true;
@@ -350,7 +448,8 @@ void main() {
     tearDown(() => remembered.dispose());
 
     test('a successful sign-in is kept; sign out forgets it', () async {
-      await remembered.signIn('https://entry.example/', 'fixture-owner', 'wrong');
+      await remembered.signIn(
+          'https://entry.example/', 'fixture-owner', 'wrong');
       expect(store.value, isNull, reason: 'a failed sign-in is never kept');
       await remembered.signIn(
           'https://entry.example/', 'fixture-owner', password);

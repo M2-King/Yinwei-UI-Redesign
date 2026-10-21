@@ -26,6 +26,7 @@ class RemoteMediaKeys {
   StreamIterator<String>? _lines;
   Future<void> _queue = Future.value();
   bool _closed = false;
+  Map<String, Object> lastTiming = const {};
 
   static const actions = {'play', 'pause', 'next', 'previous'};
 
@@ -58,15 +59,35 @@ class RemoteMediaKeys {
   Future<void> _send(String line,
       {required Future<void> Function() fallbackAction}) async {
     String reply;
+    final watch = Stopwatch()..start();
+    final warm = _lines != null;
+    var readyUs = 0;
     try {
       final lines = await _ready();
+      readyUs = watch.elapsedMicroseconds;
       _process!.stdin.write('$line\r\n');
       await _process!.stdin.flush();
       if (!await lines.moveNext().timeout(timeout)) throw StateError('closed');
       reply = lines.current.trim();
+      lastTiming = {
+        'warm': warm,
+        'readyMs': readyUs / 1000,
+        'ackMs': (watch.elapsedMicroseconds - readyUs) / 1000,
+        'fallback': false
+      };
     } catch (_) {
       _reset();
-      return fallbackAction();
+      try {
+        await fallbackAction();
+      } finally {
+        lastTiming = {
+          'warm': warm,
+          'readyMs': readyUs / 1000,
+          'totalMs': watch.elapsedMicroseconds / 1000,
+          'fallback': true
+        };
+      }
+      return;
     }
     if (reply == 'ok') return;
     if (reply == 'refused' || reply == 'nosession') {

@@ -6,6 +6,7 @@ import 'dart:typed_data';
 import 'package:yinwei_player/remote/remote_auth.dart';
 import 'package:yinwei_player/remote/remote_guest.dart';
 import 'package:yinwei_player/remote/listen_stream_source.dart';
+import 'package:yinwei_player/remote/listen_sender_pacer.dart';
 import 'package:yinwei_player/remote/native_output_tap.dart';
 import 'package:yinwei_player/remote/remote_protocol.dart';
 import 'package:yinwei_player/remote/private_route.dart';
@@ -93,6 +94,9 @@ class RemoteGateway {
                   ? null
                   : audioTap);
   Timer? _audioTimer;
+  final _audioPacer = ListenSenderPacer();
+  final _audioPaceClock = Stopwatch()..start();
+  Uint8List? _pacedPacket;
   final _requests = <String, List<DateTime>>{};
   final _captureProbeReports = <String, List<Map<String, dynamic>>>{};
   Timer? _events;
@@ -994,6 +998,8 @@ class RemoteGateway {
             unawaited(previous.close(1000, 'route_migrated'));
           }
           _audioSocket = socket;
+          _audioPacer.reset();
+          _pacedPacket = null;
           if (!identical(selectedTap, _selectedAudioTap) ||
               selectedTap == null) {
             unawaited(socket.close(1008, 'audio_source_changed'));
@@ -1069,6 +1075,8 @@ class RemoteGateway {
       _audioStream = null;
       _audioOutstanding.clear();
       _audioLastAck = 0;
+      _pacedPacket = null;
+      _audioPacer.reset();
     }
     _sockets.remove(socket);
     _connections.remove(socket);
@@ -1152,14 +1160,20 @@ class RemoteGateway {
       return;
     }
     try {
-      // At most 64 unacknowledged chunks (~680 ms): bounded network credit,
-      // not an unlimited WebSocket send queue, and wide enough to cover an
-      // internet round trip. Up to 4 per tick so the stream catches up after
-      // a stall (Windows timers can fire every ~15.6 ms). Native production
-      // never waits here.
+      // Credit bounds transport memory (64 x 20 ms for Opus). Separate
+      // media-time pacing prevents timer stalls turning into 80 ms bursts.
+      _audioPacer.tick(_audioPaceClock.elapsedMicroseconds);
       for (var i = 0; i < 4 && _audioOutstanding.length < audioCredit; ++i) {
-        final packet = (_audioStream ?? _activeAudioTap!).read();
+        final packet =
+            _pacedPacket ?? (_audioStream ?? _activeAudioTap!).read();
         if (packet == null) break;
+        final metadata = ByteData.sublistView(packet);
+        if (!_audioPacer.take(metadata.getUint32(36, Endian.little),
+            metadata.getUint32(32, Endian.little))) {
+          _pacedPacket = packet;
+          break;
+        }
+        _pacedPacket = null;
         final sequence =
             ByteData.sublistView(packet).getUint64(16, Endian.little);
         _audioOutstanding[sequence] = DateTime.now();

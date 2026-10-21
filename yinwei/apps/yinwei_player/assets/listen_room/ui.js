@@ -67,6 +67,7 @@ const setLocal = (fields, ok) => { const now = performance.now(); for (const k i
 // Intents, page → app. In the app the "YinweiNative" channel carries them to
 // Dart; in a plain browser they become a "yinwei-intent" event (dev host, tests).
 function send(intent) {
+  if (intent.t === "media") intent.tapMs = performance.now();
   const msg = JSON.stringify(intent);
   try { if (window.YinweiNative && typeof window.YinweiNative.postMessage === "function") { window.YinweiNative.postMessage(msg); return; } } catch (e) { /* fall through */ }
   window.dispatchEvent(new CustomEvent("yinwei-intent", { detail: JSON.parse(msg) }));

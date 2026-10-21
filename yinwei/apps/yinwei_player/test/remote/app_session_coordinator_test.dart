@@ -71,7 +71,13 @@ void main() {
     expect(completed, isFalse);
     expect(spatial.appliedRevision, 2);
     engine.nextWrite!.complete();
-    expect((await result)['status'], 'native_applied');
+    final response = await result;
+    expect(response['status'], 'native_applied');
+    final timing = response['timing'] as Map;
+    expect(timing['queueMs'], isNonNegative);
+    expect(timing['applyMs'], isNonNegative);
+    expect(timing['appliedAfterMs'],
+        greaterThanOrEqualTo(timing['acceptedAfterMs']));
     expect(controller.params.azimuthDeg, -90);
     expect(controller.params.elevationDeg, closeTo(30, 1e-8));
   });
@@ -151,7 +157,8 @@ void main() {
     live = true;
     coordinator.snapshot();
     live = false;
-    final applied = await coordinator.command('device', point('command_auto_keep'));
+    final applied =
+        await coordinator.command('device', point('command_auto_keep'));
     expect(applied['status'], 'native_applied');
 
     // Someone at the laptop moves the source: the remote loses control.

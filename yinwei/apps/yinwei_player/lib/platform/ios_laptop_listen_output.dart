@@ -10,7 +10,8 @@ import 'package:yinwei_player/remote/laptop_listen_controller.dart';
 /// as the capture route's return audio (listen mode: it holds the audio
 /// session and survives route changes and interruptions), plus the lock
 /// screen and Control Center through `dev.yinwei/now_playing`.
-class IosLaptopListenOutput implements LaptopListenOutput {
+class IosLaptopListenOutput
+    implements LaptopListenOutput, LowLatencyListenOutput {
   IosLaptopListenOutput(
       {MethodChannel? player, MethodChannel? audio, MethodChannel? nowPlaying})
       : _player =
@@ -38,6 +39,26 @@ class IosLaptopListenOutput implements LaptopListenOutput {
   /// Local listening gain. Kept with the output so reopening the room and
   /// stopping/restarting listening do not reset the slider.
   double get volume => _volume;
+  // Enable only for device A/B testing: an added time-pitch unit may cost more
+  // latency than it removes. No unmeasured processing is imposed by default.
+  static const experimentalCatchUp =
+      bool.fromEnvironment('YINWEI_LISTEN_CATCH_UP');
+
+  @override
+  Future<void> configureLatency({required bool privateRoute}) =>
+      _player.invokeMethod<void>('configureListenLatency', {
+        'privateRoute': privateRoute,
+        'catchUp': experimentalCatchUp,
+      });
+
+  @override
+  Future<void> setTransportGain(double gain) async {
+    if (!_prepared || !gain.isFinite) return;
+    try {
+      await _player.invokeMethod<void>(
+          'setListenTransportGain', {'gain': gain.clamp(0.0, 1.0)});
+    } on MissingPluginException {/* Older native host: no optimistic fade. */}
+  }
 
   Future<void> setVolume(double value) async {
     if (!value.isFinite) return;
@@ -104,7 +125,10 @@ class IosLaptopListenOutput implements LaptopListenOutput {
   Future<void> prepare() async {
     _prepared = false;
     _resetLevel();
-    await _player.invokeMethod<void>('prepareRemoteReturn', {'listen': true});
+    await _player.invokeMethod<void>('prepareRemoteReturn', {
+      'listen': true,
+      if (experimentalCatchUp) 'catchUp': true,
+    });
     try {
       await _player
           .invokeMethod<void>('setRemoteReturnVolume', {'volume': _volume});

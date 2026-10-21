@@ -266,6 +266,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
         await _ctrl.setMode(mode);
       },
       liveMedia: _caps.systemMedia ? _remoteMediaKey : null,
+      liveMediaTiming: () => _mediaKeys?.lastTiming ?? const {},
       libraryPlay: _sodaLibrary?.available == true ? _playSoda : null,
       libraryList: _sodaLibrary?.available == true ? _browseSoda : null,
       liveSeek: _caps.systemMedia
@@ -753,6 +754,9 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
       }
       _remoteStartStage = 'starting';
       await _startLiveHrtf();
+      if (!_live.running && _audioRoute.lastRecoveryFailure != null) {
+        throw const RemoteFailure('audio_route_restore_failed');
+      }
       if (!_live.running) throw const RemoteFailure('live_start_failed');
     } finally {
       _remoteStartStage = '';
@@ -773,8 +777,9 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
   }
 
   Future<void> _startLiveHrtf() async {
-    if (!await _routeRecovery) {
-      _live.fail('无法恢复上次的 Windows 音频输出设置；请检查系统声音设置。');
+    if (!await _audioRoute.recoverBeforeLive(_routeRecovery)) {
+      final pids = _audioRoute.lastRecoveryFailure!.pids.join(', ');
+      _live.fail('无法恢复仍在运行的音乐进程音频输出（PID: $pids）；请关闭该音乐进程后重试。');
       return;
     }
     var pid = _smtc.state.pid;

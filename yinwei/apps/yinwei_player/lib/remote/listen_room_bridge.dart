@@ -485,6 +485,7 @@ class ListenRoomBridge {
             : _toastText(session.notice ?? 'The laptop did not answer'));
         if (!ok) await push(force: true);
       case 'media':
+        session.recordPageTap(m['tapMs']);
         final liveRunning = snap['liveRunning'] == true;
         final liveMedia = caps['liveMedia'] == true;
         final type = switch (m['a']) {
