@@ -43,6 +43,14 @@ class FakeSession extends LaptopListenController {
   final calls = <String>[];
   // A start that is still on its way to the laptop.
   Future<void>? startGate;
+  Future<Map<String, dynamic>>? browseGate;
+  Map<String, dynamic>? browseRequest;
+
+  @override
+  Future<Map<String, dynamic>> browseSoda(Map<String, dynamic> request) async {
+    browseRequest = request;
+    return await browseGate ?? {'revision': 'r1', 'lists': []};
+  }
 
   @override
   bool get hasControl => control;
@@ -126,6 +134,49 @@ void main() {
   late FakeSession session;
   late ListenRoomBridge bridge;
   late List<String> scripts;
+
+  test('music browsing is on demand; late response after close is discarded',
+      () async {
+    final s = FakeSession()..snapshot = snapshot();
+    s.snapshot!['capabilities']['sodaLibrary'] = true;
+    final gate = Completer<Map<String, dynamic>>();
+    s.browseGate = gate.future;
+    final output = <String>[];
+    final b = ListenRoomBridge(session: s, run: (v) async => output.add(v));
+    expect(b.state()['music'], true);
+    final reading =
+        b.handle('{"t":"musicBrowse","request":1,"list":"list_1","offset":50}');
+    await Future<void>.delayed(Duration.zero);
+    expect(s.browseRequest, {'list': 'list_1', 'offset': 50});
+    expect(s.calls, isEmpty,
+        reason: 'browsing does not acquire control or start Live');
+    await b.handle('{"t":"musicClose"}');
+    gate.complete({'revision': 'r1', 'lists': []});
+    await reading;
+    expect(output.where((v) => v.startsWith('YinweiListen.music')), isEmpty);
+    b.dispose();
+    s.dispose();
+  });
+
+  test('chosen song has a dedicated lease command and accepts no arbitrary URI',
+      () async {
+    final s = FakeSession()..snapshot = snapshot();
+    s.snapshot!['capabilities']['sodaLibrary'] = true;
+    final b = ListenRoomBridge(session: s, run: (_) async {});
+    await b.handle(
+        '{"t":"musicPlay","list":"list1","snapshot":"snap1","track":"row1","revision":"r1"}');
+    expect(s.calls, [
+      'take',
+      'library.play {"list":"list1","snapshot":"snap1","track":"row1","revision":"r1"}'
+    ]);
+    s.calls.clear();
+    await b.handle('{"t":"musicPlay","uri":"luna://arbitrary"}');
+    expect(s.calls, isEmpty);
+    s.signed = false;
+    expect(b.state()['music'], false);
+    b.dispose();
+    s.dispose();
+  });
 
   test('speaker state and intents keep the page revision through commands',
       () async {

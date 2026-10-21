@@ -110,6 +110,8 @@ class Fixture {
         spatial: SpatialRuntimeAdapter()..bootstrap(f.engine.params),
         nativeBackend: true,
         liveRunning: () => false,
+        libraryList: (_) async =>
+            {'available': true, 'revision': 'r1', 'rows': []},
         liveMedia: (action) async => f.media.add(action));
     f.host = PrivateRouteHost(
         file: pairFile,
@@ -435,6 +437,36 @@ void main() {
           reason: path);
     }
     expect(f.lookups, 1); // Short positive cache; no per-frame whois processes.
+  });
+
+  test(
+      'private catalog endpoint reaches owner auth instead of allowlist refusal',
+      () async {
+    final f = await Fixture.create();
+    final enrolled = await f.enroll();
+    final response = await f.request('/remote/api/commands', headers: {
+      'X-Yinwei-Pair-Id': enrolled.pair.id,
+      'X-Yinwei-Pair-Key': enrolled.pair.key,
+    }, body: {});
+    // Pair possession grants private routing, not an owner session or CSRF.
+    expect(response.status, 401);
+  });
+
+  test('paired private owner can browse without taking control', () async {
+    final f = await Fixture.create();
+    final enrolled = await f.enroll();
+    final result =
+        await enrolled.client.libraryList(f.coordinator.snapshot(), {});
+    expect(result['available'], isTrue);
+    expect(result['rows'], isEmpty);
+    expect(f.coordinator.snapshot(device: enrolled.pair.id)['controlOwned'],
+        isFalse);
+    f.peer = null;
+    f.now = f.now.add(const Duration(seconds: 3));
+    await expectLater(
+        enrolled.client.libraryList(f.coordinator.snapshot(), {}),
+        throwsA(isA<RemoteApiException>()
+            .having((e) => e.code, 'code', 'private_identity_unavailable')));
   });
 
   test('pair tickets expire, are single-use, and cannot be redeemed publicly',

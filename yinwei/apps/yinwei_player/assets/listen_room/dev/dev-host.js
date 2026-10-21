@@ -19,7 +19,7 @@
     az: 35, el: 20, dist: 3.2, track: { ...tracks[0] }, volume: 0.72, level: 0,
     stats: { received: 18240, bufferMs: 160, underruns: 0 }, opens: null, pending: false, progress: null,
     pos: 42, dur: 245, seekable: true, quality: "high", stream: "high", opus: true,
-    speakers: [], selectedSpeakerIndex: 0, arrayRevision: 1, maxSpeakers: 8, speakerControl: true, matrixLinked: false,
+    speakers: [], selectedSpeakerIndex: 0, arrayRevision: 1, maxSpeakers: 8, speakerControl: true, matrixLinked: false, music: true,
   };
   function seedSpeakers(count) {
     M.speakers = Array.from({ length: count }, (_, index) => ({ index,
@@ -37,6 +37,27 @@
   function handle(i) {
     log.unshift(JSON.stringify(i)); log.length = Math.min(log.length, 8); renderLog();
     switch (i.t) {
+      case "musicBrowse": {
+        // Synthetic examples only. This stand-in never launches the laptop app.
+        const lists = [
+          { id: "liked", title: "Liked songs", cached: 90, total: 424, updatedAt: "2026-10-21T02:41:15Z", historyCount: 0 },
+          { id: "annual", title: "2025年度歌单", cached: 8, total: 33, updatedAt: "2026-10-21T02:53:09Z", historyCount: 1 },
+          { id: "evening", title: "Evening listening", cached: 42, total: 42, updatedAt: "2026-10-21T02:54:54Z", historyCount: 0 },
+        ];
+        const list = lists.find(l => l.id === i.list), historical = i.snapshot === "older";
+        const snapshots = list ? [{ id: "newest", ...list, historical: false }, ...(list.historyCount ? [{ ...list, id: "older", cached: 31, historical: true, updatedAt: "2026-09-04T04:00:00Z" }] : [])] : [];
+        // Ensure snapshot identity isn't replaced by the collection's id.
+        if (snapshots[0]) snapshots[0].id = "newest";
+        later(180, () => YinweiListen.music({ request: i.request, available: true, revision: "review1", lists,
+          list: list ? { ...list, snapshots } : null,
+          page: list ? { snapshot: historical ? "older" : "newest", offset: 0, nextOffset: null,
+            rows: ["Quiet water", "归途", "Moonlight", "Soft rain", "远方", "After the evening", "Still air", "Home"].map((title, n) => ({
+              id: `row_${n}`, title, artist: "Review artist", durationMs: 210000 + n * 1000, playable: !historical,
+            })) } : null }));
+        break;
+      }
+      case "musicPlay": say("Review only · no song was sent to the laptop"); break;
+      case "musicClose": break;
       case "listen":
         M.listening = "connecting";
         if (i.startLive) { // the laptop's steps, as the app reports them

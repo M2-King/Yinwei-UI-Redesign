@@ -16,7 +16,7 @@ const ListenBridge = (() => {
   const FIELDS = ["laptop", "connection", "source", "live", "playing", "listening", "control", "notice",
     "mode", "motion", "orbitHz", "az", "el", "dist", "track", "volume", "level", "stats", "opens",
     "pending", "progress", "pos", "dur", "seekable", "canClose", "updates", "quality", "stream", "opus",
-    "speakers", "selectedSpeakerIndex", "arrayRevision", "maxSpeakers", "speakerControl", "matrixLinked"];
+    "speakers", "selectedSpeakerIndex", "arrayRevision", "maxSpeakers", "speakerControl", "matrixLinked", "music"];
   const wrap = (a) => { a = ((a + 180) % 360 + 360) % 360 - 180; return a === -180 ? 180 : a; };
   // Values the app may send, so a bad message can't put the page in a state it can't draw.
   const ENUMS = {
@@ -29,7 +29,7 @@ const ListenBridge = (() => {
   const SONG = { pos: [0, 86400], dur: [0, 86400] };
   const RANGES = { ...SONG, orbitHz: [0.05, 2], az: [-180, 180], el: [-90, 90], dist: [0.5, 10], volume: [0, 1], level: [0, 1] };
   function clean(k, v) {
-    if (["speakerControl", "matrixLinked"].includes(k)) return typeof v === "boolean" ? v : undefined;
+    if (["speakerControl", "matrixLinked", "music"].includes(k)) return typeof v === "boolean" ? v : undefined;
     if (["arrayRevision", "selectedSpeakerIndex", "maxSpeakers"].includes(k)) {
       const max = k === "selectedSpeakerIndex" ? 7 : k === "maxSpeakers" ? 8 : Number.MAX_SAFE_INTEGER;
       return Number.isSafeInteger(v) && v >= (k === "maxSpeakers" ? 2 : 0) && v <= max ? v : undefined;

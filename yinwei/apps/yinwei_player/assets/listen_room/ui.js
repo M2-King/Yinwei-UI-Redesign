@@ -28,7 +28,7 @@ const S = {
   az: 0, el: 0, dist: 2, track: null, volume: 1, level: 0, stats: { received: 0, bufferMs: 0, underruns: 0 }, opens: null,
   pending: false, progress: null, pos: 0, dur: 0, seekable: false,
   quality: "high", stream: null, opus: false, // sound quality chosen / sent now / Opus possible
-  canClose: true, updates: false, // the room as the whole app: no way back; updates checked here
+  canClose: true, updates: false, music: false, // the room as the whole app: no way back; updates checked here
   screen: "room", view: "3d", panel: null,
   speakers: [], selectedSpeakerIndex: 0, arrayRevision: 0, maxSpeakers: 8, speakerControl: false, matrixLinked: false,
 };
@@ -71,6 +71,7 @@ function send(intent) {
   try { if (window.YinweiNative && typeof window.YinweiNative.postMessage === "function") { window.YinweiNative.postMessage(msg); return; } } catch (e) { /* fall through */ }
   window.dispatchEvent(new CustomEvent("yinwei-intent", { detail: JSON.parse(msg) }));
 }
+const musicSheet = ListenMusic.create({ send, state: () => S, toast: (text) => toast(text) });
 function apply(next) {
   if (typeof next === "string") { try { next = JSON.parse(next); } catch (e) { return; } }
   const now = performance.now(), heldBefore = Object.keys(held).join();
@@ -137,6 +138,7 @@ const once = (key, value, draw) => { const sig = JSON.stringify(value); if (draw
 const setText = (el, t) => { if (el.textContent !== t) el.textContent = t; };
 let volDragging = false;
 function render() {
+  musicSheet.update();
   const noApp = S.notice === "noapp", isLost = lost(), locked = otherHasControl() || isLost;
   // No music app open, but the laptop opens S.opens on Start.
   const opens = !noApp && !S.live && S.opens ? S.opens : null;
@@ -569,6 +571,7 @@ function drawLevel() {
 // ---------------------------------------------------------------- the app's handle on the page
 // Dart calls these with runJavaScript(...). Everything else stays private.
 window.YinweiListen = Object.freeze({
+  music: (value) => musicSheet.receive(value),
   version: ListenBridge.VERSION,
   apply,                                        // (state) app → page, at most 10 times a second
   toast: (text, holdMs) => toast(String(text), Number(holdMs) || 1500), // e.g. "Applied on the laptop" after a command succeeds

@@ -37,6 +37,7 @@ void main() {
   late Map<String, String> cookies;
   late String loginCsrf;
   late String csrf;
+  var sodaReads = 0;
   const password = 'test-only-password';
 
   setUp(() async {
@@ -50,6 +51,7 @@ void main() {
         salt: base64UrlEncode(salt),
         hash: base64UrlEncode(await key.extractBytes()),
         iterations: 10));
+    sodaReads = 0;
     controller = EngineController(engine: MockEngine());
     final spatial = SpatialRuntimeAdapter()..bootstrap(controller.params);
     audioTap = FakeOutputSource();
@@ -63,6 +65,15 @@ void main() {
         allowArrayFileAudio: false,
         createOpusEncoder: _FakeOpus.new,
         coordinator: AppSessionCoordinator(
+            libraryList: (request) async {
+              sodaReads++;
+              return {
+                'available': true,
+                'lists': [],
+                'rows': [],
+                'echo': request['list']
+              };
+            },
             controller: controller,
             spatial: spatial,
             nativeBackend: true,
@@ -126,6 +137,35 @@ void main() {
     csrf = (jsonDecode((await request('/remote/api/session')).text)
         as Map)['csrf'] as String;
   }
+
+  test('Soda browse requires owner session and CSRF but no control lease',
+      () async {
+    final unauthorized = await request('/remote/api/commands', body: {});
+    expect(unauthorized.status, 401);
+    expect(sodaReads, 0);
+    await signin();
+    final noCsrf = await request('/remote/api/commands', body: {});
+    expect(noCsrf.status, 403);
+    expect(sodaReads, 0);
+    final response = await request('/remote/api/commands',
+        body: {
+          'protocolVersion': 1,
+          'hostSessionId': gateway.coordinator.hostSessionId,
+          'commandId': 'library_read_001',
+          'type': 'library.list',
+          'payload': {'list': 'host_list'}
+        },
+        csrfToken: csrf);
+    expect(response.status, 200);
+    expect((jsonDecode(response.text) as Map)['library']['echo'], 'host_list');
+    expect(sodaReads, 1);
+  });
+
+  test('Soda browse does not expose a GET or query-string variant', () async {
+    await signin();
+    expect((await request('/remote/api/soda/library')).status, 404);
+    expect(sodaReads, 0);
+  });
 
   Future<({WebSocket socket, StreamIterator<dynamic> events})>
       subscribeAudio() async {

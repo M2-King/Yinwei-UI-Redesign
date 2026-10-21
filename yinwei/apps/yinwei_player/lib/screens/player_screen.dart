@@ -38,6 +38,8 @@ import 'package:yinwei_player/remote/remote_guest.dart';
 import 'package:yinwei_player/mobile/ios_listen_room_screen.dart';
 import 'package:yinwei_player/remote/remote_media_keys.dart';
 import 'package:yinwei_player/remote/remote_music_app.dart';
+import 'package:yinwei_player/remote/soda_library.dart';
+import 'package:yinwei_player/remote/soda_track_launcher.dart';
 import 'package:yinwei_player/remote/remote_deployment.dart';
 import 'package:yinwei_player/remote/remote_auth.dart';
 import 'package:yinwei_player/remote/native_output_tap.dart';
@@ -135,6 +137,32 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
   late final SystemMediaService _smtc;
   // Opened by a remote "Start on laptop" when no music app is open.
   RemoteMusicApp? _musicApp;
+  SodaLibrary? _sodaLibrary;
+  SodaTrackLauncher? _sodaLauncher;
+
+  Future<Map<String, dynamic>> _browseSoda(Map<String, dynamic> request) async {
+    try {
+      return await _sodaLibrary!.browse(request);
+    } on SodaLibraryFailure catch (error) {
+      throw RemoteFailure(error.code);
+    }
+  }
+
+  Future<void> _playSoda(
+      Map<String, dynamic> payload, void Function() beforeDispatch) async {
+    try {
+      final trackId = await _sodaLibrary!.resolveTrack(payload);
+      await _sodaLauncher!.play(trackId, beforeDispatch: beforeDispatch,
+          revalidateSelection: () async {
+        if (await _sodaLibrary!.resolveTrack(payload) != trackId) {
+          throw const SodaLibraryFailure('soda_stale_selection');
+        }
+      });
+    } on SodaLibraryFailure catch (error) {
+      throw RemoteFailure(error.code);
+    }
+  }
+
   Timer? _musicAppScan;
   // Play/pause/next for the Live source app, through one ready PowerShell.
   RemoteMediaKeys? _mediaKeys;
@@ -201,6 +229,10 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
     _spatial = SpatialRuntimeAdapter();
     _spatial.bootstrap(_ctrl.params);
     _sceneBridge = SpatialSceneBridge(adapter: _spatial);
+    if (Platform.isWindows && _backend == EngineBackend.native) {
+      _sodaLibrary = SodaLibrary(log: (event) => debugPrint(jsonEncode(event)));
+      _sodaLauncher = SodaTrackLauncher();
+    }
     _appSession = AppSessionCoordinator(
       controller: _ctrl,
       spatial: _spatial,
@@ -234,6 +266,8 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
         await _ctrl.setMode(mode);
       },
       liveMedia: _caps.systemMedia ? _remoteMediaKey : null,
+      libraryPlay: _sodaLibrary?.available == true ? _playSoda : null,
+      libraryList: _sodaLibrary?.available == true ? _browseSoda : null,
       liveSeek: _caps.systemMedia
           ? (seconds) => _mediaKeys != null
               ? _mediaKeys!.seek(seconds)

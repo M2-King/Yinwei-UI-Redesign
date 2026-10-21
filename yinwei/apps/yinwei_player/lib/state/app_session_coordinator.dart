@@ -23,6 +23,8 @@ class AppSessionCoordinator {
     this.applyLiveParams,
     this.applyLiveMode,
     this.liveMedia,
+    this.libraryPlay,
+    this.libraryList,
     this.liveSeek,
     this.startLive,
     this.stopLive,
@@ -61,6 +63,7 @@ class AppSessionCoordinator {
     'array.speaker.set',
     'motion.set',
     'media.seek',
+    'library.play',
   };
 
   /// Start/stop Live Transfer from the remote, through the same path as the
@@ -104,6 +107,14 @@ class AppSessionCoordinator {
   /// Play/pause/next/previous for the Live source app through Windows media
   /// controls. It drives the music app only; the audio engine is untouched.
   final Future<void> Function(String action)? liveMedia;
+
+  /// Cached Soda selection only. The callback resolves catalog/account state,
+  /// then calls [beforeDispatch] immediately before its one external launch.
+  final Future<void> Function(
+          Map<String, dynamic> payload, void Function() beforeDispatch)?
+      libraryPlay;
+  final Future<Map<String, dynamic>> Function(Map<String, dynamic> request)?
+      libraryList;
   static const _mediaActions = {
     'media.play': 'play',
     'media.pause': 'pause',
@@ -253,6 +264,7 @@ class AppSessionCoordinator {
         'browserLiveAudio': browserLiveAudioAvailable,
         'liveControl': liveControl,
         'liveMedia': liveMedia != null,
+        'sodaLibrary': libraryPlay != null && libraryList != null,
         'remoteLive': remoteLive,
         'remoteArray': applyArrayMode != null,
         'remoteSpeakers': applyArrayLayout != null &&
@@ -339,12 +351,39 @@ class AppSessionCoordinator {
     };
   }
 
+  Future<Map<String, dynamic>> _readLibrary(Map<String, dynamic> input) async {
+    if (_closed) throw const RemoteFailure('host_closed');
+    if (input['protocolVersion'] != 1 ||
+        input['hostSessionId'] != hostSessionId) {
+      throw const RemoteFailure('stale_host');
+    }
+    final browse = libraryList;
+    if (browse == null) throw const RemoteFailure('soda_unavailable');
+    final payload = input['payload'];
+    if (payload is! Map<String, dynamic> ||
+        payload.keys.any((k) =>
+            !const ['list', 'snapshot', 'offset', 'revision'].contains(k))) {
+      throw const RemoteFailure('invalid_payload', httpStatus: 400);
+    }
+    final library = await browse(payload);
+    if (_closed) throw const RemoteFailure('host_closed');
+    return {
+      'commandId': input['commandId'],
+      'status': 'read',
+      'library': library
+    };
+  }
+
   Future<Map<String, dynamic>> command(
       String device, Map<String, dynamic> input) {
     final id = input['commandId'];
     if (id is! String || !RegExp(r'^[a-zA-Z0-9_-]{8,80}$').hasMatch(id)) {
       throw const RemoteFailure('invalid_command_id', httpStatus: 400);
     }
+    // Browsing is owner-authenticated at the existing command endpoint, but
+    // never takes a playback lease. Re-read even on a transport retry so cached
+    // command responses cannot cross a provider account change.
+    if (input['type'] == 'library.list') return _readLibrary(input);
     final key = '$device:$id';
     final encoded = jsonEncode(input);
     if (_results.containsKey(key)) {
@@ -407,6 +446,29 @@ class AppSessionCoordinator {
       _remoteApplying = true;
       try {
         switch (input['type']) {
+          case 'library.play':
+            final dispatch = libraryPlay;
+            if (dispatch == null) {
+              throw const RemoteFailure('soda_unavailable');
+            }
+            await dispatch(payload, () {
+              snapshot();
+              if (_closed || input['hostSessionId'] != hostSessionId) {
+                throw const RemoteFailure('stale_host');
+              }
+              if (_device != device ||
+                  _lease != input['controlLeaseId'] ||
+                  _expires == null ||
+                  !_expires!.isAfter(_now()) ||
+                  localGeneration != _localGeneration) {
+                throw const RemoteFailure('control_lost');
+              }
+              if (remoteTransformRunning ||
+                  controller.busy ||
+                  (liveRunning() && !liveControl)) {
+                throw const RemoteFailure('local_busy');
+              }
+            });
           case 'open':
             final media = _media[payload['mediaId']];
             if (media == null) {
@@ -629,7 +691,7 @@ class AppSessionCoordinator {
             throw const RemoteFailure('unsupported_command', httpStatus: 400);
         }
         lastCommandStatus = localGeneration == _localGeneration
-            ? 'native_applied'
+            ? (input['type'] == 'library.play' ? 'submitted' : 'native_applied')
             : 'superseded';
         return {
           'commandId': id,

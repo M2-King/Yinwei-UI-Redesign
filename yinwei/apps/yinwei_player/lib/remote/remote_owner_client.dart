@@ -213,6 +213,19 @@ class RemoteOwnerClient {
   Future<Map<String, dynamic>> sendCommand(Map<String, dynamic> envelope) =>
       _request('/remote/api/commands', body: envelope);
 
+  /// Read-only cached music browsing; owner authentication and CSRF still apply.
+  Future<Map<String, dynamic>> libraryList(
+      Map<String, dynamic> snapshot, Map<String, dynamic> request) async {
+    // command() is virtual: routed clients retain one envelope/command ID
+    // through migration, exactly as they do for mutating commands.
+    final result = await command(snapshot, '', 'library.list', request);
+    final library = result['library'];
+    if (library is! Map<String, dynamic>) {
+      throw const FormatException('invalid_library_response');
+    }
+    return library;
+  }
+
   String _commandId() {
     const alphabet =
         'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';

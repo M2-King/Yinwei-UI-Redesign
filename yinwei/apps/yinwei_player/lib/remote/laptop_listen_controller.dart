@@ -581,6 +581,17 @@ class LaptopListenController extends ChangeNotifier {
   }
 
   /// Sends a laptop command (`media.next`, `point.set`, `live.start`…).
+  Future<Map<String, dynamic>> browseSoda(Map<String, dynamic> request) async {
+    final client = _client;
+    final host = snapshot?['hostSessionId'];
+    if (client == null || host == null) throw StateError('Not connected');
+    final value = await client.libraryList(snapshot!, request);
+    if (!identical(client, _client) || host != snapshot?['hostSessionId']) {
+      throw StateError('Music host changed');
+    }
+    return value;
+  }
+
   Future<bool> command(String type,
           [Map<String, dynamic> payload = const {}]) =>
       _command(type, payload, false);
@@ -601,9 +612,11 @@ class LaptopListenController extends ChangeNotifier {
       if (result['snapshot'] is Map<String, dynamic>) {
         _applySnapshot(result['snapshot'] as Map<String, dynamic>);
       }
-      notice = result['status'] == 'native_applied'
-          ? 'Applied on the laptop.'
-          : 'The laptop’s own controls superseded this change.';
+      notice = result['status'] == 'submitted'
+          ? 'Sent to 汽水. Check the laptop if playback does not change.'
+          : result['status'] == 'native_applied'
+              ? 'Applied on the laptop.'
+              : 'The laptop’s own controls superseded this change.';
       return true;
     } on RemoteApiException catch (error) {
       // The laptop's state moved on (a song change) or the lease lapsed:
@@ -624,25 +637,28 @@ class LaptopListenController extends ChangeNotifier {
       // A refusal about the music or the mode keeps control; anything else
       // needs control again.
       if (!const {
-        'media_command_failed',
-        'no_music_app',
-        'music_not_playing',
-        'music_app_open_failed',
-        'music_app_no_song',
-        'live_start_failed',
-        'array_active',
-        'invalid_payload',
-        'stale_array',
-        'speaker_limit',
-        'speaker_protected',
-        'array_inactive',
-      }.contains(error.code)) {
+            'media_command_failed',
+            'no_music_app',
+            'music_not_playing',
+            'music_app_open_failed',
+            'music_app_no_song',
+            'live_start_failed',
+            'array_active',
+            'invalid_payload',
+            'stale_array',
+            'speaker_limit',
+            'speaker_protected',
+            'array_inactive',
+          }.contains(error.code) &&
+          !error.code.startsWith('soda_')) {
         _lease = null;
       }
       notice = failureText(error.code);
       return false;
     } catch (_) {
-      notice = 'The laptop did not answer · try again.';
+      notice = type == 'library.play'
+          ? 'The playback result is unknown. Check 汽水 on the laptop before trying again.'
+          : 'The laptop did not answer · try again.';
       return false;
     } finally {
       pending = false;
@@ -651,6 +667,24 @@ class LaptopListenController extends ChangeNotifier {
   }
 
   static String failureText(String code) => switch (code) {
+        'soda_stale_selection' ||
+        'soda_invalid_selection' =>
+          'This cached list changed. Open the list again.',
+        'soda_track_unavailable' =>
+          '汽水 may not be able to play this cached song. Check it on the laptop.',
+        'soda_not_running' => 'Open 汽水 on the laptop first.',
+        'soda_handler_changed' ||
+        'soda_handler_unavailable' =>
+          'The 汽水 link handler is unavailable or changed. Check the laptop.',
+        'soda_dispatch_uncertain' =>
+          'The playback result is unknown. Check 汽水 on the laptop before trying again.',
+        'soda_unavailable' => 'Open 汽水 on the laptop to browse cached music.',
+        'soda_stale' => 'This cached list changed. Open the list again.',
+        'soda_account_changed' => 'The 汽水 account changed. Open Music again.',
+        'soda_dispatch_unknown' =>
+          'Sent to 汽水; playback could not be confirmed. Check the laptop before trying again.',
+        'soda_handler_invalid' =>
+          'The 汽水 link handler changed. Check the laptop.',
         'stale_array' => 'The speakers changed. Select the speaker again.',
         'speaker_limit' => 'The room supports up to 8 speakers.',
         'speaker_protected' => 'The left and right speakers stay in the room.',

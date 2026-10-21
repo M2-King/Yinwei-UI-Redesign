@@ -91,6 +91,8 @@ class ListenRoomBridge {
   // This iPad asked the laptop to start (music + Live): shown as progress
   // until the laptop reports its own step.
   bool _startingLive = false;
+  int _musicGeneration = 0;
+  bool _musicPlaying = false;
 
   /// The app is in the background: nothing is sent to the page. iPadOS
   /// freezes the hidden WebView, and each update would wait on the main
@@ -118,6 +120,7 @@ class ListenRoomBridge {
 
   void dispose() {
     _disposed = true;
+    _musicGeneration++;
     _timer?.cancel();
     session.removeListener(_changed);
     _iosOutput?.level.removeListener(schedule);
@@ -279,6 +282,7 @@ class ListenRoomBridge {
       'quality': s.soundQuality.name,
       'stream': s.audioConnected ? s.streamQuality?.name : null,
       'opus': s.opusAvailable,
+      'music': s.signedIn && caps['sodaLibrary'] == true,
       'progress': progress,
       'pos': dur > 0 ? pos.clamp(0.0, dur) : 0,
       'dur': dur > 0 ? dur : 0,
@@ -375,6 +379,65 @@ class ListenRoomBridge {
           await toast('Audio diagnostics copied');
         } catch (_) {
           await toast('Could not copy audio diagnostics');
+        }
+      case 'musicClose':
+        _musicGeneration++;
+      case 'musicBrowse':
+        if (caps['sodaLibrary'] != true || !session.signedIn) return;
+        final requestId = m['request'];
+        if (requestId is! int || requestId < 0 || requestId > 1000000000) {
+          return;
+        }
+        final request = <String, dynamic>{};
+        for (final key in ['list', 'snapshot']) {
+          final value = m[key];
+          if (value != null) {
+            if (value is! String || value.length > 160 || value.isEmpty) return;
+            request[key] = value;
+          }
+        }
+        final offset = m['offset'];
+        if (offset != null) {
+          if (offset is! int || offset < 0 || offset > 100000) return;
+          request['offset'] = offset;
+        }
+        final generation = ++_musicGeneration;
+        final host = snap['hostSessionId'];
+        Map<String, dynamic> value;
+        try {
+          value = await session.browseSoda(request);
+        } catch (_) {
+          value = {
+            'error':
+                'Cached music is unavailable. Open 汽水 on the laptop, then reopen Music.'
+          };
+        }
+        if (_disposed ||
+            _background ||
+            generation != _musicGeneration ||
+            !session.signedIn ||
+            host != session.snapshot?['hostSessionId']) {
+          return;
+        }
+        await run('YinweiListen.music(${jsonEncode({
+              'request': requestId,
+              ...value
+            })})');
+      case 'musicPlay':
+        if (caps['sodaLibrary'] != true || _musicPlaying || session.pending) {
+          return;
+        }
+        final payload = <String, dynamic>{};
+        for (final key in ['list', 'snapshot', 'track', 'revision']) {
+          final value = m[key];
+          if (value is! String || value.isEmpty || value.length > 160) return;
+          payload[key] = value;
+        }
+        _musicPlaying = true;
+        try {
+          await _command('library.play', payload);
+        } finally {
+          _musicPlaying = false;
         }
       case 'rects':
         final r = m['airplay'];
