@@ -259,6 +259,7 @@ class ListenRoomBridge {
       'maxSpeakers': array['maxSpeakers'] ?? 8,
       'speakerControl': caps['remoteSpeakers'] == true,
       'matrixLinked': array['matrixLinked'] == true,
+      'matrixSpread': array['matrixSpread'] ?? 1.0,
       'motion': mode['motion'] == 'orbit' ? 'orbit' : 'fixed',
       'orbitHz': _num(mode['orbitHz'])?.clamp(0.05, 2.0) ?? 0.4,
       'az': heading != null
@@ -555,6 +556,8 @@ class ListenRoomBridge {
       case 'speakerRemove':
       case 'speakerSelect':
       case 'speakerPlace':
+      case 'matrixLink':
+      case 'matrixAdjust':
         final revision = m['arrayRevision'];
         final index = m['index'];
         if (caps['remoteSpeakers'] != true ||
@@ -567,16 +570,39 @@ class ListenRoomBridge {
           'speakerAdd' => 'array.speaker.add',
           'speakerRemove' => 'array.speaker.remove',
           'speakerSelect' => 'array.speaker.select',
+          'matrixLink' => 'array.matrix.link',
+          'matrixAdjust' => 'array.matrix.set',
           _ => 'array.speaker.set',
         };
-        if (m['t'] != 'speakerAdd' &&
-            (index is! int || index < 0 || index >= 8)) {
+        final needsIndex = m['t'] != 'speakerAdd' && m['t'] != 'matrixLink';
+        if (needsIndex && (index is! int || index < 0 || index >= 8)) {
           return;
         }
         final payload = <String, dynamic>{
           'arrayRevision': revision,
-          if (m['t'] != 'speakerAdd') 'index': index,
+          if (needsIndex) 'index': index,
         };
+        if (m['t'] == 'matrixLink') {
+          if (m['linked'] is! bool) return;
+          payload['linked'] = m['linked'];
+        }
+        if (m['t'] == 'matrixAdjust') {
+          final axis = m['axis'];
+          final value = _num(m['value']);
+          if (value == null || !['az', 'el', 'dist'].contains(axis)) return;
+          final min = axis == 'dist'
+              ? 0.5
+              : axis == 'el'
+                  ? -90.0
+                  : -180.0;
+          final max = axis == 'dist'
+              ? 10.0
+              : axis == 'el'
+                  ? 90.0
+                  : 180.0;
+          if (value < min || value > max) return;
+          payload.addAll({'axis': axis, 'value': value});
+        }
         if (m['t'] == 'speakerPlace') {
           final az = _num(m['az']), el = _num(m['el']), dist = _num(m['dist']);
           if (az == null || el == null || dist == null) return;

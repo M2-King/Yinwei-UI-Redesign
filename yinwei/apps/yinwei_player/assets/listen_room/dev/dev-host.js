@@ -19,14 +19,14 @@
     az: 35, el: 20, dist: 3.2, track: { ...tracks[0] }, volume: 0.72, level: 0,
     stats: { received: 18240, bufferMs: 160, underruns: 0 }, opens: null, pending: false, progress: null,
     pos: 42, dur: 245, seekable: true, quality: "high", stream: "high", opus: true,
-    speakers: [], selectedSpeakerIndex: 0, arrayRevision: 1, maxSpeakers: 8, speakerControl: true, matrixLinked: false, music: true,
+    speakers: [], selectedSpeakerIndex: 0, arrayRevision: 1, maxSpeakers: 8, speakerControl: true, matrixLinked: false, matrixSpread: 1, music: true,
   };
   function seedSpeakers(count) {
     M.speakers = Array.from({ length: count }, (_, index) => ({ index,
       label: index === 0 ? "L" : index === 1 ? "R" : String(index + 1),
       az: [-30, 30, -70, 70, -110, 110, -150, 150][index], el: 0, dist: 1.8,
       gainDb: 0, mute: false, feed: index === 0 ? "left" : index === 1 ? "right" : "mid" }));
-    M.selectedSpeakerIndex = count > 2 ? 2 : 0; M.arrayRevision++;
+    M.selectedSpeakerIndex = count > 2 ? 2 : 0; M.matrixLinked = false; M.matrixSpread = 1; M.arrayRevision++;
   }
   seedSpeakers(2);
   const later = (ms, f) => setTimeout(f, ms);
@@ -85,11 +85,23 @@
       case "speakerRemove":
       case "speakerSelect":
       case "speakerPlace":
+      case "matrixLink":
+      case "matrixAdjust":
         M.pending = true;
         later(200, () => {
           M.pending = false;
+          if (M.control !== "mine" || M.mode !== "stereo2") return;
           if (i.arrayRevision !== M.arrayRevision) { say("The speakers changed. Select the speaker again."); return; }
-          if (i.t === "speakerAdd" && M.speakers.length < 8) {
+          if (i.t === "matrixLink") {
+            if (typeof i.linked !== "boolean") return;
+            if (i.linked !== M.matrixLinked) {
+              M.matrixLinked = i.linked; M.matrixSpread = 1;
+              if (i.linked) {
+                const mean = clamp(M.speakers.reduce((n, s) => n + s.dist, 0) / M.speakers.length, 0.5, 10);
+                M.speakers.forEach(s => s.dist = mean);
+              }
+            }
+          } else if (i.t === "speakerAdd" && M.speakers.length < 8) {
             const index = M.speakers.length;
             M.speakers.push({ index, label: String(index + 1), az: 0, el: 0, dist: 1.8, gainDb: 0, mute: false, feed: "mid" });
             M.selectedSpeakerIndex = index;
@@ -98,7 +110,21 @@
             M.selectedSpeakerIndex = Math.min(i.index, M.speakers.length - 1);
           } else if (M.speakers[i.index]) {
             M.selectedSpeakerIndex = i.index;
-            if (i.t === "speakerPlace") Object.assign(M.speakers[i.index], { az: i.az, el: i.el, dist: i.dist });
+            if (i.t === "matrixAdjust" && M.matrixLinked) {
+              const base = M.speakers[i.index], da = wrap(i.value - base.az), de = i.value - base.el;
+              M.speakers.forEach(s => {
+                if (i.axis === "az") s.az = wrap(s.az + da);
+                if (i.axis === "el") s.el = clamp(s.el + de, -90, 90);
+                if (i.axis === "dist") s.dist = i.value;
+              });
+            } else if (i.t === "speakerPlace") {
+              if (M.matrixLinked) {
+                // Review-only mirror of ArrayLayout.moveSelectedInGroup /
+                // setAllDistance. Production always delegates to Dart.
+                const base = M.speakers[i.index], da = wrap(i.az - base.az), de = i.el - base.el;
+                M.speakers.forEach(s => Object.assign(s, { az: wrap(s.az + da), el: clamp(s.el + de, -90, 90), dist: i.dist }));
+              } else Object.assign(M.speakers[i.index], { az: i.az, el: i.el, dist: i.dist });
+            }
           }
           M.arrayRevision++; applied();
         }); break;

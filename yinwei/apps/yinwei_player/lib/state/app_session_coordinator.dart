@@ -63,6 +63,8 @@ class AppSessionCoordinator {
     'array.speaker.remove',
     'array.speaker.select',
     'array.speaker.set',
+    'array.matrix.link',
+    'array.matrix.set',
     'motion.set',
     'media.seek',
     'library.play',
@@ -392,7 +394,8 @@ class AppSessionCoordinator {
       if (_fingerprints[key] != encoded) {
         throw const RemoteFailure('command_id_reused');
       }
-      if ((input['type'] as String?)?.startsWith('array.speaker.') == true) {
+      if ((input['type'] as String?)?.startsWith('array.speaker.') == true ||
+          (input['type'] as String?)?.startsWith('array.matrix.') == true) {
         return _results[key]!.then((result) {
           snapshot();
           final applied = (result['snapshot'] as Map)['arrayState'] as Map;
@@ -565,6 +568,8 @@ class AppSessionCoordinator {
           case 'array.speaker.remove':
           case 'array.speaker.select':
           case 'array.speaker.set':
+          case 'array.matrix.link':
+          case 'array.matrix.set':
             if (applyArrayLayout == null ||
                 !controller.arraySupported ||
                 !controller.extraSpeakersSupported ||
@@ -582,7 +587,15 @@ class AppSessionCoordinator {
             }
             final next = controller.array.copy();
             final type = input['type'];
-            if (type == 'array.speaker.add') {
+            if (type == 'array.matrix.link') {
+              final linked = payload['linked'];
+              if (linked is! bool) {
+                throw const RemoteFailure('invalid_payload', httpStatus: 400);
+              }
+              // An already-linked request must not recapture matrixRest or
+              // reset the laptop's spread. All geometry stays in ArrayLayout.
+              if (linked != next.matrixLinked) next.setMatrixLinked(linked);
+            } else if (type == 'array.speaker.add') {
               if (!next.canAddSpeaker) {
                 throw const RemoteFailure('speaker_limit');
               }
@@ -593,7 +606,30 @@ class AppSessionCoordinator {
                 throw const RemoteFailure('invalid_payload', httpStatus: 400);
               }
               next.selectedIndex = index;
-              if (type == 'array.speaker.remove') {
+              if (type == 'array.matrix.set') {
+                if (!next.matrixLinked) {
+                  throw const RemoteFailure('matrix_inactive');
+                }
+                // Match the laptop sidebar: an axis edit changes only that
+                // axis. In particular rotation must not equalize distances
+                // after the laptop adds a speaker to an existing cluster.
+                switch (payload['axis']) {
+                  case 'az':
+                    next.moveSelectedInGroup(
+                        azimuthDeg: remoteNumber(payload, 'value', -180, 180)
+                            .toDouble());
+                  case 'el':
+                    next.moveSelectedInGroup(
+                        elevationDeg:
+                            remoteNumber(payload, 'value', -90, 90).toDouble());
+                  case 'dist':
+                    next.setAllDistance(
+                        remoteNumber(payload, 'value', 0.5, 10).toDouble());
+                  default:
+                    throw const RemoteFailure('invalid_payload',
+                        httpStatus: 400);
+                }
+              } else if (type == 'array.speaker.remove') {
                 if (!next.canRemoveSelected) {
                   throw const RemoteFailure('speaker_protected');
                 }

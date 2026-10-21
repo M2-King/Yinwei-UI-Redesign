@@ -30,13 +30,14 @@ const S = {
   quality: "high", stream: null, opus: false, // sound quality chosen / sent now / Opus possible
   canClose: true, updates: false, music: false, // the room as the whole app: no way back; updates checked here
   screen: "room", view: "3d", panel: null,
-  speakers: [], selectedSpeakerIndex: 0, arrayRevision: 0, maxSpeakers: 8, speakerControl: false, matrixLinked: false,
+  speakers: [], selectedSpeakerIndex: 0, arrayRevision: 0, maxSpeakers: 8, speakerControl: false, matrixLinked: false, matrixSpread: 1,
 };
 // A gesture preview, never a second authoritative array. Every commit retains
 // the revision at gesture start, even if a laptop edit arrives in the meantime.
 let speakerDraft = null;
 const activeSpeaker = () => speakerDraft || S.speakers[S.selectedSpeakerIndex];
-const canEditSpeakers = () => S.mode === "stereo2" && S.speakerControl && !S.pending && !lost() && S.control === "mine";
+const canEditSpeakers = () => S.mode === "stereo2" && S.speakerControl && !S.pending &&
+  !(speakerDraft && speakerDraft.committed) && !lost() && S.control === "mine";
 function beginSpeaker(index) {
   const s = S.speakers[index];
   if (!s || !canEditSpeakers()) return false;
@@ -47,10 +48,13 @@ function speakerIntent(t, extra = {}) {
   send({ t, arrayRevision: S.arrayRevision, ...extra });
 }
 function commitSpeaker() {
-  if (!speakerDraft) return;
+  if (!speakerDraft || speakerDraft.committed) return;
   speakerDraft.committed = performance.now();
   const { index, az, el, dist, arrayRevision } = speakerDraft;
-  send({ t: "speakerPlace", index, az, el, dist, arrayRevision });
+  if (speakerDraft.axis) send({ t: "matrixAdjust", index, axis: speakerDraft.axis,
+    value: speakerDraft[speakerDraft.axis], arrayRevision });
+  else send({ t: "speakerPlace", index, az, el, dist, arrayRevision });
+  renderSpeakerPlace(); // lock the next gesture until this revision is acknowledged
 }
 function speakerPose(index) {
   const s = S.speakers[index];
@@ -59,7 +63,8 @@ function speakerPose(index) {
   if (!S.matrixLinked) return s;
   const base = S.speakers[speakerDraft.index];
   return { ...s, az: wrap(s.az + wrap(speakerDraft.az - base.az)),
-    el: clamp(s.el + speakerDraft.el - base.el, -90, 90), dist: speakerDraft.dist };
+    el: clamp(s.el + speakerDraft.el - base.el, -90, 90),
+    dist: speakerDraft.axis && speakerDraft.axis !== "dist" ? s.dist : speakerDraft.dist };
 }
 const held = {}; // values you just set, kept until the app confirms them
 const setLocal = (fields, ok) => { const now = performance.now(); for (const k in fields) { S[k] = fields[k]; ListenBridge.hold(held, k, fields[k], now, ok && ok[k]); } };
@@ -87,9 +92,10 @@ function apply(next) {
     placing: typeof dragging !== "undefined" && dragging === "source",
     orbiting: S.mode === "point" && S.motion === "orbit",
   });
-  if (speakerDraft && (S.mode !== "stereo2" || S.control !== "mine" ||
-      (speakerDraft.committed && (S.arrayRevision !== speakerDraft.arrayRevision ||
-        (wasPending && !S.pending) || now - speakerDraft.committed > ListenBridge.HOLD_MS)))) speakerDraft = null;
+  if (speakerDraft && (S.mode !== "stereo2" || S.control !== "mine" || lost() ||
+      S.arrayRevision !== speakerDraft.arrayRevision ||
+      (speakerDraft.committed && ((wasPending && !S.pending) ||
+        now - speakerDraft.committed > ListenBridge.HOLD_MS)))) speakerDraft = null;
   if (changed.includes("pos")) posAt = now; // the song clock restarts from each report
   if (changed.length || Object.keys(held).join() !== heldBefore) render();
 }
@@ -320,20 +326,25 @@ function renderPop() {
         pop.innerHTML = `<h3>Place <span class="speaker-count">${S.speakers.length} / ${S.maxSpeakers}</span></h3>
           <div class="speaker-list" role="group" aria-label="Speakers">${S.speakers.map(s => `<button class="speaker-row" data-speaker="${s.index}" type="button" aria-pressed="false"><span class="speaker-badge">${esc(s.label)}</span><span class="speaker-detail"></span></button>`).join("")}</div>
           <button class="speaker-add" id="speaker-add" type="button">${ms("add")} Add speaker</button>
+          <div class="pop-foot"><span>Link speakers</span><button class="link" id="speaker-link" type="button" aria-label="Link speakers" aria-pressed="false">Link</button></div>
           <div id="speaker-editor"><div class="readout" id="speaker-read"></div>
-          <div class="slider"><div class="slider-head"><span>Direction</span><output id="speaker-az-value"></output></div><input id="speaker-az" type="range" min="-180" max="180" step="1" aria-label="Speaker direction"></div>
-          <div class="slider"><div class="slider-head"><span>Height</span><output id="speaker-el-value"></output></div><input id="speaker-el" type="range" min="-90" max="90" step="1" aria-label="Speaker height"></div>
-          <div class="slider"><div class="slider-head"><span>Distance</span><output id="speaker-dist-value"></output></div><input id="speaker-dist" type="range" min="0" max="1000" step="1" aria-label="Speaker distance"></div></div>
+          <div class="slider"><div class="slider-head"><span id="speaker-az-label">Direction</span><output id="speaker-az-value"></output></div><input id="speaker-az" type="range" min="-180" max="180" step="1" aria-label="Speaker direction"></div>
+          <div class="slider"><div class="slider-head"><span id="speaker-el-label">Height</span><output id="speaker-el-value"></output></div><input id="speaker-el" type="range" min="-90" max="90" step="1" aria-label="Speaker height"></div>
+          <div class="slider"><div class="slider-head"><span id="speaker-dist-label">Distance</span><output id="speaker-dist-value"></output></div><input id="speaker-dist" type="range" min="0" max="1000" step="1" aria-label="Speaker distance"></div></div>
           <div class="pop-foot speaker-foot"><span id="speaker-hint"></span><button class="link" id="speaker-remove" type="button">Remove</button></div>`;
         pop.querySelectorAll("[data-speaker]").forEach(b => { b.onclick = () => {
           speakerDraft = null; speakerIntent("speakerSelect", { index: Number(b.dataset.speaker) });
         }; });
         $("speaker-add").onclick = () => speakerIntent("speakerAdd");
+        $("speaker-link").onclick = () => {
+          speakerDraft = null; speakerIntent("matrixLink", { linked: !S.matrixLinked });
+        };
         $("speaker-remove").onclick = () => speakerIntent("speakerRemove", { index: S.selectedSpeakerIndex });
         for (const k of ["az", "el", "dist"]) {
           const slider = $(`speaker-${k}`);
           slider.oninput = () => {
-            if (!speakerDraft && !beginSpeaker(S.selectedSpeakerIndex)) return;
+            if ((!speakerDraft || speakerDraft.committed) && !beginSpeaker(S.selectedSpeakerIndex)) return;
+            if (S.matrixLinked) speakerDraft.axis = k;
             speakerDraft[k] = k === "dist" ? sliderToDist(Number(slider.value)) : Number(slider.value);
             renderSpeakerPlace();
           };
@@ -388,6 +399,10 @@ function renderPlace() {
 function renderSpeakerPlace() {
   if (!$("speaker-add")) return;
   const s = activeSpeaker(), editable = canEditSpeakers();
+  const link = $("speaker-link");
+  link.disabled = !editable;
+  link.setAttribute("aria-pressed", String(S.matrixLinked));
+  setText(link, S.matrixLinked ? "Linked" : "Link");
   $("speaker-add").disabled = !editable || S.speakers.length >= S.maxSpeakers;
   $("speaker-editor").hidden = !s;
   $("speaker-remove").hidden = !s || s.index < 2;
@@ -400,9 +415,13 @@ function renderSpeakerPlace() {
     setText(b.querySelector(".speaker-detail"), pose ? `${fmtAz(pose.az)} · ${fmtDist(pose.dist)}${pose.mute ? " · Muted" : ""}` : "");
   });
   if (!s) return;
-  setText($("speaker-read"), `Speaker ${s.label} · ${fmtAz(s.az)} · ${fmtEl(s.el)} · ${fmtDist(s.dist)}`);
+  setText($("speaker-read"), `${S.matrixLinked ? "Array" : `Speaker ${s.label}`} · ${fmtAz(s.az)} · ${fmtEl(s.el)} · ${fmtDist(s.dist)}`);
   for (const k of ["az", "el", "dist"]) {
     const slider = $(`speaker-${k}`), fmt = k === "az" ? fmtAz : k === "el" ? fmtEl : fmtDist;
+    const label = S.matrixLinked ? { az: "Array rotation", el: "Array height", dist: "Array distance" }[k]
+      : { az: "Direction", el: "Height", dist: "Distance" }[k];
+    setText($(`speaker-${k}-label`), label);
+    slider.setAttribute("aria-label", S.matrixLinked ? label : `Speaker ${label.toLowerCase()}`);
     slider.disabled = !editable;
     if (document.activeElement !== slider) slider.value = k === "dist" ? distToSlider(s.dist) : Math.round(s[k]);
     sliderPct(slider); setText($(`speaker-${k}-value`), fmt(s[k]));

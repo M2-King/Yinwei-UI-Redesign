@@ -1,0 +1,38 @@
+{"t":"speakerPlace","index":0,"az":34,"el":18,"dist":3.6,"arrayRevision":12}
+{"t":"speakerSelect","arrayRevision":11,"index":0}
+{"t":"matrixAdjust","index":2,"axis":"dist","value":4,"arrayRevision":10}
+{"t":"matrixAdjust","index":2,"axis":"el","value":18,"arrayRevision":9}
+{"t":"matrixAdjust","index":2,"axis":"az","value":-20,"arrayRevision":8}
+{"t":"matrixAdjust","index":2,"axis":"az","value":-70,"arrayRevision":7}
+{"t":"matrixAdjust","index":2,"axis":"el","value":0,"arrayRevision":6}
+{"t":"rects","airplay":[731,1071,48,48]}
+
+L34° R · 3.6 m
+R94° R · 3.6 m
+36° L · 3.6 m
+4134° R · 3.6 m
+546° L · 3.6 m
+6174° R · 3.6 m
+786° L · 3.6 m
+8146° L · 3.6 m
+
+Yinwei Listen Room — speed report
+Device: Win32 · screen 1920×1080 @1x · window 820×1180
+GPU: ANGLE (NVIDIA, NVIDIA GeForce RTX 5070 Laptop GPU (0x00002D58) Direct3D11 vs_5_0 ps_5_0, D3D11)
+First room frame: 636 ms after load · detailed textures ready: 1400 ms (worker)
+Start: page and three.js loaded 154 ms · room built 368 ms · first frame drawn 267 ms later
+Idle (30 fps cap): 30.0 fps over 11421 frames
+Moving (drag, orbit, camera): 147.4 fps over 1034 frames · worst second 99 fps
+  · 2.0 + top view: 180.4 fps (415 frames)
+  · 2.0 + place panel open + opening move: 137.7 fps (327 frames)
+  · 2.0 + opening move: 148.7 fps (88 frames)
+  · 2.0 + turning the room + top view: 180.0 fps (81 frames)
+  · Point + opening move: 68.9 fps (62 frames)
+  · 2.0 + place panel open: 154.1 fps (61 frames)
+Resolution: 1x of max 1x (stepped down 0×) · room full (auto)
+Touch response: 9 ms from finger move to frame · finger updates 16 a second
+Freezes over 100 ms: 2 (longest 138 ms) · last: 138 ms after start · 108 ms after texture leather
+Speed test: not run (YinweiListen.speedTest())
+Shaders and drawing setups prepared up front: 47 ms
+Per frame: 206 draw calls · 125k triangles · 218 meshes (480 before merging) · glow buffers half-float
+Speakers: 8 · fixed pool 8 · cabinet shadow casters limited to L/R · GPU geometries 118

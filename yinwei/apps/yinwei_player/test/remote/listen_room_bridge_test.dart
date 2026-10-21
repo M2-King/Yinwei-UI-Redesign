@@ -188,6 +188,7 @@ void main() {
       'selectedIndex': 2,
       'maxSpeakers': 8,
       'matrixLinked': true,
+      'matrixSpread': 1.7,
       'speakers': [
         {
           'index': 2,
@@ -204,6 +205,7 @@ void main() {
     expect(b.state()['arrayRevision'], 12);
     expect(b.state()['selectedSpeakerIndex'], 2);
     expect(b.state()['matrixLinked'], true);
+    expect(b.state()['matrixSpread'], 1.7);
     // A newer snapshot must not replace the old gesture's revision.
     await b.handle(
         '{"t":"speakerPlace","arrayRevision":11,"index":2,"az":50,"el":10,"dist":3}');
@@ -213,6 +215,33 @@ void main() {
     await b.handle('{"t":"speakerAdd"}');
     await b.handle('{"t":"speakerRemove","arrayRevision":12,"index":8}');
     expect(s.calls, isEmpty);
+    await b.handle('{"t":"matrixLink","arrayRevision":11,"linked":false}');
+    expect(s.calls.single,
+        'array.matrix.link {"arrayRevision":11,"linked":false}');
+    s.calls.clear();
+    for (final value in ['1', '"true"', 'null']) {
+      await b.handle('{"t":"matrixLink","arrayRevision":12,"linked":$value}');
+    }
+    expect(s.calls, isEmpty);
+    await b.handle(
+        '{"t":"matrixAdjust","arrayRevision":11,"index":2,"axis":"el","value":25}');
+    expect(s.calls.single,
+        'array.matrix.set {"arrayRevision":11,"index":2,"axis":"el","value":25.0}');
+    s.calls.clear();
+    for (final payload in [
+      '"axis":"spread","value":1',
+      '"axis":"el","value":91',
+      '"axis":"el","value":"25"'
+    ]) {
+      await b
+          .handle('{"t":"matrixAdjust","arrayRevision":12,"index":2,$payload}');
+    }
+    expect(s.calls, isEmpty);
+    // A subsequent laptop edit is reflected without a page intent.
+    s.snapshot!['arrayState']['matrixLinked'] = false;
+    s.snapshot!['arrayState']['matrixSpread'] = 1.0;
+    expect(b.state()['matrixLinked'], false);
+    expect(b.state()['matrixSpread'], 1.0);
     b.dispose();
     s.dispose();
   });

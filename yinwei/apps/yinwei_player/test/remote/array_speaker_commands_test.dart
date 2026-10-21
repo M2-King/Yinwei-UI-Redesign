@@ -23,6 +23,7 @@ void main() {
   late AppSessionCoordinator host;
   late bool live;
   late bool liveSupported;
+  late DateTime now;
   late String lease;
   final liveArrays = <ArrayLayout>[];
   var seq = 0;
@@ -32,14 +33,17 @@ void main() {
     await c.applyArrayMode(ArrayMode.stereo2);
     live = false;
     liveSupported = true;
+    now = DateTime(2026, 10, 21);
     liveArrays.clear();
     host = AppSessionCoordinator(
         controller: c,
+        now: () => now,
         spatial: SpatialRuntimeAdapter()..bootstrap(c.params),
         nativeBackend: true,
         liveRunning: () => live,
         applyLiveParams: (_) async {},
         applyLiveMode: (_) async {},
+        applyArrayMode: c.applyArrayMode,
         liveArraySpeakersAvailable: () => liveSupported,
         applyArrayLayout: (a) async {
           if (live) liveArrays.add(a.copy());
@@ -62,7 +66,8 @@ void main() {
       'controlLeaseId': lease,
       'expectedStateVersion': s['stateVersion'],
       'expectedSceneRevision': s['sceneRevision'],
-      'type': 'array.speaker.$type',
+      'type':
+          type.startsWith('matrix.') ? 'array.$type' : 'array.speaker.$type',
       'payload': {
         'arrayRevision': revision ?? (s['arrayState'] as Map)['revision'],
         ...values
@@ -75,6 +80,187 @@ void main() {
       host.command('ipad', input(type, revision: revision, values: values));
   Matcher code(String code) =>
       isA<RemoteFailure>().having((e) => e.code, 'code', code);
+
+  test('link captures rest at mean distance; unlink preserves every pose',
+      () async {
+    final local = c.array.copy()..addSpeaker(azimuthDeg: 170, elevationDeg: 20);
+    local.speakers[0].distanceM = 2;
+    local.speakers[1].distanceM = 4;
+    local.speakers[2].distanceM = 6;
+    await c.setArrayAcknowledged(local);
+    host.snapshot();
+    lease = host.acquireControl('ipad')['controlLeaseId'] as String;
+    await edit('matrix.link', values: {'linked': true});
+    expect(c.array.matrixLinked, true);
+    expect(c.array.matrixRest, hasLength(3));
+    expect(c.array.speakers.map((s) => s.distanceM), [4, 4, 4]);
+    final poses = (host.snapshot()['arrayState'] as Map)['speakers'];
+    await edit('matrix.link', values: {'linked': false});
+    expect(c.array.matrixLinked, false);
+    expect(c.array.matrixRest, isNull);
+    expect((host.snapshot()['arrayState'] as Map)['speakers'], poses);
+  });
+
+  test('linked gestures match laptop model and preserve spread and rest',
+      () async {
+    for (var i = 0; i < 6; i++) {
+      await edit('add');
+    }
+    final local = c.array.copy()..setMatrixLinked(true);
+    local.applyGroupDelta(azimuthDeltaDeg: 155, elevationDeltaDeg: 65);
+    local.setMatrixSpread(1.7);
+    await c.setArrayAcknowledged(local);
+    host.snapshot();
+    lease = host.acquireControl('ipad')['controlLeaseId'] as String;
+    final expected = local.copy();
+    // Includes azimuth seam wrapping and elevation clamping.
+    for (final pose in [
+      {'az': -175.0, 'el': expected.selected.elevationDeg, 'dist': 1.8},
+      {'az': -175.0, 'el': 85.0, 'dist': 1.8},
+      {'az': -175.0, 'el': 85.0, 'dist': 4.2},
+    ]) {
+      expected.moveSelectedInGroup(
+          azimuthDeg: pose['az'], elevationDeg: pose['el']);
+      expected.setAllDistance(pose['dist']!);
+      await edit('set', values: {'index': 7, ...pose});
+      for (var i = 0; i < 8; i++) {
+        expect(c.array.speakers[i].azimuthDeg, expected.speakers[i].azimuthDeg);
+        expect(c.array.speakers[i].elevationDeg,
+            expected.speakers[i].elevationDeg);
+        expect(c.array.speakers[i].distanceM, expected.speakers[i].distanceM);
+        expect(c.array.matrixRest![i].azimuthDeg,
+            expected.matrixRest![i].azimuthDeg);
+        expect(c.array.matrixRest![i].elevationDeg,
+            expected.matrixRest![i].elevationDeg);
+      }
+      expect(c.array.matrixSpread, 1.7);
+    }
+    final rest = c.array.matrixRest!.map((s) => s.azimuthDeg).toList();
+    await edit('matrix.link', values: {'linked': true});
+    expect(c.array.matrixSpread, 1.7);
+    expect(c.array.matrixRest!.map((s) => s.azimuthDeg), rest);
+  });
+
+  test('matrix command uses revision, deduplication, lease and takeover',
+      () async {
+    final request = input('matrix.link', values: {'linked': true});
+    await host.command('ipad', request);
+    final writes = engine.writes;
+    await host.command('ipad', request);
+    expect(engine.writes, writes);
+    final oldRevision = (request['payload'] as Map)['arrayRevision'] as int;
+    await expectLater(
+        edit('matrix.link', revision: oldRevision, values: {'linked': false}),
+        throwsA(code('stale_array')));
+    await edit('set', values: {'index': 0, 'az': 70, 'el': 20, 'dist': 3});
+    await expectLater(
+        host.command('ipad', request), throwsA(code('stale_array')));
+    final queued =
+        host.command('ipad', input('matrix.link', values: {'linked': false}));
+    host.takeLocalControl();
+    await expectLater(queued, throwsA(code('control_lost')));
+    expect(c.array.matrixLinked, true);
+    lease = host.acquireControl('ipad')['controlLeaseId'] as String;
+    live = true;
+    await edit('matrix.link', values: {'linked': false});
+    expect(liveArrays.single.matrixLinked, false);
+    for (final value in [null, 0, 'true']) {
+      await expectLater(edit('matrix.link', values: {'linked': value}),
+          throwsA(code('invalid_payload')));
+    }
+  });
+
+  test('2.0 to Point and back retains linked array, spread and matrix rest',
+      () async {
+    await edit('add');
+    await edit('matrix.link', values: {'linked': true});
+    final before = c.array.copy();
+    for (final mode in ['point', 'stereo2']) {
+      final request = input('matrix.link');
+      request['type'] = 'array.mode';
+      request['payload'] = {'mode': mode};
+      await host.command('ipad', request);
+      expect(c.array.matrixLinked, true);
+      expect(c.array.matrixSpread, before.matrixSpread);
+      expect(c.array.speakers.map((s) => s.azimuthDeg),
+          before.speakers.map((s) => s.azimuthDeg));
+      expect(c.array.matrixRest!.map((s) => s.azimuthDeg),
+          before.matrixRest!.map((s) => s.azimuthDeg));
+    }
+  });
+
+  test('group sliders edit only their axis and leave laptop spread untouched',
+      () async {
+    final local = c.array.copy()
+      ..setMatrixLinked(true)
+      ..setMatrixSpread(1.7);
+    // A laptop-added linked speaker starts at its own distance.
+    local.speakers[1].distanceM = 4;
+    local.matrixRest![1].distanceM = 4;
+    await c.setArrayAcknowledged(local);
+    host.snapshot();
+    lease = host.acquireControl('ipad')['controlLeaseId'] as String;
+    final expected = local.copy();
+    for (final entry in {'az': 170.0, 'el': 80.0, 'dist': 3.2}.entries) {
+      if (entry.key == 'az') {
+        expected.moveSelectedInGroup(azimuthDeg: entry.value);
+      }
+      if (entry.key == 'el') {
+        expected.moveSelectedInGroup(elevationDeg: entry.value);
+      }
+      if (entry.key == 'dist') expected.setAllDistance(entry.value);
+      await edit('matrix.set',
+          values: {'index': 0, 'axis': entry.key, 'value': entry.value});
+      for (var i = 0; i < 2; i++) {
+        expect(c.array.speakers[i].azimuthDeg, expected.speakers[i].azimuthDeg);
+        expect(c.array.speakers[i].elevationDeg,
+            expected.speakers[i].elevationDeg);
+        expect(c.array.speakers[i].distanceM, expected.speakers[i].distanceM);
+        expect(c.array.matrixRest![i].distanceM,
+            expected.matrixRest![i].distanceM);
+      }
+      expect(c.array.matrixSpread, 1.7);
+    }
+    for (final payload in [
+      {'axis': 'spread', 'value': 1.2},
+      {'axis': 'az', 'value': '50'},
+      {'axis': 'el', 'value': 91},
+      {'axis': 'dist', 'value': 0.4},
+    ]) {
+      await expectLater(edit('matrix.set', values: {'index': 0, ...payload}),
+          throwsA(code('invalid_payload')));
+    }
+    final stale = (host.snapshot()['arrayState'] as Map)['revision'] as int;
+    await edit('matrix.link', values: {'linked': false});
+    await expectLater(
+        edit('matrix.set',
+            revision: stale, values: {'index': 0, 'axis': 'az', 'value': 50}),
+        throwsA(code('stale_array')));
+    await expectLater(
+        edit('matrix.set', values: {'index': 0, 'axis': 'az', 'value': 50}),
+        throwsA(code('matrix_inactive')));
+  });
+
+  test('expired matrix lease is rejected and renewed takeover succeeds',
+      () async {
+    now = now.add(const Duration(minutes: 2));
+    await expectLater(edit('matrix.link', values: {'linked': true}),
+        throwsA(code('control_lost')));
+    expect(c.array.matrixLinked, false);
+    lease = host.acquireControl('ipad')['controlLeaseId'] as String;
+    await edit('matrix.link', values: {'linked': true});
+    final request =
+        input('matrix.set', values: {'index': 0, 'axis': 'az', 'value': 70});
+    await host.command('ipad', request);
+    final writes = engine.writes;
+    await host.command('ipad', request);
+    expect(engine.writes, writes);
+    final queued = host.command('ipad',
+        input('matrix.set', values: {'index': 0, 'axis': 'el', 'value': 30}));
+    host.takeLocalControl();
+    await expectLater(queued, throwsA(code('control_lost')));
+    expect(c.array.selected.elevationDeg, 0);
+  });
 
   test('remove speaker 3 then retried old index 4 cannot edit shifted speaker',
       () async {

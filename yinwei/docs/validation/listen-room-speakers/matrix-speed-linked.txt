@@ -1,0 +1,20 @@
+Yinwei Listen Room — speed report
+Device: Win32 · screen 1920×1080 @1x · window 1180×820
+GPU: ANGLE (NVIDIA, NVIDIA GeForce RTX 5070 Laptop GPU (0x00002D58) Direct3D11 vs_5_0 ps_5_0, D3D11)
+First room frame: 616 ms after load · detailed textures ready: 1427 ms (worker)
+Start: page and three.js loaded 102 ms · room built 313 ms · first frame drawn 302 ms later
+Idle (30 fps cap): 30.0 fps over 3502 frames
+Moving (drag, orbit, camera): 186.1 fps over 3003 frames · worst second 126 fps
+  · 2.0 + speed test: 195.4 fps (1648 frames)
+  · Point + opening move: 179.2 fps (705 frames)
+  · 2.0 + place panel open: 168.9 fps (292 frames)
+  · 2.0: 174.1 fps (140 frames)
+  · 2.0 + turning the room + place panel open: 159.6 fps (133 frames)
+  · Point: 212.5 fps (85 frames)
+Resolution: 1x of max 1x (stepped down 0×) · room full (auto)
+Touch response: 8 ms from finger move to frame · finger updates 19 a second
+Freezes over 100 ms: 1 (longest 167 ms) · last: 167 ms after start
+Speed test: full 1x 238 fps · full 1x 238 fps · light 1x 238 fps (typical frame, turning the room)
+Shaders and drawing setups prepared up front: 74 ms
+Per frame: 200 draw calls · 123k triangles · 218 meshes (480 before merging) · glow buffers half-float
+Speakers: 8 · fixed pool 8 · cabinet shadow casters limited to L/R · GPU geometries 117
