@@ -974,7 +974,8 @@ function Invoke-YinweiAction([string]$Action, [string]$Arg1, [string]$Arg2, [str
     $routed = 0
     $applied = @()
     $candidates = @()
-    if ($Arg3) { $candidates = @($Arg3 | ConvertFrom-Json) }
+    # Windows PowerShell 5.1 emits a JSON array as a single pipeline object.
+    if ($Arg3) { $candidates = @(($Arg3 | ConvertFrom-Json) | ForEach-Object { $_ }) }
     foreach ($candidate in $candidates) {
       $p = [int]$candidate.pid
       $process = Get-RouteProcess $p

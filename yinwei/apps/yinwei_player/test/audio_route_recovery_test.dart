@@ -404,8 +404,11 @@ $ErrorActionPreference = 'Stop'
 Add-Type -TypeDefinition @'
 public static class YinweiPolicy {
   public static int Calls = 0;
+  public static int Pins = 0;
   public static int Result = 0;
   public static int Clear(uint pid) { Calls++; return Result; }
+  public static int Set(uint pid, string device) { Pins++; return 0; }
+  public static int SetMuted(string device, bool muted) { return 0; }
 }
 '@
 ''' +
@@ -432,6 +435,14 @@ if ($script:YwCode -ne 5 -or [YinweiPolicy]::Calls -ne 2) { throw 'live failure 
 [YinweiPolicy]::Result = 1
 Invoke-YinweiAction 'clear' "$PID" ($identity | ConvertTo-Json -Compress) '' ''
 if ($script:YwCode -ne 0) { throw 'S_FALSE should be success' }
+# A multi-process journal must enumerate identities, not treat all PID values
+# as one Object[]. Use the current identity twice to keep the test independent
+# of other running apps while exercising the real PowerShell JSON pipeline.
+$candidates = @($identity, $identity) | ConvertTo-Json -Compress
+$pins = @(Invoke-YinweiAction 'apply' "$PID" 'test-only-mocked-device' $candidates '')
+if ($script:YwCode -ne 0 -or [YinweiPolicy]::Pins -ne 2 -or $pins.Count -ne 2) { throw 'multi-process routing failed' }
+$pins = @(Invoke-YinweiAction 'apply' "$PID" 'test-only-mocked-device' ($identity | ConvertTo-Json -Compress) '')
+if ($script:YwCode -ne 0 -or [YinweiPolicy]::Pins -ne 3 -or $pins.Count -ne 1) { throw 'single-process routing failed' }
 Write-Output 'IDENTITY PASS'
 ''',
         flush: true);
