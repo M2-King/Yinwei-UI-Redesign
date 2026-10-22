@@ -226,6 +226,19 @@ class RemoteOwnerClient {
     return library;
   }
 
+  Future<Map<String, dynamic>> sodaMetadata(Map<String, dynamic> snapshot,
+      String kind, Map<String, dynamic> payload) async {
+    if (!const ['search', 'modes'].contains(kind)) {
+      throw const FormatException('invalid_soda_kind');
+    }
+    final response = await command(snapshot, '', 'soda.$kind', payload);
+    final value = response['soda'];
+    if (value is! Map<String, dynamic>) {
+      throw const FormatException('invalid_soda_response');
+    }
+    return value;
+  }
+
   String _commandId() {
     const alphabet =
         'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';

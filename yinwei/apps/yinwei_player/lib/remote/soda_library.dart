@@ -247,8 +247,21 @@ class SodaLibrary {
     return snapshot;
   }
 
+  /// At most this many search results per request (no paging in v1).
+  static const searchLimit = 50;
+  static const searchMaxLength = 120;
+
   Future<Map<String, dynamic>> browse(Map<String, dynamic> request) async {
     if (!available) throw const SodaLibraryFailure('soda_unavailable');
+    final query = request['query'];
+    if (query != null &&
+        (query is! String ||
+            query.trim().isEmpty ||
+            query.length > searchMaxLength ||
+            request['list'] != null ||
+            request['snapshot'] != null)) {
+      throw const SodaLibraryFailure('soda_invalid_selection');
+    }
     final pending = _pending;
     if (pending != null) await pending;
     if (_account != null) {
@@ -280,6 +293,10 @@ class SodaLibrary {
       'list': null,
       'page': null,
     };
+    if (query != null) {
+      response['search'] = _search(query as String, ordered);
+      return response;
+    }
     final requested = request['list'];
     if (requested == null) return response;
     final list = _lists.values.where((l) => l.token == requested).firstOrNull;
@@ -329,6 +346,51 @@ class SodaLibrary {
     };
     return response;
   }
+
+  /// Search the cached songs: every word must appear in the title or artist,
+  /// case-insensitively. Only the newest snapshot of lists still in 汽水's
+  /// cache is searched, so every result is playable through [resolveTrack]
+  /// with its own list and snapshot. A song in several lists appears once,
+  /// under the first list in sheet order (Liked songs first).
+  Map<String, dynamic> _search(String raw, List<_ListState> ordered) {
+    final terms = _fold(raw).split(' ').where((t) => t.isNotEmpty).toList();
+    final seen = <String>{};
+    final rows = <Map<String, dynamic>>[];
+    var more = false;
+    outer:
+    for (final list in ordered) {
+      final s = list.latest;
+      if (!list.current || s == null) continue;
+      for (final t in s.tracks) {
+        final text = _fold('${t.title} ${t.artist}');
+        if (!terms.every(text.contains) || !seen.add(t.id)) continue;
+        if (rows.length == searchLimit) {
+          more = true;
+          break outer;
+        }
+        rows.add({
+          'id': t.token,
+          'list': list.token,
+          'snapshot': s.token,
+          'listTitle': list.title,
+          'title': t.title,
+          'artist': t.artist,
+          'durationMs': t.duration,
+          'playable': t.supported,
+        });
+      }
+    }
+    return {'query': raw.trim(), 'rows': rows, 'more': more};
+  }
+
+  /// Lower case, one space between words, and the iPad keyboard's curly
+  /// apostrophes/quotes treated as straight ones ("Don’t" finds "Don't").
+  static String _fold(String value) => value
+      .toLowerCase()
+      .replaceAll(RegExp('[‘’‛′＇]'), "'")
+      .replaceAll(RegExp('[“”‟″＂]'), '"')
+      .replaceAll(RegExp(r'\s+'), ' ')
+      .trim();
 
   Map<String, dynamic> _summary(_ListState list) {
     final s = list.latest;

@@ -643,6 +643,12 @@ void main() {
       home.dispose();
     });
 
+    test('the room menu shows the build of this app', () {
+      expect(bridge.state()['appBuild'], isNull);
+      bridge.appBuild = '61';
+      expect(bridge.state()['appBuild'], '61');
+    });
+
     test('pending: a command on its way keeps what you tapped', () {
       expect(bridge.state()['pending'], isFalse);
       session.pending = true;

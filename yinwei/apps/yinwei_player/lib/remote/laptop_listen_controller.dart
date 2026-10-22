@@ -633,6 +633,21 @@ class LaptopListenController extends ChangeNotifier {
     return value;
   }
 
+  Future<Map<String, dynamic>> browseOnlineSoda(
+      String kind, Map<String, dynamic> payload) async {
+    final client = _client;
+    final host = snapshot?['hostSessionId'];
+    final generation = _transportGeneration;
+    if (client == null || host == null) throw StateError('Not connected');
+    final value = await client.sodaMetadata(snapshot!, kind, payload);
+    if (!identical(client, _client) ||
+        host != snapshot?['hostSessionId'] ||
+        generation != _transportGeneration) {
+      throw StateError('Music route changed');
+    }
+    return value;
+  }
+
   Future<bool> command(String type,
       [Map<String, dynamic> payload = const {}]) async {
     final tapped = _commandClock.elapsedMicroseconds;
@@ -772,7 +787,7 @@ class LaptopListenController extends ChangeNotifier {
       notice = failureText(error.code);
       return false;
     } catch (_) {
-      notice = type == 'library.play'
+      notice = const ['library.play', 'soda.play'].contains(type)
           ? 'The playback result is unknown. Check 汽水 on the laptop before trying again.'
           : 'The laptop did not answer · try again.';
       return false;

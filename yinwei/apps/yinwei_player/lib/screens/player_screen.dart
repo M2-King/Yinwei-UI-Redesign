@@ -40,6 +40,7 @@ import 'package:yinwei_player/remote/remote_media_keys.dart';
 import 'package:yinwei_player/remote/remote_music_app.dart';
 import 'package:yinwei_player/remote/soda_library.dart';
 import 'package:yinwei_player/remote/soda_track_launcher.dart';
+import 'package:yinwei_player/remote/soda_online.dart';
 import 'package:yinwei_player/remote/remote_deployment.dart';
 import 'package:yinwei_player/remote/remote_auth.dart';
 import 'package:yinwei_player/remote/native_output_tap.dart';
@@ -139,8 +140,23 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
   RemoteMusicApp? _musicApp;
   SodaLibrary? _sodaLibrary;
   SodaTrackLauncher? _sodaLauncher;
+  SodaOnline? _sodaOnline;
+
+  Future<void> _playOnlineSoda(
+      Map<String, dynamic> payload, void Function() beforeDispatch) async {
+    final online = _sodaOnline!;
+    final id = online.resolveTrack(payload);
+    await _sodaLauncher!.play(id, beforeDispatch: beforeDispatch,
+        revalidateSelection: () async {
+      if (online.resolveTrack(payload) != id) {
+        throw const RemoteFailure('soda_stale_selection');
+      }
+    });
+  }
 
   Future<Map<String, dynamic>> _browseSoda(Map<String, dynamic> request) async {
+    // Someone is choosing a song: do the slow 汽水 check now, not on the tap.
+    _sodaLauncher?.prefetch();
     try {
       return await _sodaLibrary!.browse(request);
     } on SodaLibraryFailure catch (error) {
@@ -232,6 +248,14 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
     if (Platform.isWindows && _backend == EngineBackend.native) {
       _sodaLibrary = SodaLibrary(log: (event) => debugPrint(jsonEncode(event)));
       _sodaLauncher = SodaTrackLauncher();
+      if (Platform.environment['YINWEI_SODA_ONLINE'] == '1' &&
+          _sodaLibrary!.available) {
+        _sodaOnline = SodaOnline(
+            identityDirectory: Directory(
+                '${Platform.environment['LOCALAPPDATA'] ?? Platform.environment['APPDATA']}'
+                '${Platform.pathSeparator}Yinwei${Platform.pathSeparator}remote'
+                '${Platform.pathSeparator}soda-online-v1'));
+      }
     }
     _appSession = AppSessionCoordinator(
       controller: _ctrl,
@@ -269,6 +293,8 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
       liveMediaTiming: () => _mediaKeys?.lastTiming ?? const {},
       libraryPlay: _sodaLibrary?.available == true ? _playSoda : null,
       libraryList: _sodaLibrary?.available == true ? _browseSoda : null,
+      sodaMetadata: _sodaOnline?.browse,
+      sodaPlay: _sodaOnline?.playbackVerified == true ? _playOnlineSoda : null,
       liveSeek: _caps.systemMedia
           ? (seconds) => _mediaKeys != null
               ? _mediaKeys!.seek(seconds)
@@ -1078,6 +1104,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
     _followDebounce?.cancel();
     _islandAnim?.cancel();
     _musicAppScan?.cancel();
+    _sodaOnline?.close();
     _mediaKeys?.close();
     _ctrl.removeListener(_onChange);
     _window.removeListener(_onWindowMode);

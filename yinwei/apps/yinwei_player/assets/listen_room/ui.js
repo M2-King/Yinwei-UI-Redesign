@@ -28,7 +28,7 @@ const S = {
   az: 0, el: 0, dist: 2, track: null, volume: 1, level: 0, stats: { received: 0, bufferMs: 0, underruns: 0 }, opens: null,
   pending: false, progress: null, pos: 0, dur: 0, seekable: false,
   quality: "high", stream: null, opus: false, // sound quality chosen / sent now / Opus possible
-  canClose: true, updates: false, music: false, // the room as the whole app: no way back; updates checked here
+  canClose: true, updates: false, appBuild: null, music: false, // the room as the whole app: no way back; updates checked here
   screen: "room", view: "3d", panel: null,
   speakers: [], selectedSpeakerIndex: 0, arrayRevision: 0, maxSpeakers: 8, speakerControl: false, matrixLinked: false, matrixSpread: 1,
 };
@@ -370,8 +370,11 @@ function renderPop() {
         <div class="pop-foot" style="font-size:14px;color:var(--text-2)"><span>${isLost ? "Reconnecting to" : "Connected to"} <b style="color:var(--text);font-weight:400">${esc(S.laptop)}</b></span><span>${isLost ? "" : "●"}</span></div>
         <div class="pop-foot" style="font-size:14px;color:var(--text-2)"><span>Music app</span><span style="color:var(--text)">${esc(S.source)}</span></div>
         <div class="pop-foot" style="font-size:14px;color:var(--text-2)"><span>Live Transfer</span><span style="color:var(--text)">${S.live ? "On" : "Off"}</span></div>
-        ${S.live ? `<button class="choice needs-control" id="c-stop-live" type="button">${ms("stop_circle")}<span><b>Stop Live on laptop</b><small>The laptop keeps the music app open</small></span></button>` : ""}`;
+        <div class="pop-foot" style="font-size:14px;color:var(--text-2)"><span>Yinwei on this iPad</span><span style="color:var(--text)" id="room-build">${esc(buildText())}</span></div>
+        ${S.live ? `<button class="choice needs-control" id="c-stop-live" type="button">${ms("stop_circle")}<span><b>Stop Live on laptop</b><small>The laptop keeps the music app open</small></span></button>` : ""}
+        ${S.updates ? `<button class="choice" id="c-updates" type="button">${ms("info")}<span><b>Check for updates</b><small>Looks for a newer iPad build</small></span></button>` : ""}`;
       if (S.live) $("c-stop-live").onclick = () => { closePop(); send({ t: "liveStop" }); };
+      if (S.updates) $("c-updates").onclick = () => { closePop(); send({ t: "checkUpdates" }); }; // the app checks and shows the result
     }
     requestAnimationFrame(placePop);
   });
@@ -382,6 +385,8 @@ function renderPop() {
   }
   if (S.panel === "place") renderPlace();
 }
+// "Build 61" for a published build, the plain version for a local one.
+function buildText() { return !S.appBuild ? "Unknown" : /^\d+$/.test(S.appBuild) ? `Build ${S.appBuild}` : `Version ${S.appBuild}`; }
 function renderPlace() {
   if (S.panel === "place" && S.mode === "stereo2") { renderSpeakerPlace(); return; }
   if (S.panel !== "place" || !$("p-read")) { const v = $("sv-place"); if (v) setText(v, S.mode === "point" ? fmtDist(S.dist) : "Speakers"); return; }
@@ -592,6 +597,7 @@ function drawLevel() {
 // Dart calls these with runJavaScript(...). Everything else stays private.
 window.YinweiListen = Object.freeze({
   music: (value) => musicSheet.receive(value),
+  soda: (value) => musicSheet.receiveOnline(value),
   version: ListenBridge.VERSION,
   apply,                                        // (state) app → page, at most 10 times a second
   toast: (text, holdMs) => toast(String(text), Number(holdMs) || 1500), // e.g. "Applied on the laptop" after a command succeeds

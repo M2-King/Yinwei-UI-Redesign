@@ -80,10 +80,18 @@ class SodaCacheReader {
         result.completeError(const SodaCacheFailure('soda_source_busy'));
       }
     });
-    unawaited(Isolate.spawn(_cacheWorker, (reply.sendPort, path, accountOnly))
+    // The deadline can expire while spawn is still pending. Keep the worker
+    // paused until the caller has installed it and checked that the read is
+    // still wanted; a timed-out startup must never open cache files afterwards.
+    unawaited(Isolate.spawn(_cacheWorker, (reply.sendPort, path, accountOnly),
+            paused: true)
         .then((isolate) {
       worker = isolate;
-      if (result.isCompleted) isolate.kill(priority: Isolate.immediate);
+      if (result.isCompleted) {
+        isolate.kill(priority: Isolate.immediate);
+      } else {
+        isolate.resume(isolate.pauseCapability!);
+      }
     }, onError: (Object _) {
       if (!result.isCompleted) {
         result.completeError(const SodaCacheFailure('soda_source_busy'));

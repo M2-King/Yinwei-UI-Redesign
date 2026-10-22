@@ -41,6 +41,9 @@ class ListenRoomBridge {
   /// The page's "Check for updates" (shown only when set).
   VoidCallback? onCheckUpdates;
 
+  /// This app's build as people see it ("61"), shown in the room menu.
+  String? appBuild;
+
   final LaptopListenController session;
 
   /// Runs a script in the page.
@@ -92,6 +95,7 @@ class ListenRoomBridge {
   // until the laptop reports its own step.
   bool _startingLive = false;
   int _musicGeneration = 0;
+  int _sodaGeneration = 0;
   bool _musicPlaying = false;
 
   /// The app is in the background: nothing is sent to the page. iPadOS
@@ -280,10 +284,13 @@ class ListenRoomBridge {
       'pending': s.pending,
       'canClose': canClose,
       'updates': onCheckUpdates != null,
+      'appBuild': appBuild,
       'quality': s.soundQuality.name,
       'stream': s.audioConnected ? s.streamQuality?.name : null,
       'opus': s.opusAvailable,
       'music': s.signedIn && caps['sodaLibrary'] == true,
+      'musicSearch': s.signedIn && caps['sodaSearch'] == true,
+      'musicOnline': s.signedIn && caps['sodaOnline'] == true,
       'progress': progress,
       'pos': dur > 0 ? pos.clamp(0.0, dur) : 0,
       'dur': dur > 0 ? dur : 0,
@@ -383,6 +390,70 @@ class ListenRoomBridge {
         }
       case 'musicClose':
         _musicGeneration++;
+        _sodaGeneration++;
+      case 'musicOnline':
+        if (caps['sodaOnline'] != true || !session.signedIn) return;
+        final requestId = m['request'];
+        final kind = m['kind'];
+        if (requestId is! int ||
+            requestId < 0 ||
+            requestId > 1000000000 ||
+            !const ['search', 'modes'].contains(kind)) {
+          return;
+        }
+        final payload = <String, dynamic>{};
+        if (kind == 'search') {
+          final query = m['query'];
+          if (query is! String ||
+              query.trim().runes.length < 2 ||
+              query.runes.length > 120 ||
+              query.runes.any((c) => c < 32)) {
+            return;
+          }
+          payload['query'] = query.trim();
+        }
+        final generation = ++_sodaGeneration;
+        final host = snap['hostSessionId'];
+        Map<String, dynamic> value;
+        try {
+          value = await session.browseOnlineSoda(kind as String, payload);
+        } catch (_) {
+          value = {
+            'error': 'Online 汽水 is unavailable. Your cached lists still work.'
+          };
+        }
+        if (_disposed ||
+            _background ||
+            generation != _sodaGeneration ||
+            !session.signedIn ||
+            host != session.snapshot?['hostSessionId']) {
+          return;
+        }
+        await run('YinweiListen.soda(${jsonEncode({
+              'request': requestId,
+              ...value
+            })})');
+      case 'musicOnlinePlay':
+        if (caps['sodaOnlinePlay'] != true ||
+            _musicPlaying ||
+            session.pending) {
+          return;
+        }
+        final payload = <String, dynamic>{};
+        for (final key in ['track', 'revision']) {
+          final value = m[key];
+          if (value is! String ||
+              !RegExp(r'^[A-Za-z0-9_-]{1,160}$').hasMatch(value)) {
+            return;
+          }
+          payload[key] = value;
+        }
+        _musicPlaying = true;
+        try {
+          await _command('soda.play', payload);
+        } finally {
+          _musicPlaying = false;
+        }
       case 'musicBrowse':
         if (caps['sodaLibrary'] != true || !session.signedIn) return;
         final requestId = m['request'];
@@ -396,6 +467,17 @@ class ListenRoomBridge {
             if (value is! String || value.length > 160 || value.isEmpty) return;
             request[key] = value;
           }
+        }
+        final query = m['query'];
+        if (query != null) {
+          // Only laptops that advertise search get a query.
+          if (caps['sodaSearch'] != true ||
+              query is! String ||
+              query.trim().isEmpty ||
+              query.length > 120) {
+            return;
+          }
+          request['query'] = query.trim();
         }
         final offset = m['offset'];
         if (offset != null) {

@@ -19,7 +19,7 @@
     az: 35, el: 20, dist: 3.2, track: { ...tracks[0] }, volume: 0.72, level: 0,
     stats: { received: 18240, bufferMs: 160, underruns: 0 }, opens: null, pending: false, progress: null,
     pos: 42, dur: 245, seekable: true, quality: "high", stream: "high", opus: true,
-    speakers: [], selectedSpeakerIndex: 0, arrayRevision: 1, maxSpeakers: 8, speakerControl: true, matrixLinked: false, matrixSpread: 1, music: true,
+    speakers: [], selectedSpeakerIndex: 0, arrayRevision: 1, maxSpeakers: 8, speakerControl: true, matrixLinked: false, matrixSpread: 1, music: true, musicSearch: true, musicOnline: true, updates: true, appBuild: "61",
   };
   function seedSpeakers(count) {
     M.speakers = Array.from({ length: count }, (_, index) => ({ index,
@@ -44,6 +44,20 @@
           { id: "annual", title: "2025年度歌单", cached: 8, total: 33, updatedAt: "2026-10-21T02:53:09Z", historyCount: 1 },
           { id: "evening", title: "Evening listening", cached: 42, total: 42, updatedAt: "2026-10-21T02:54:54Z", historyCount: 0 },
         ];
+        const titles = ["Quiet water", "归途", "Moonlight", "Soft rain", "远方", "After the evening", "Don't Stop", "Home"];
+        if (i.query) {
+          const fold = s => s.toLowerCase().replace(/[‘’‛′＇]/g, "'").replace(/[“”‟″＂]/g, '"');
+          const terms = fold(i.query).split(/\s+/).filter(Boolean);
+          const rows = [];
+          for (const l of lists) titles.forEach((title, n) => {
+            const artist = n % 2 ? "Review artist" : "Night band";
+            if (terms.every(t => fold(`${title} ${artist}`).includes(t)) && !rows.some(r => r.title === title))
+              rows.push({ id: `row_${n}`, list: l.id, snapshot: "newest", listTitle: l.title, title, artist, durationMs: 210000 + n * 1000, playable: true });
+          });
+          later(180, () => YinweiListen.music({ request: i.request, available: true, revision: "review1", lists, list: null, page: null,
+            search: { query: i.query, rows, more: false } }));
+          break;
+        }
         const list = lists.find(l => l.id === i.list), historical = i.snapshot === "older";
         const snapshots = list ? [{ id: "newest", ...list, historical: false }, ...(list.historyCount ? [{ ...list, id: "older", cached: 31, historical: true, updatedAt: "2026-09-04T04:00:00Z" }] : [])] : [];
         // Ensure snapshot identity isn't replaced by the collection's id.
@@ -56,6 +70,15 @@
             })) } : null }));
         break;
       }
+      case "musicOnline": {
+        const search = i.kind === "search";
+        later(280, () => YinweiListen.soda({request:i.request, kind:i.kind, query:search ? i.query : "",
+          revision:"review_online", playbackReady:false, rows:search ? [
+            {id:"review_online_track", title:"Online review sample", artist:"Synthetic artist", durationMs:220000, playable:false}
+          ] : [], modes:search ? [] : [{id:"review_mode",label:"Focus · review sample"}]}));
+        break;
+      }
+      case "musicOnlinePlay":
       case "musicPlay": say("Review only · no song was sent to the laptop"); break;
       case "musicClose": break;
       case "listen":
@@ -77,6 +100,7 @@
           else M.playing = i.a === "play";
         });
         break;
+      case "checkUpdates": say("Checking for updates… (the app shows the result)"); break;
       case "liveStop": later(300, () => { Object.assign(M, { live: false, listening: "off", playing: false }); say("Live stopped on the laptop"); }); break;
       case "layout": later(200, () => { M.mode = i.mode; if (i.mode === "stereo2") M.motion = "fixed"; applied(); }); break;
       case "motion": later(200, () => { M.motion = i.motion; M.orbitHz = i.orbitHz; applied(); }); break;

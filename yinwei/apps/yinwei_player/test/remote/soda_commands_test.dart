@@ -106,6 +106,35 @@ void main() {
         throwsA(code('invalid_payload')));
   });
 
+  test('search travels as library.list with a query, advertised separately',
+      () async {
+    final caps = host.snapshot()['capabilities'] as Map;
+    expect(caps['sodaSearch'], isTrue);
+    final payloads = <Map<String, dynamic>>[];
+    final searching = AppSessionCoordinator(
+        controller: engine,
+        spatial: SpatialRuntimeAdapter()..bootstrap(engine.params),
+        nativeBackend: true,
+        liveRunning: () => true,
+        applyLiveParams: (_) async {},
+        applyLiveMode: (_) async {},
+        libraryList: (payload) async {
+          payloads.add(payload);
+          return {'revision': 'catalog_v1', 'lists': [], 'search': {}};
+        },
+        libraryPlay: (_, __) async {});
+    addTearDown(searching.close);
+    final read = await searching.command('reader', {
+      'protocolVersion': 1,
+      'hostSessionId': searching.hostSessionId,
+      'commandId': 'library_find_001',
+      'type': 'library.list',
+      'payload': {'query': 'rain'}
+    });
+    expect(read['status'], 'read');
+    expect(payloads.single, {'query': 'rain'});
+  });
+
   test('same command ID with another selection is rejected', () async {
     final input = command();
     await host.command('ipad', input);

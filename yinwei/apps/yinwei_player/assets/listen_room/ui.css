@@ -369,6 +369,10 @@ input[type="range"]:disabled { opacity: 0.4; }
 .music-head small { font-size: 10px; letter-spacing: .16em; color: #a7b3c9; }
 .music-head h2 { font-weight: 500; font-size: 27px; margin: 6px 0 0; overflow-wrap: anywhere; }
 .music-hint { font-size: 12px; line-height: 1.5; color: #aab5c8; margin: 16px 0; }
+.music-search { width: 100%; box-sizing: border-box; margin: 0 0 12px; padding: 12px 14px; font: inherit; font-size: 14px; color: #eff3fb; border: 1px solid #ffffff1c; border-radius: 12px; background: #ffffff0a; outline: none; }
+.music-search::placeholder { color: #8f9bb1; }
+.music-search:focus-visible { border-color: #9abaff; }
+.music-search[hidden] { display: none; }
 .music-nav { display: flex; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
 .music-sheet button:not(.round), .music-snapshots { font: inherit; color: inherit; border: 1px solid #ffffff16; border-radius: 12px; background: #ffffff06; cursor: pointer; }
 .music-nav button, .music-pages button { padding: 10px 14px; font-size: 12px !important; }

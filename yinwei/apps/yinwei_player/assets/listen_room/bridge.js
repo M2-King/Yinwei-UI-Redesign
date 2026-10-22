@@ -15,8 +15,8 @@ const ListenBridge = (() => {
   const VERSION = 1, HOLD_MS = 2500;
   const FIELDS = ["laptop", "connection", "source", "live", "playing", "listening", "control", "notice",
     "mode", "motion", "orbitHz", "az", "el", "dist", "track", "volume", "level", "stats", "opens",
-    "pending", "progress", "pos", "dur", "seekable", "canClose", "updates", "quality", "stream", "opus",
-    "speakers", "selectedSpeakerIndex", "arrayRevision", "maxSpeakers", "speakerControl", "matrixLinked", "matrixSpread", "music"];
+    "pending", "progress", "pos", "dur", "seekable", "canClose", "updates", "appBuild", "quality", "stream", "opus",
+    "speakers", "selectedSpeakerIndex", "arrayRevision", "maxSpeakers", "speakerControl", "matrixLinked", "matrixSpread", "music", "musicSearch", "musicOnline"];
   const wrap = (a) => { a = ((a + 180) % 360 + 360) % 360 - 180; return a === -180 ? 180 : a; };
   // Values the app may send, so a bad message can't put the page in a state it can't draw.
   const ENUMS = {
@@ -30,7 +30,7 @@ const ListenBridge = (() => {
   const RANGES = { ...SONG, orbitHz: [0.05, 2], az: [-180, 180], el: [-90, 90], dist: [0.5, 10], volume: [0, 1], level: [0, 1] };
   function clean(k, v) {
     if (k === "matrixSpread") return typeof v === "number" && Number.isFinite(v) && v >= 0.12 && v <= 2.6 ? v : undefined;
-    if (["speakerControl", "matrixLinked", "music"].includes(k)) return typeof v === "boolean" ? v : undefined;
+    if (["speakerControl", "matrixLinked", "music", "musicSearch", "musicOnline"].includes(k)) return typeof v === "boolean" ? v : undefined;
     if (["arrayRevision", "selectedSpeakerIndex", "maxSpeakers"].includes(k)) {
       const max = k === "selectedSpeakerIndex" ? 7 : k === "maxSpeakers" ? 8 : Number.MAX_SAFE_INTEGER;
       return Number.isSafeInteger(v) && v >= (k === "maxSpeakers" ? 2 : 0) && v <= max ? v : undefined;
@@ -50,6 +50,8 @@ const ListenBridge = (() => {
     if (ENUMS[k]) return ENUMS[k].includes(v) ? v : undefined;
     if (RANGES[k]) { const n = Number(v); return Number.isFinite(n) ? Math.min(RANGES[k][1], Math.max(RANGES[k][0], n)) : undefined; }
     if (["live", "playing", "pending", "seekable", "canClose", "updates", "opus"].includes(k)) return typeof v === "boolean" ? v : undefined;
+    // This iPad app's build ("61"), or a plain version for a local build; null when unknown.
+    if (k === "appBuild") return typeof v === "string" && /^[0-9A-Za-z.+-]{1,24}$/.test(v) ? v : null;
     // What the laptop is sending now (Opus high / max, or lossless); null before its audio starts.
     if (k === "stream") return ["high", "max", "lossless"].includes(v) ? v : null;
     // Start progress: asking (this iPad), opening / pressing / starting (the laptop), audio; null when idle.

@@ -127,6 +127,92 @@ void main() {
     expect(launched, isFalse);
   });
 
+  group('remembered 汽水 check', () {
+    var now = DateTime(2026, 10, 22, 19);
+    late int inspections;
+    late List<String> running;
+    late List<String> launched;
+    late SodaTrackLauncher launcher;
+    setUp(() {
+      now = DateTime(2026, 10, 22, 19);
+      inspections = 0;
+      running = [executable];
+      launched = [];
+      launcher = SodaTrackLauncher(
+          supported: true,
+          exists: (_) => true,
+          clock: () => now,
+          inspect: () async {
+            inspections++;
+            return (command: command, runningPaths: List.of(running));
+          },
+          launch: (_, args) async => launched.add(args.last));
+    });
+
+    test('a tap after the sheet opened does not read again', () async {
+      launcher.prefetch();
+      await Future<void>.delayed(Duration.zero);
+      now = now.add(const Duration(seconds: 10));
+      await launcher.play('123', beforeDispatch: () {});
+      expect(inspections, 1);
+      expect(launched, hasLength(1));
+    });
+
+    test('prefetch while a reading is running shares it', () async {
+      launcher.prefetch();
+      launcher.prefetch();
+      await launcher.play('123', beforeDispatch: () {});
+      expect(inspections, 1);
+    });
+
+    test('an old reading is read again', () async {
+      launcher.prefetch();
+      await Future<void>.delayed(Duration.zero);
+      now = now.add(SodaTrackLauncher.identityFreshFor);
+      await launcher.play('123', beforeDispatch: () {});
+      expect(inspections, 2);
+    });
+
+    test('a remembered reading that no longer passes is read again once',
+        () async {
+      running = [];
+      launcher.prefetch();
+      await Future<void>.delayed(Duration.zero);
+      running = [executable]; // 汽水 was started after the sheet opened
+      await launcher.play('123', beforeDispatch: () {});
+      expect(inspections, 2);
+      expect(launched, hasLength(1));
+    });
+
+    test('a fresh reading that fails is reported, not retried', () async {
+      running = [];
+      await expectLater(launcher.play('123', beforeDispatch: () {}),
+          throwsA(code('soda_not_running')));
+      expect(inspections, 1);
+      expect(launched, isEmpty);
+    });
+
+    test('a failed prefetch is ignored and the tap reads again', () async {
+      var fail = true;
+      final flaky = SodaTrackLauncher(
+          supported: true,
+          exists: (_) => true,
+          clock: () => now,
+          inspect: () async {
+            inspections++;
+            if (fail) throw const ProcessException('synthetic', []);
+            return (command: command, runningPaths: [executable]);
+          },
+          launch: (_, args) async => launched.add(args.last));
+      flaky.prefetch();
+      await Future<void>.delayed(Duration.zero);
+      fail = false;
+      await flaky.play('123', beforeDispatch: () {});
+      expect(inspections, 2);
+      expect(launched, hasLength(1));
+    });
+  });
+
   test('dispatch uncertainty never retries or reports a pre-action error',
       () async {
     var attempts = 0;

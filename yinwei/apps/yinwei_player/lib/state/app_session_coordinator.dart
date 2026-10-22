@@ -26,6 +26,8 @@ class AppSessionCoordinator {
     this.liveMediaTiming,
     this.libraryPlay,
     this.libraryList,
+    this.sodaMetadata,
+    this.sodaPlay,
     this.liveSeek,
     this.startLive,
     this.stopLive,
@@ -68,6 +70,7 @@ class AppSessionCoordinator {
     'motion.set',
     'media.seek',
     'library.play',
+    'soda.play',
   };
 
   /// Start/stop Live Transfer from the remote, through the same path as the
@@ -119,6 +122,10 @@ class AppSessionCoordinator {
       libraryPlay;
   final Future<Map<String, dynamic>> Function(Map<String, dynamic> request)?
       libraryList;
+  final Future<Map<String, dynamic>> Function(
+      String kind, Map<String, dynamic> payload)? sodaMetadata;
+  final Future<void> Function(
+      Map<String, dynamic> payload, void Function() beforeDispatch)? sodaPlay;
   static const _mediaActions = {
     'media.play': 'play',
     'media.pause': 'pause',
@@ -269,6 +276,10 @@ class AppSessionCoordinator {
         'liveControl': liveControl,
         'liveMedia': liveMedia != null,
         'sodaLibrary': libraryPlay != null && libraryList != null,
+        // Search the cached songs (library.list with a query).
+        'sodaSearch': libraryPlay != null && libraryList != null,
+        'sodaOnline': sodaMetadata != null,
+        'sodaOnlinePlay': sodaPlay != null,
         'remoteLive': remoteLive,
         'remoteArray': applyArrayMode != null,
         'remoteSpeakers': applyArrayLayout != null &&
@@ -365,8 +376,13 @@ class AppSessionCoordinator {
     if (browse == null) throw const RemoteFailure('soda_unavailable');
     final payload = input['payload'];
     if (payload is! Map<String, dynamic> ||
-        payload.keys.any((k) =>
-            !const ['list', 'snapshot', 'offset', 'revision'].contains(k))) {
+        payload.keys.any((k) => !const [
+              'list',
+              'snapshot',
+              'offset',
+              'revision',
+              'query'
+            ].contains(k))) {
       throw const RemoteFailure('invalid_payload', httpStatus: 400);
     }
     final library = await browse(payload);
@@ -376,6 +392,36 @@ class AppSessionCoordinator {
       'status': 'read',
       'library': library
     };
+  }
+
+  Future<Map<String, dynamic>> _readSoda(Map<String, dynamic> input) async {
+    if (_closed) throw const RemoteFailure('host_closed');
+    if (input['protocolVersion'] != 1 ||
+        input['hostSessionId'] != hostSessionId) {
+      throw const RemoteFailure('stale_host');
+    }
+    final read = sodaMetadata;
+    if (read == null) throw const RemoteFailure('soda_online_unavailable');
+    final payload = input['payload'];
+    if (payload is! Map<String, dynamic>) {
+      throw const RemoteFailure('invalid_payload', httpStatus: 400);
+    }
+    if (input['type'] == 'soda.search') {
+      final query = payload['query'];
+      if (payload.length != 1 ||
+          query is! String ||
+          query.trim().runes.length < 2 ||
+          query.runes.length > 120 ||
+          query.runes.any((c) => c < 32)) {
+        throw const RemoteFailure('invalid_payload', httpStatus: 400);
+      }
+    } else if (payload.isNotEmpty) {
+      throw const RemoteFailure('invalid_payload', httpStatus: 400);
+    }
+    final value = await read(
+        input['type'] == 'soda.search' ? 'search' : 'modes', payload);
+    if (_closed) throw const RemoteFailure('host_closed');
+    return {'commandId': input['commandId'], 'status': 'read', 'soda': value};
   }
 
   Future<Map<String, dynamic>> command(
@@ -388,6 +434,9 @@ class AppSessionCoordinator {
     // never takes a playback lease. Re-read even on a transport retry so cached
     // command responses cannot cross a provider account change.
     if (input['type'] == 'library.list') return _readLibrary(input);
+    if (input['type'] == 'soda.search' || input['type'] == 'soda.modes') {
+      return _readSoda(input);
+    }
     final key = '$device:$id';
     final encoded = jsonEncode(input);
     if (_results.containsKey(key)) {
@@ -453,8 +502,10 @@ class AppSessionCoordinator {
       _remoteApplying = true;
       try {
         switch (input['type']) {
+          case 'soda.play':
           case 'library.play':
-            final dispatch = libraryPlay;
+            final dispatch =
+                input['type'] == 'soda.play' ? sodaPlay : libraryPlay;
             if (dispatch == null) {
               throw const RemoteFailure('soda_unavailable');
             }
@@ -731,7 +782,9 @@ class AppSessionCoordinator {
             throw const RemoteFailure('unsupported_command', httpStatus: 400);
         }
         lastCommandStatus = localGeneration == _localGeneration
-            ? (input['type'] == 'library.play' ? 'submitted' : 'native_applied')
+            ? (const ['library.play', 'soda.play'].contains(input['type'])
+                ? 'submitted'
+                : 'native_applied')
             : 'superseded';
         return {
           'commandId': id,

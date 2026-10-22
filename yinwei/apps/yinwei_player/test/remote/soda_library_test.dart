@@ -379,6 +379,93 @@ void main() {
             .length,
         1);
   });
+  group('search my songs', () {
+    SodaCacheState named(Map<String, List<String>> songs) {
+      final ids = songs.keys.toList();
+      final state = frame(ids, total: ids.length);
+      final resources = state.details['456']!['data']['media_resources'] as List;
+      for (var i = 0; i < ids.length; i++) {
+        final track = resources[i]['entity']['track_wrapper']['track'] as Map;
+        track['name'] = songs[ids[i]]![0];
+        track['artists'] = [
+          {'name': songs[ids[i]]![1]}
+        ];
+      }
+      return state;
+    }
+
+    test('every word must match title or artist, case-insensitively', () async {
+      reader.state = named({
+        '1000': ['Soft Rain', 'Night Band'],
+        '1001': ['晴天', '周杰伦'],
+        '1002': ['Rain Dance', 'Other'],
+      });
+      final rain = await library.browse({'query': 'rain'});
+      expect((rain['search']['rows'] as List).map((r) => r['title']),
+          ['Soft Rain', 'Rain Dance']);
+      final both = await library.browse({'query': '  RAIN   night '});
+      expect((both['search']['rows'] as List).map((r) => r['title']),
+          ['Soft Rain']);
+      expect(both['search']['query'], 'RAIN   night');
+      final chinese = await library.browse({'query': '周杰伦'});
+      expect((chinese['search']['rows'] as List).single['title'], '晴天');
+      final none = await library.browse({'query': 'nothing here'});
+      expect(none['search']['rows'], isEmpty);
+      expect(none['list'], isNull);
+      expect(none['page'], isNull);
+    });
+
+    test('iPad curly apostrophes and quotes match straight ones', () async {
+      reader.state = named({
+        '1000': ["Don't Stop", 'Band'],
+        '1001': ['Say “Hi”', 'Band'],
+      });
+      final curly = await library.browse({'query': 'don’t'});
+      expect((curly['search']['rows'] as List).single['title'], "Don't Stop");
+      final quoted = await library.browse({'query': '"hi"'});
+      expect((quoted['search']['rows'] as List).single['title'],
+          'Say “Hi”');
+    });
+
+    test('a found song plays through the normal resolve path', () async {
+      reader.state = named({
+        '1000': ['Soft Rain', 'Night Band'],
+      });
+      final found = await library.browse({'query': 'soft'});
+      final row = (found['search']['rows'] as List).single;
+      final id = await library.resolveTrack({
+        'list': row['list'],
+        'snapshot': row['snapshot'],
+        'track': row['id'],
+        'revision': found['revision'],
+      });
+      expect(id, '1000');
+      expect(jsonEncode(found), isNot(contains('"1000"')),
+          reason: 'provider ids never leave the laptop');
+    });
+
+    test('results are bounded and say there are more', () async {
+      reader.state =
+          named({for (var i = 0; i < 70; i++) '${1000 + i}': ['Song $i', 'Band']});
+      final found = await library.browse({'query': 'song'});
+      expect(found['search']['rows'], hasLength(SodaLibrary.searchLimit));
+      expect(found['search']['more'], true);
+    });
+
+    test('invalid queries are refused', () async {
+      for (final bad in [
+        {'query': ''},
+        {'query': '   '},
+        {'query': 7},
+        {'query': 'x' * 121},
+        {'query': 'rain', 'list': 'abc'},
+      ]) {
+        await expectLater(library.browse(bad), throwsA(isA<SodaLibraryFailure>()),
+            reason: '$bad');
+      }
+    });
+  });
+
 }
 
 class FakeReader extends SodaCacheReader {

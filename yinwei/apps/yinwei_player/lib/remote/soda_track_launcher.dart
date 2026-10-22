@@ -14,10 +14,46 @@ class SodaTrackLauncher {
     Future<void> Function(String executable, List<String> arguments)? launch,
     bool Function(String path)? exists,
     bool? supported,
+    DateTime Function()? clock,
   })  : _inspect = inspect ?? _inspectWindows,
         _launch = launch ?? _launchWindows,
         _exists = exists ?? ((path) => File(path).existsSync()),
-        _supported = supported ?? Platform.isWindows;
+        _supported = supported ?? Platform.isWindows,
+        _now = clock ?? DateTime.now;
+
+  /// How long a handler/running-app reading is reused. The reading starts a
+  /// PowerShell and takes 4–7 s on a busy laptop, so a tap reuses the one
+  /// [prefetch] made when the music sheet opened.
+  static const identityFreshFor = Duration(seconds: 15);
+
+  final DateTime Function() _now;
+  SodaLaunchIdentity? _identity;
+  DateTime? _identityAt;
+  Future<SodaLaunchIdentity>? _reading;
+
+  bool get _fresh =>
+      _identity != null &&
+      _now().difference(_identityAt!) < identityFreshFor;
+
+  /// Reads the handler and running 汽水 copies ahead of a tap. Failures are
+  /// ignored here; [play] reads again.
+  void prefetch() {
+    if (!_supported || _fresh) return;
+    _read().then((_) {}, onError: (Object _) {});
+  }
+
+  Future<SodaLaunchIdentity> _read() {
+    return _reading ??= () async {
+      try {
+        final value = await _inspect();
+        _identity = value;
+        _identityAt = _now();
+        return value;
+      } finally {
+        _reading = null;
+      }
+    }();
+  }
 
   final Future<SodaLaunchIdentity> Function() _inspect;
   final Future<void> Function(String, List<String>) _launch;
@@ -32,28 +68,25 @@ class SodaTrackLauncher {
     if (idMatch == null || idMatch.end != trackId.length) {
       throw const RemoteFailure('soda_invalid_selection');
     }
-    SodaLaunchIdentity identity;
-    try {
-      identity = await _inspect();
-    } catch (_) {
-      throw const RemoteFailure('soda_handler_unavailable');
-    }
-    // This exact fixed template is the observed installed luna handler. Refuse
-    // alternate flags, executables and substitutions rather than interpreting
-    // a registry command line through a shell.
-    final match = RegExp(r'^"([^"\r\n]+)" "--" "%1"$')
-        .firstMatch(identity.command.trim());
-    final executable = match?.group(1);
-    if (executable == null ||
-        !File(executable).isAbsolute ||
-        executable.split(RegExp(r'[/\\]')).last.toLowerCase() !=
-            'sodamusic.exe' ||
-        !_exists(executable)) {
-      throw const RemoteFailure('soda_handler_changed');
-    }
-    if (!identity.runningPaths
-        .any((path) => path.toLowerCase() == executable.toLowerCase())) {
-      throw const RemoteFailure('soda_not_running');
+    // A remembered reading that no longer passes is read again once, so a
+    // changed handler or a restarted 汽水 is never judged on old data.
+    var cached = _fresh;
+    late String executable;
+    while (true) {
+      SodaLaunchIdentity identity;
+      try {
+        identity = cached ? _identity! : await _read();
+      } catch (_) {
+        throw const RemoteFailure('soda_handler_unavailable');
+      }
+      try {
+        executable = _validExecutable(identity);
+        break;
+      } on RemoteFailure {
+        if (!cached) rethrow;
+        cached = false;
+        _identity = null;
+      }
     }
     final uri = Uri(
       scheme: 'luna',
@@ -74,6 +107,27 @@ class SodaTrackLauncher {
       // refusal: clients must not repeat a possibly submitted playback action.
       throw const RemoteFailure('soda_dispatch_uncertain');
     }
+  }
+
+  String _validExecutable(SodaLaunchIdentity identity) {
+    // This exact fixed template is the observed installed luna handler. Refuse
+    // alternate flags, executables and substitutions rather than interpreting
+    // a registry command line through a shell.
+    final match = RegExp(r'^"([^"\r\n]+)" "--" "%1"$')
+        .firstMatch(identity.command.trim());
+    final executable = match?.group(1);
+    if (executable == null ||
+        !File(executable).isAbsolute ||
+        executable.split(RegExp(r'[/\\]')).last.toLowerCase() !=
+            'sodamusic.exe' ||
+        !_exists(executable)) {
+      throw const RemoteFailure('soda_handler_changed');
+    }
+    if (!identity.runningPaths
+        .any((path) => path.toLowerCase() == executable.toLowerCase())) {
+      throw const RemoteFailure('soda_not_running');
+    }
+    return executable;
   }
 
   static Future<SodaLaunchIdentity> _inspectWindows() async {
@@ -99,7 +153,7 @@ $paths = @(Get-Process -Name SodaMusic -ErrorAction SilentlyContinue | ForEach-O
     final stdout = utf8.decoder.bind(process.stdout).join();
     final stderr = process.stderr.drain<void>();
     try {
-      final code = await process.exitCode.timeout(const Duration(seconds: 4));
+      final code = await process.exitCode.timeout(const Duration(seconds: 8));
       await stderr;
       final value = jsonDecode(await stdout);
       if (code != 0 ||

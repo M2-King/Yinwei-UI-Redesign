@@ -50,6 +50,18 @@ test('rejects values the page cannot draw and clamps numbers', () => {
   assert.equal(S.live, false, 'booleans must be booleans');
 });
 
+test('the app build is a short plain label or nothing', () => {
+  const S = base();
+  B.merge(S, {v: 1, appBuild: '61'}, {}, 0);
+  assert.equal(S.appBuild, '61');
+  B.merge(S, {v: 1, appBuild: '0.1.3+local'}, {}, 0);
+  assert.equal(S.appBuild, '0.1.3+local');
+  for (const bad of ['<b>61</b>', 'x'.repeat(25), '', 61]) {
+    B.merge(S, {v: 1, appBuild: bad}, {}, 0);
+    assert.equal(S.appBuild, null, `refuses ${JSON.stringify(bad)}`);
+  }
+});
+
 test('a value you just set is kept until the app confirms it', () => {
   const S = base(), held = {};
   B.merge(S, state(), held, 0);

@@ -144,6 +144,7 @@ class _IosListenRoomScreenState extends State<IosListenRoomScreen>
       ..onClose = () {
         unawaited(Navigator.of(context).maybePop());
       }
+      ..appBuild = _updates?.build
       ..onCheckUpdates = _updates == null
           ? null
           : () {
