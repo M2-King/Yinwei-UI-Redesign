@@ -398,7 +398,10 @@ void main() {
     final end = source.indexOf('# serve: compile', start);
     final script =
         File('${temp.path}${Platform.pathSeparator}identity-test.ps1');
-    await script.writeAsString(
+    // Same encoding as production (writeRouteScript): UTF-8 with a BOM.
+    await script.writeAsBytes([
+      0xEF, 0xBB, 0xBF,
+      ...utf8.encode(
         r'''
 $ErrorActionPreference = 'Stop'
 Add-Type -TypeDefinition @'
@@ -444,8 +447,8 @@ if ($script:YwCode -ne 0 -or [YinweiPolicy]::Pins -ne 2 -or $pins.Count -ne 2) {
 $pins = @(Invoke-YinweiAction 'apply' "$PID" 'test-only-mocked-device' ($identity | ConvertTo-Json -Compress) '')
 if ($script:YwCode -ne 0 -or [YinweiPolicy]::Pins -ne 3 -or $pins.Count -ne 1) { throw 'single-process routing failed' }
 Write-Output 'IDENTITY PASS'
-''',
-        flush: true);
+''')
+    ], flush: true);
     final result = await Process.run('powershell.exe', [
       '-NoProfile',
       '-NonInteractive',
@@ -456,5 +459,27 @@ Write-Output 'IDENTITY PASS'
     ]).timeout(const Duration(seconds: 25));
     expect(result.exitCode, 0, reason: '${result.stdout}\n${result.stderr}');
     expect(result.stdout, contains('IDENTITY PASS'));
+  }, skip: !Platform.isWindows);
+
+  test('the routing script parses as Windows PowerShell reads it', () async {
+    // Regression: written without a BOM, `powershell -File` decoded the
+    // Chinese device patterns as GB2312 and the script failed to parse.
+    final temp = await Directory.systemTemp.createTemp('yinwei-route-parse-');
+    addTearDown(() => temp.delete(recursive: true));
+    final file = File('${temp.path}${Platform.pathSeparator}route.ps1');
+    await writeRouteScript(file);
+    final bytes = await file.readAsBytes();
+    expect(bytes.take(3), [0xEF, 0xBB, 0xBF]);
+    final result = await Process.run('powershell.exe', [
+      '-NoProfile',
+      '-NonInteractive',
+      '-Command',
+      r'$t = $null; $e = $null; '
+          r'[void][System.Management.Automation.Language.Parser]::ParseFile('
+          "'${file.path}'"
+          r', [ref]$t, [ref]$e); $e.Count'
+    ]).timeout(const Duration(seconds: 25));
+    expect((result.stdout as String).trim(), '0',
+        reason: '${result.stdout} ${result.stderr}');
   }, skip: !Platform.isWindows);
 }

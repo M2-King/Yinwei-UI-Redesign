@@ -576,7 +576,7 @@ class AppAudioRouter {
   Future<String> _ensureScript() async {
     final dir = await getApplicationSupportDirectory();
     final file = File('${dir.path}\\yinwei_app_audio_route.ps1');
-    await file.writeAsString(_kScript, flush: true);
+    await writeRouteScript(file);
     return file.path;
   }
 
@@ -733,6 +733,18 @@ class AppAudioEndpoint {
   final String name;
   final String id;
 }
+
+/// Writes the routing script so Windows PowerShell 5.1 reads it correctly.
+///
+/// `powershell -File` reads a script without a byte-order mark in the system
+/// ANSI code page (GB2312 on Chinese Windows), not UTF-8. The script contains
+/// Chinese device-name patterns (耳机, 扬声器, 麦克风); decoded as GB2312 they
+/// swallowed a closing quote and the whole script failed to parse, so every
+/// routing call and every recovery failed. A UTF-8 BOM makes PowerShell read
+/// it as UTF-8 on any Windows language.
+Future<void> writeRouteScript(File file) => file.writeAsBytes(
+    [0xEF, 0xBB, 0xBF, ...utf8.encode(_kScript)],
+    flush: true);
 
 const _kScript = r'''
 param(
