@@ -251,6 +251,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
       if (Platform.environment['YINWEI_SODA_ONLINE'] == '1' &&
           _sodaLibrary!.available) {
         _sodaOnline = SodaOnline(
+            playbackVerified: true,
             identityDirectory: Directory(
                 '${Platform.environment['LOCALAPPDATA'] ?? Platform.environment['APPDATA']}'
                 '${Platform.pathSeparator}Yinwei${Platform.pathSeparator}remote'
