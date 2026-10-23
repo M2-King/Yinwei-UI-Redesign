@@ -7,6 +7,7 @@ import 'package:yinwei_player/platform/ios_laptop_listen_output.dart';
 
 import 'laptop_listen_controller.dart';
 import 'listen_quality.dart';
+import 'remote_owner_client.dart';
 
 /// Connects the Listen Room page (`assets/listen_room/`) to the listening
 /// session (IMPLEMENTATION_IPAD_LISTEN_ROOM.md §4).
@@ -417,6 +418,18 @@ class ListenRoomBridge {
         Map<String, dynamic> value;
         try {
           value = await session.browseOnlineSoda(kind as String, payload);
+        } on RemoteApiException catch (error) {
+          const codes = {
+            'soda_online_rate_limited',
+            'soda_online_timeout',
+            'soda_online_rejected',
+            'soda_schema_changed',
+            'rate_limited',
+          };
+          value = {
+            'error': 'Online 汽水 is unavailable. Your cached lists still work.',
+            if (codes.contains(error.code)) 'errorCode': error.code,
+          };
         } catch (_) {
           value = {
             'error': 'Online 汽水 is unavailable. Your cached lists still work.'

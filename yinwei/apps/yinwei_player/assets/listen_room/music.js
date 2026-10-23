@@ -58,7 +58,17 @@ const ListenMusic = (() => {
   const note = v => `${v.cached} of ${v.total === null ? "?" : v.total} cached · updated ${time(v.updatedAt)}`;
   function cleanOnline(v) {
     if (!v || !Number.isSafeInteger(v.request) || v.request < 0) return null;
-    if (v.error) return {request: v.request, error: "Online 汽水 is unavailable. Your cached lists still work."};
+    if (v.error) {
+      const messages = {
+        soda_online_rate_limited: "汽水 is limiting searches. Wait a moment, then search again. Your cached lists still work.",
+        rate_limited: "Too many requests. Wait a moment, then search again.",
+        soda_online_timeout: "汽水 took too long to respond. Search again to retry.",
+        soda_online_rejected: "汽水 did not accept this search. Your cached lists still work.",
+        soda_schema_changed: "汽水 returned an unexpected response. Your cached lists still work."
+      };
+      return {request: v.request, error: Object.hasOwn(messages, v.errorCode) ? messages[v.errorCode] :
+        "Online 汽水 is unavailable. Your cached lists still work."};
+    }
     if (!token(v.revision) || !["search", "modes"].includes(v.kind) || typeof v.query !== "string" ||
         Array.from(v.query).length > 120 || !Array.isArray(v.rows) || v.rows.length > 20 ||
         !Array.isArray(v.modes) || v.modes.length > 80) return null;
@@ -99,9 +109,11 @@ const ListenMusic = (() => {
       send({ t: "musicBrowse", request: ++request, ...(selected ? { list: selected } : {}),
         ...(snapshot ? { snapshot } : {}), offset });
     }
-    function search(text) {
+    function search(text, force = false) {
       if (!open) return;
-      query = text.trim().slice(0, 120);
+      const next = text.trim().slice(0, 120);
+      if (!force && next && next === query && !modeView && (busy || onlineBusy)) return;
+      query = next;
       if (!query) { busy = false; load(); return; }
       selected = null; snapshot = null; offset = 0; busy = true;
       modeView = false; data = null; el("music-body").replaceChildren();
@@ -259,7 +271,7 @@ const ListenMusic = (() => {
     }
     el("music-btn").onclick = show; el("music-close").onclick = close;
     el("music-back").onclick = () => { clearTimeout(searchTimer); query = ""; el("music-search").value = ""; busy = false; load(); };
-    el("music-refresh").onclick = () => query ? search(query) : load(selected);
+    el("music-refresh").onclick = () => query ? search(query, true) : load(selected);
     el("music-modes").onclick = () => {
       if (!open || !state().musicOnline) return;
       clearTimeout(searchTimer); query = ""; el("music-search").value = "";
@@ -270,7 +282,11 @@ const ListenMusic = (() => {
     el("music-search").addEventListener("input", e => {
       clearTimeout(searchTimer);
       const value = e.target.value;
-      searchTimer = setTimeout(() => search(value), 300);
+      // Fence old replies immediately, including the gap before debounce fires.
+      ++request; ++onlineRequest; busy = false; data = null; onlineData = null; onlineBusy = false;
+      el("music-body").replaceChildren();
+      el("music-status").textContent = "Waiting for you to finish typing…";
+      searchTimer = setTimeout(() => search(value, true), 600);
     });
     el("music-search").addEventListener("keydown", e => {
       if (e.key === "Enter") { e.preventDefault(); clearTimeout(searchTimer); search(e.target.value); }

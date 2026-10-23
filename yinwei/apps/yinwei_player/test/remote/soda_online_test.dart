@@ -231,7 +231,7 @@ void main() {
         (await service.browse('search', {'query': 'empty'}))['rows'], isEmpty);
     body = {'status_code': 1000006};
     await expectLater(service.browse('search', {'query': 'blocked'}),
-        throwsA(failure('soda_schema_changed')));
+        throwsA(failure('soda_online_rejected')));
     reply = () async => _Response([]);
     await expectLater(service.browse('search', {'query': 'blank'}),
         throwsA(failure('soda_schema_changed')));
@@ -277,11 +277,83 @@ void main() {
     await Future<void>.delayed(const Duration(milliseconds: 20));
     final previous = client;
     reply = () async => _Response(utf8.encode(jsonEncode(body)));
-    await service.browse('search', {'query': 'second'});
+    final second = service.browse('search', {'query': 'second'});
     final expectation = expectLater(first, throwsA(failure('soda_superseded')));
+    await Future<void>.delayed(Duration.zero);
+    expect(previous.closed, false,
+        reason: 'typing must not repeatedly abort the provider connection');
     gate.complete(_Response(utf8.encode(jsonEncode(body))));
     await expectation;
+    await second;
     expect(previous.closed, true);
+  });
+  test('rapid replacement searches run only the active and newest request',
+      () async {
+    final gate = Completer<HttpClientResponse>();
+    var requests = 0;
+    reply = () {
+      requests++;
+      return requests == 1
+          ? gate.future
+          : Future.value(_Response(utf8.encode(jsonEncode(body))));
+    };
+    final first = service.browse('search', {'query': 'first'});
+    final firstCheck = expectLater(first, throwsA(failure('soda_superseded')));
+    while (requests == 0) {
+      await Future<void>.delayed(Duration.zero);
+    }
+    final running = client;
+    final replaced = <Future<void>>[];
+    for (var i = 0; i < 5; i++) {
+      replaced.add(expectLater(service.browse('search', {'query': 'middle$i'}),
+          throwsA(failure('soda_superseded'))));
+    }
+    final newest = service.browse('search', {'query': 'newest'});
+    expect(requests, 1);
+    expect(running.closed, false);
+    gate.complete(_Response(utf8.encode(jsonEncode(body))));
+    await firstCheck;
+    await Future.wait(replaced);
+    expect((await newest)['query'], 'newest');
+    expect(requests, 2);
+    for (var i = 0; i < 8; i++) {
+      expect((await service.browse('search', {'query': 'next$i'}))['rows'],
+          hasLength(1));
+    }
+  });
+  test('provider throttling backs off without retries and then recovers',
+      () async {
+    var requests = 0;
+    reply = () async {
+      requests++;
+      return _Response([], statusCode: 429);
+    };
+    await expectLater(service.browse('search', {'query': 'first'}),
+        throwsA(failure('soda_online_rate_limited')));
+    await expectLater(service.browse('search', {'query': 'second'}),
+        throwsA(failure('soda_online_rate_limited')));
+    expect(requests, 1);
+    now = now.add(const Duration(seconds: 31));
+    reply = () async {
+      requests++;
+      return _Response(utf8.encode(jsonEncode(body)));
+    };
+    expect((await service.browse('search', {'query': 'recovered'}))['rows'],
+        hasLength(1));
+    expect(requests, 2);
+  });
+  test('an active failure releases the latest waiting search', () async {
+    final gate = Completer<HttpClientResponse>();
+    reply = () => gate.future;
+    final first = service.browse('search', {'query': 'first'});
+    final check =
+        expectLater(first, throwsA(failure('soda_online_unavailable')));
+    await Future<void>.delayed(const Duration(milliseconds: 20));
+    reply = () async => _Response(utf8.encode(jsonEncode(body)));
+    final newest = service.browse('search', {'query': 'newest'});
+    gate.completeError(const SocketException('fixture'));
+    await check;
+    expect((await newest)['query'], 'newest');
   });
   test('deadline closes active socket and does not return stale data',
       () async {

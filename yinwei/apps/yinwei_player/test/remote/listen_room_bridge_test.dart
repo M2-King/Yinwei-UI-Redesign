@@ -7,6 +7,7 @@ import 'package:yinwei_player/platform/ios_laptop_listen_output.dart';
 import 'package:yinwei_player/platform/replaykit_audio_probe.dart';
 import 'package:yinwei_player/remote/laptop_listen_controller.dart';
 import 'package:yinwei_player/remote/listen_room_bridge.dart';
+import 'package:yinwei_player/remote/remote_owner_client.dart';
 
 import '../fixtures/listen_room_audio.dart';
 
@@ -45,6 +46,13 @@ class FakeSession extends LaptopListenController {
   Future<void>? startGate;
   Future<Map<String, dynamic>>? browseGate;
   Map<String, dynamic>? browseRequest;
+  Future<Map<String, dynamic>> Function(String, Map<String, dynamic>)?
+      onlineRead;
+
+  @override
+  Future<Map<String, dynamic>> browseOnlineSoda(
+          String kind, Map<String, dynamic> payload) async =>
+      onlineRead!(kind, payload);
 
   @override
   Future<Map<String, dynamic>> browseSoda(Map<String, dynamic> request) async {
@@ -134,6 +142,44 @@ void main() {
   late FakeSession session;
   late ListenRoomBridge bridge;
   late List<String> scripts;
+
+  test(
+      'online search returns only the newest request and recovers after errors',
+      () async {
+    final s = FakeSession()..snapshot = snapshot();
+    s.snapshot!['capabilities']['sodaOnline'] = true;
+    final output = <String>[];
+    final b = ListenRoomBridge(session: s, run: (v) async => output.add(v));
+    final firstGate = Completer<Map<String, dynamic>>();
+    s.onlineRead = (_, __) => firstGate.future;
+    final first = b.handle(
+        '{"t":"musicOnline","request":1,"kind":"search","query":"first"}');
+    s.onlineRead = (_, __) async => {'kind': 'search', 'query': 'newest'};
+    await b.handle(
+        '{"t":"musicOnline","request":2,"kind":"search","query":"newest"}');
+    firstGate.complete({'kind': 'search', 'query': 'first'});
+    await first;
+    expect(
+        output.where((v) => v.startsWith('YinweiListen.soda')), hasLength(1));
+    expect(output.single, contains('newest'));
+    for (final code in ['soda_online_rate_limited', 'private-token-path']) {
+      s.onlineRead = (_, __) async =>
+          throw RemoteApiException('/remote/api/commands', 503, code);
+      await b.handle(
+          '{"t":"musicOnline","request":3,"kind":"search","query":"failed"}');
+      expect(output.last.contains('errorCode'),
+          code == 'soda_online_rate_limited');
+      expect(output.last, isNot(contains('private-token-path')));
+    }
+    s.onlineRead = (_, __) async => {'kind': 'search', 'query': 'recovered'};
+    await b.handle(
+        '{"t":"musicOnline","request":4,"kind":"search","query":"recovered"}');
+    expect(output.last, contains('recovered'));
+    expect(s.calls, isEmpty,
+        reason: 'search never takes control or plays audio');
+    b.dispose();
+    s.dispose();
+  });
 
   test('music browsing is on demand; late response after close is discarded',
       () async {

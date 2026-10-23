@@ -27,6 +27,8 @@ class SodaOnline {
   final _cache = <String, _OnlinePage>{};
   Future<Map<String, String>>? _identity;
   HttpClient? _active;
+  Future<void>? _inFlight;
+  DateTime? _retryAfter;
   int _generation = 0;
   bool _closed = false;
 
@@ -81,13 +83,35 @@ class SodaOnline {
       throw const RemoteFailure('invalid_payload', httpStatus: 400);
     }
     final generation = ++_generation;
-    _active?.close(force: true);
+    // Finish the current bounded provider read instead of repeatedly aborting
+    // sockets while someone types. Only the newest waiting intent may start.
+    while (_inFlight != null) {
+      await _inFlight;
+      if (_closed || generation != _generation) {
+        throw const RemoteFailure('soda_superseded');
+      }
+    }
+    final finished = Completer<void>();
+    _inFlight = finished.future;
+    try {
+      return await _browse(kind, q, generation);
+    } finally {
+      _inFlight = null;
+      finished.complete();
+    }
+  }
+
+  Future<Map<String, dynamic>> _browse(
+      String kind, String q, int generation) async {
     final key = '$kind:$q';
     final cached = _cache.remove(key);
     if (cached != null &&
         _clock().difference(cached.created) < const Duration(seconds: 60)) {
       _cache[key] = cached;
       return {...cached.public, 'cached': true};
+    }
+    if (_retryAfter?.isAfter(_clock()) == true) {
+      throw const RemoteFailure('soda_online_rate_limited');
     }
     final client = _clientFactory();
     client.autoUncompress = false;
@@ -150,6 +174,13 @@ class SodaOnline {
           request.write('{}');
         }
         final response = await request.close();
+        if (response.statusCode == 429) {
+          final seconds = int.tryParse(
+                  response.headers.value(HttpHeaders.retryAfterHeader) ?? '') ??
+              30;
+          _retryAfter = _clock().add(Duration(seconds: seconds.clamp(1, 120)));
+          throw const RemoteFailure('soda_online_rate_limited');
+        }
         if (response.statusCode != 200 ||
             response.headers.value(HttpHeaders.contentEncodingHeader) != null ||
             response.contentLength > 2 * 1024 * 1024) {
@@ -175,10 +206,12 @@ class SodaOnline {
       final tracks = <String, String>{};
       final rows = <Map<String, dynamic>>[];
       final modes = <Map<String, dynamic>>[];
+      if (body['status_code'] != null && body['status_code'] != 0) {
+        throw const RemoteFailure('soda_online_rejected');
+      }
       if (kind == 'search') {
         final groups = body['result_groups'];
-        if (groups is! List ||
-            (body['status_code'] != null && body['status_code'] != 0)) {
+        if (groups is! List) {
           throw const RemoteFailure('soda_schema_changed');
         }
         final seen = <String>{};
