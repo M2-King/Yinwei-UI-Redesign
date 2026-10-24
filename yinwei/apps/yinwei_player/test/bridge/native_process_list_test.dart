@@ -38,6 +38,9 @@ void main() {
   late List<_Row> soda;
   late int main;
   setUpAll(() async {
+    soda = const [];
+    main = 0;
+    if (!Platform.isWindows) return; // CI runs on macOS: no PowerShell/WMI
     soda = await _wmiSoda();
     final pids = soda.map((r) => r.pid).toSet();
     final mains = soda
