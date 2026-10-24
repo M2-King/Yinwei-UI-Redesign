@@ -97,8 +97,10 @@ iPad bridge ── YinweiListen.cover(key, dataUrl) ──▶ page repaints the 
   - `template_prefix` must match `^tplv-[a-z0-9]{4,32}$`;
   - the host must match `^p[0-9]{1,2}-luna\.douyinpic\.com$`.
   Invalid data means no cover, never an error. The descriptor stays on the laptop:
-  it is never sent to the iPad. History snapshots store it, which needs a
-  snapshot format version bump; older snapshots simply have no cover.
+  it is never sent to the iPad. It is kept in an **in-memory map, track ID →
+  cover**, refreshed on every cache read and cleared with the lists on an account
+  change. It is **not** stored in history snapshots: that would change every
+  list's fingerprint and add a new history entry to every list.
 - **`SodaCoverStore`** (`lib/remote/soda_cover_store.dart`, new). This is the only
   code allowed to download artwork.
   - HTTPS only, allow-listed host, path built only from a validated descriptor
@@ -190,6 +192,20 @@ route, the UDP work, `soda_track_launcher.dart` playback rules, and the room lay
 | C3 | Page: `ListenCovers`, `drawCover` in the 4 places | Node tests and a browser check with the dev host; screenshots of each place |
 | C4 | Playing-song thumbnail from Windows (`media.cover`) | Song started on the laptop shows its cover |
 | Ship | Laptop bundle + iPad build | Owner checks on the iPad |
+
+## 5a. Results (C0–C3, 2026-10-25)
+
+- **C0, image address:** `<urls[i]><uri>~<template_prefix>-crop-center:N:N.jpg`
+  returns a JPEG. At 360 px the image was 6 KB (~1.2 s on first download); WebP
+  is 2.7 KB; `-image.jpg` (full size) is 58 KB; `.jpg` alone or no suffix is
+  rejected (400). Chosen: 480 px JPEG.
+- **C1, real check** through `SodaCoverStore`: the first download was a
+  9.3 KB JPEG in 1256 ms; the second came from the laptop's disk cache in 5 ms.
+- **C2:** opaque keys with no IDs in page state; cover requests are served from
+  the iPad cache after the first one; nothing is sent in the background.
+- **C3:** the browser dev host showed real covers in all four places (bottom bar,
+  quick-menu cards and background, window panes), with no console errors.
+- **C4:** not started.
 
 ## 6. Tests
 

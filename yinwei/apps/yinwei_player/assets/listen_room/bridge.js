@@ -16,7 +16,7 @@ const ListenBridge = (() => {
   const FIELDS = ["laptop", "connection", "source", "live", "playing", "listening", "control", "notice",
     "mode", "motion", "orbitHz", "az", "el", "dist", "track", "volume", "level", "stats", "opens",
     "pending", "progress", "pos", "dur", "seekable", "canClose", "updates", "appBuild", "quality", "stream", "opus",
-    "speakers", "selectedSpeakerIndex", "arrayRevision", "maxSpeakers", "speakerControl", "matrixLinked", "matrixSpread", "music", "musicSearch", "musicOnline", "queue", "queueRevision", "queuePlaying"];
+    "speakers", "selectedSpeakerIndex", "arrayRevision", "maxSpeakers", "speakerControl", "matrixLinked", "matrixSpread", "music", "musicSearch", "musicOnline", "queue", "queueRevision", "queuePlaying", "covers"];
   const wrap = (a) => { a = ((a + 180) % 360 + 360) % 360 - 180; return a === -180 ? 180 : a; };
   // Values the app may send, so a bad message can't put the page in a state it can't draw.
   const ENUMS = {
@@ -28,11 +28,13 @@ const ListenBridge = (() => {
   // Song progress, in seconds.
   const SONG = { pos: [0, 86400], dur: [0, 86400] };
   const RANGES = { ...SONG, orbitHz: [0.05, 2], az: [-180, 180], el: [-90, 90], dist: [0.5, 10], volume: [0, 1], level: [0, 1] };
+  // An opaque per-run cover key from the app (never a song ID or address).
+  const coverKey = (v) => (typeof v === "string" && /^[0-9a-f]{16}$/.test(v) ? v : "");
   function clean(k, v) {
     if (k === "queueRevision") return Number.isSafeInteger(v) && v >= 0 ? v : undefined;
     if (k === "queuePlaying") return Number.isInteger(v) && v >= -1 && v < 500 ? v : undefined;
     if (k === "matrixSpread") return typeof v === "number" && Number.isFinite(v) && v >= 0.12 && v <= 2.6 ? v : undefined;
-    if (["speakerControl", "matrixLinked", "music", "musicSearch", "musicOnline"].includes(k)) return typeof v === "boolean" ? v : undefined;
+    if (["speakerControl", "matrixLinked", "music", "musicSearch", "musicOnline", "covers"].includes(k)) return typeof v === "boolean" ? v : undefined;
     if (["arrayRevision", "selectedSpeakerIndex", "maxSpeakers"].includes(k)) {
       const max = k === "selectedSpeakerIndex" ? 7 : k === "maxSpeakers" ? 8 : Number.MAX_SAFE_INTEGER;
       return Number.isSafeInteger(v) && v >= (k === "maxSpeakers" ? 2 : 0) && v <= max ? v : undefined;
@@ -61,7 +63,7 @@ const ListenBridge = (() => {
     if (k === "laptop" || k === "source") return typeof v === "string" ? v.slice(0, 80) : undefined;
     // The music app the laptop opens on Start when none is open; null when it can't.
     if (k === "opens") return typeof v === "string" && v ? v.slice(0, 80) : null;
-    if (k === "track") return v && typeof v === "object" ? { title: String(v.title || "").slice(0, 200), artist: String(v.artist || "").slice(0, 200) } : null;
+    if (k === "track") return v && typeof v === "object" ? { title: String(v.title || "").slice(0, 200), artist: String(v.artist || "").slice(0, 200), cover: coverKey(v.cover) } : null;
     // The list last played from the iPad music sheet: its name, which row is playing
     // (-1 = none / not in the list), and up to 500 songs. null when the iPad
     // has not received a sheet selection yet.
@@ -70,7 +72,7 @@ const ListenBridge = (() => {
       const songs = [];
       for (const s of v.songs) {
         if (!s || typeof s !== "object") return null;
-        songs.push({ title: String(s.title || "").slice(0, 200), artist: String(s.artist || "").slice(0, 200) });
+        songs.push({ title: String(s.title || "").slice(0, 200), artist: String(s.artist || "").slice(0, 200), cover: coverKey(s.cover) });
       }
       const playing = Number.isInteger(v.playing) && v.playing >= -1 && v.playing < songs.length ? v.playing : -1;
       return { title: String(v.title || "").slice(0, 120), playing, songs };
@@ -79,7 +81,7 @@ const ListenBridge = (() => {
     return undefined;
   }
   const queueSame = (a, b) => a === b || !!(a && b && a.title === b.title && a.playing === b.playing &&
-    a.songs.length === b.songs.length && a.songs.every((s, i) => s.title === b.songs[i].title && s.artist === b.songs[i].artist));
+    a.songs.length === b.songs.length && a.songs.every((s, i) => s.title === b.songs[i].title && s.artist === b.songs[i].artist && s.cover === b.songs[i].cover));
   const same = (k, a, b) => (k === "queue" ? queueSame(a, b) : k === "az" ? Math.abs(wrap(a - b)) < 0.5 : k === "el" ? Math.abs(a - b) < 0.5
     : k === "dist" ? Math.abs(a - b) < 0.051 : k === "pos" ? Math.abs(a - b) < 2.5 : k === "orbitHz" || k === "volume" ? Math.abs(a - b) < 0.011 : a === b);
   // Keep a value the person just set. ok(appValue) says when the app has confirmed it.
@@ -120,5 +122,5 @@ const ListenBridge = (() => {
     traceRows.push(row);
   }
   const tapReport = () => traceRows.map(r => ({ ...r }));
-  return { trace, tapReport, VERSION, HOLD_MS, FIELDS, PROGRESS, merge, hold, same, clean, hueOf };
+  return { trace, tapReport, VERSION, HOLD_MS, FIELDS, PROGRESS, merge, hold, same, clean, hueOf, coverKey };
 })();

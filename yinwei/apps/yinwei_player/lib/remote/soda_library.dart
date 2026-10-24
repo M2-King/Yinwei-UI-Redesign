@@ -8,6 +8,7 @@ import 'dart:math';
 import 'package:crypto/crypto.dart';
 
 import 'soda_cache_reader.dart';
+import 'soda_cover.dart';
 
 class SodaLibraryFailure implements Exception {
   const SodaLibraryFailure(this.code);
@@ -17,7 +18,7 @@ class SodaLibraryFailure implements Exception {
 }
 
 /// A bounded provider metadata adapter. It never invokes Soda, focuses a window,
-/// reads credentials, downloads artwork/audio, or changes playback/capture.
+/// reads credentials, downloads audio (covers only: SodaCoverStore), or changes playback/capture.
 class SodaLibrary {
   SodaLibrary({
     SodaCacheReader? reader,
@@ -43,6 +44,9 @@ class SodaLibrary {
   int? _retainedBytes;
   final _random = Random.secure();
   final _lists = <String, _ListState>{};
+  // Covers by track ID from the current cache read (not stored in history,
+  // so snapshot fingerprints are unchanged). Cleared with the lists.
+  final _covers = <String, SodaCoverRef>{};
   String? _account, _readerRevision;
   String _revision = '';
   Future<void>? _pending;
@@ -73,6 +77,7 @@ class SodaLibrary {
 
   void _invalidate() {
     _lists.clear();
+    _covers.clear();
     _account = null;
     _readerRevision = null;
     _lastRead = null;
@@ -214,6 +219,8 @@ class SodaLibrary {
       }
       final media = t['media_type'];
       if (media != null && media != 'track') continue;
+      final cover = SodaCoverRef.fromAlbum(t['album']);
+      if (cover != null && _covers.length < 20000) _covers[id] = cover;
       final artists = t['artists'];
       final names = artists is List
           ? artists
@@ -486,6 +493,26 @@ class SodaLibrary {
     }
     ListenTapTrace.mark('host.resolve.end', {'us': clock.elapsedMicroseconds});
     return track.id;
+  }
+
+  /// The cover of a song shown from a cached list, by the same opaque
+  /// selection the iPad plays with. Read-only and refresh-free: an account
+  /// change clears every list (and every cover), so old tokens resolve to
+  /// nothing. Null when the song or its cover is unknown.
+  ({String id, SodaCoverRef ref})? coverForSelection(
+      Map<String, dynamic> payload) {
+    final list =
+        _lists.values.where((l) => l.token == payload['list']).firstOrNull;
+    if (list == null) return null;
+    final snapshot = list.snapshots
+            .where((x) => x.token == payload['snapshot'])
+            .firstOrNull ??
+        (list.latest?.token == payload['snapshot'] ? list.latest : null);
+    final track = snapshot?.tracks
+        .where((t) => t.token == payload['track'])
+        .firstOrNull;
+    final ref = track == null ? null : _covers[track.id];
+    return ref == null ? null : (id: track!.id, ref: ref);
   }
 
   String _scope(String account) =>

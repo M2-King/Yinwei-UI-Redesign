@@ -36,7 +36,7 @@ function setup(reduced=false, count=12){
   const state={queue:count?{title:'Queue',playing:3,songs:Array.from({length:count},(_,i)=>({title:`Song ${i}`,artist:`Artist ${i}`}))}:null,playing:true,pending:false,connection:'connected'};
   let cancelled=0, fired=null;
   const ctx=vm.createContext({$,document:doc,performance:{now:()=>now},reduced,
-    clamp:(v,a,b)=>Math.max(a,Math.min(b,v)),S:state,ListenBridge:{hueOf:()=>220},paintArt(){},artVariant:()=>0,isCjk:()=>false,
+    clamp:(v,a,b)=>Math.max(a,Math.min(b,v)),S:state,ListenBridge:{hueOf:()=>220},paintArt(){},paintSongArt(){},Covers:{onReady(){},want(){},draw:()=>false,has:()=>false},artVariant:()=>0,isCjk:()=>false,
     closePop(){},closeMenus(){},act(){},otherHasControl:()=>state.control==='other',lost:()=>false,
     toast:t=>notices.push(t),send:i=>intents.push(i),browseCamera:m=>modes.push(m),stopFire(){cancelled++;fired=null;},
     fireToWindows(){fired=vm.runInContext('winOffset',ctx);},three:{panes:Array(8)},frontPane:()=>3,panesInView:()=>[1,6],
@@ -125,7 +125,7 @@ test('pane hit ignores lines/points and invisible materials but respects opaque 
   blockers[2].object.parent={visible:false};assert.equal(hit().song,4);
 });
 test('reduced-motion volley clears shots and uses the ordinary window fade',()=>{
-  const ctx=vm.createContext({reduced:true,three:{},clamp:()=>0});
+  const ctx=vm.createContext({reduced:true,three:{},clamp:()=>0,Covers:{onReady(){},want(){},draw:()=>false,has:()=>false}});
   vm.runInContext(room.slice(room.indexOf('const WIN ='),room.indexOf('// ---------------------------------------------------------------- input')),ctx);
   vm.runInContext('fire={};fireToWindows(10,10,76)',ctx);
   assert.equal(vm.runInContext('fire',ctx),null);

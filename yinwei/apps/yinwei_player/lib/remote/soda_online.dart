@@ -4,6 +4,7 @@ import 'dart:io';
 import 'dart:math';
 
 import 'remote_protocol.dart';
+import 'soda_cover.dart';
 
 /// Anonymous metadata only. Protocol references and licences:
 /// docs/SODA_ONLINE_INTEGRATION_PROGRESS.md. Never reads desktop credentials,
@@ -25,6 +26,8 @@ class SodaOnline {
   final Duration timeout;
   final _random = Random.secure();
   final _cache = <String, _OnlinePage>{};
+  /// Covers of search results by track ID (bounded; metadata only).
+  final _covers = <String, SodaCoverRef>{};
   /// How long a shown search result can still be played (it was 60 s, which
   /// made a quick-menu tap on a search result fail a minute later).
   static const playableFor = Duration(minutes: 15);
@@ -240,6 +243,11 @@ class SodaOnline {
             }
             final handle = _token();
             tracks[handle] = id;
+            final cover = SodaCoverRef.fromAlbum(t['album']);
+            if (cover != null) {
+              if (_covers.length >= 2000) _covers.remove(_covers.keys.first);
+              _covers[id] = cover;
+            }
             final artists = t['artists'];
             rows.add({
               'id': handle,
@@ -349,6 +357,18 @@ class SodaOnline {
       }
     }
     throw const RemoteFailure('soda_stale_selection');
+  }
+
+  /// The cover of a shown search result, by its opaque handle and revision.
+  ({String id, SodaCoverRef ref})? coverForSelection(
+      Map<String, dynamic> payload) {
+    for (final page in _cache.values) {
+      if (page.public['revision'] != payload['revision']) continue;
+      final id = page.tracks[payload['track']];
+      final ref = id == null ? null : _covers[id];
+      if (ref != null) return (id: id!, ref: ref);
+    }
+    return null;
   }
 
   static String _text(Object? value, int limit) =>

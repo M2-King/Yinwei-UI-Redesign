@@ -29,6 +29,7 @@ class AppSessionCoordinator {
     this.libraryPlay,
     this.libraryList,
     this.sodaMetadata,
+    this.sodaCover,
     this.sodaPlay,
     this.liveSeek,
     this.startLive,
@@ -128,6 +129,11 @@ class AppSessionCoordinator {
       String kind, Map<String, dynamic> payload)? sodaMetadata;
   final Future<void> Function(
       Map<String, dynamic> payload, void Function() beforeDispatch)? sodaPlay;
+  /// A song cover for the iPad (docs/IMPLEMENTATION_LISTEN_ROOM_COVERS.md):
+  /// `{source: library|online, list?, snapshot?, track, revision}` gives
+  /// `{mime, data}` (base64) or `{unavailable: true}`. Read-only.
+  final Future<Map<String, dynamic>> Function(Map<String, dynamic> payload)?
+      sodaCover;
   static const _mediaActions = {
     'media.play': 'play',
     'media.pause': 'pause',
@@ -282,6 +288,7 @@ class AppSessionCoordinator {
         'sodaSearch': libraryPlay != null && libraryList != null,
         'sodaOnline': sodaMetadata != null,
         'sodaOnlinePlay': sodaPlay != null,
+        'sodaCovers': sodaCover != null,
         'remoteLive': remoteLive,
         'remoteArray': applyArrayMode != null,
         'remoteSpeakers': applyArrayLayout != null &&
@@ -396,6 +403,35 @@ class AppSessionCoordinator {
     };
   }
 
+  Future<Map<String, dynamic>> _readCover(Map<String, dynamic> input) async {
+    if (_closed) throw const RemoteFailure('host_closed');
+    if (input['protocolVersion'] != 1 ||
+        input['hostSessionId'] != hostSessionId) {
+      throw const RemoteFailure('stale_host');
+    }
+    final read = sodaCover;
+    if (read == null) throw const RemoteFailure('soda_unavailable');
+    final payload = input['payload'];
+    final id = RegExp(r'^[A-Za-z0-9_-]{1,160}$');
+    if (payload is! Map<String, dynamic> ||
+        !const ['library', 'online'].contains(payload['source']) ||
+        payload.keys.any((k) => !const [
+              'source',
+              'list',
+              'snapshot',
+              'track',
+              'revision'
+            ].contains(k)) ||
+        payload.entries
+            .where((e) => e.key != 'source')
+            .any((e) => e.value is! String || !id.hasMatch(e.value as String))) {
+      throw const RemoteFailure('invalid_payload', httpStatus: 400);
+    }
+    final cover = await read(payload);
+    if (_closed) throw const RemoteFailure('host_closed');
+    return {'commandId': input['commandId'], 'status': 'read', 'cover': cover};
+  }
+
   Future<Map<String, dynamic>> _readSoda(Map<String, dynamic> input) async {
     if (_closed) throw const RemoteFailure('host_closed');
     if (input['protocolVersion'] != 1 ||
@@ -441,6 +477,7 @@ class AppSessionCoordinator {
     // never takes a playback lease. Re-read even on a transport retry so cached
     // command responses cannot cross a provider account change.
     if (input['type'] == 'library.list') return _readLibrary(input);
+    if (input['type'] == 'soda.cover') return _readCover(input);
     if (input['type'] == 'soda.search' || input['type'] == 'soda.modes') {
       return _readSoda(input);
     }

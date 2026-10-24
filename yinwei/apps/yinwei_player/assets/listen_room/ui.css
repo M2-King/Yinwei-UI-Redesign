@@ -513,3 +513,7 @@ input[type="range"]:disabled { opacity: 0.4; }
 .win-list button { display: block; padding: 12px 18px; border-radius: 18px; background: #161b29; }
 .win-list:focus-within button:not(:focus) { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
 @media (prefers-reduced-motion: reduce) { .pk-bgdots canvas, .pk-bgart { transition: none; } }
+/* A real song cover arriving replaces the generated one with a short fade. */
+.cover-in { animation: cover-in 0.3s ease-out; }
+@keyframes cover-in { from { opacity: 0.35; } to { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .cover-in { animation: none; } }

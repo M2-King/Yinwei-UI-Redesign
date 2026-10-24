@@ -23,7 +23,8 @@
     pos: 42, dur: 245, seekable: true, quality: "high", stream: "high", opus: true,
     speakers: [], selectedSpeakerIndex: 0, arrayRevision: 1, maxSpeakers: 8, speakerControl: true, matrixLinked: false, matrixSpread: 1, music: true, musicSearch: true, musicOnline: true, updates: true, appBuild: "61",
     // The list the current song plays from (state.queue): the review library's own songs.
-    queue: { title: "Liked songs", playing: 0, songs: [...tracks.map((t) => ({ ...t })), ...titles.map((title, n) => ({ title, artist: n % 2 ? "Review artist" : "Night band" }))] },
+    queue: { title: "Liked songs", playing: 0, songs: [...tracks.map((t) => ({ ...t })), ...titles.map((title, n) => ({ title, artist: n % 2 ? "Review artist" : "Night band" }))].map((song, n) => ({ ...song, cover: (0xc0ffee00 + n).toString(16).padStart(16, "0") })) },
+    covers: true, // review: songs carry opaque cover keys; coverRequest answers with a drawn test image
   };
   M.track = { ...M.queue.songs[M.queue.playing] }; // the stack opens on the song that is playing
   function seedSpeakers(count) {
@@ -89,6 +90,17 @@
         if (n) { M.queue.playing = i.i; Object.assign(M, { track: { ...n }, playing: true, pos: 0 }); say(`Review only · would play ${n.title}`); }
         break;
       }
+      case "coverRequest": later(300, () => {
+        // Review only: a drawn stand-in for a real album cover (the app sends the laptop's image).
+        const c = document.createElement("canvas"); c.width = c.height = 480;
+        const g = c.getContext("2d"), n = parseInt(i.key.slice(-4), 16) % 360;
+        const grad = g.createLinearGradient(0, 0, 480, 480);
+        grad.addColorStop(0, `hsl(${(n * 47) % 360} 70% 55%)`); grad.addColorStop(1, `hsl(${(n * 47 + 80) % 360} 65% 25%)`);
+        g.fillStyle = grad; g.fillRect(0, 0, 480, 480);
+        g.fillStyle = "rgba(255,255,255,0.9)"; g.font = "bold 64px sans-serif"; g.textAlign = "center";
+        g.fillText("COVER", 240, 230); g.font = "40px sans-serif"; g.fillText(`#${n}`, 240, 300);
+        window.YinweiListen.cover(i.key, c.toDataURL("image/jpeg", 0.85));
+      }); break;
       case "musicClose": break;
       case "listen":
         M.listening = "connecting";

@@ -82,6 +82,61 @@ function send(intent) {
   window.dispatchEvent(new CustomEvent("yinwei-intent", { detail: JSON.parse(msg) }));
 }
 const musicSheet = ListenMusic.create({ send, state: () => S, toast: (text) => toast(text) });
+
+// Real song covers (docs/IMPLEMENTATION_LISTEN_ROOM_COVERS.md). The app sends each one as a data:
+// URL for an opaque per-run key; the generated moon cover stays until it arrives, or if it never does.
+// Covers are asked for only when a song is drawn, so only what is on screen is fetched.
+const Covers = (() => {
+  const ready = new Map(), asked = new Map(), pending = new Set(), failed = new Set(), listeners = [];
+  const LIMIT = 64, OUTSTANDING = 6, ASK_TIMEOUT_MS = 10000;
+  function ask(key) { asked.set(key, performance.now()); send({ t: "coverRequest", key }); }
+  function want(key) {
+    if (!key || !S.covers || ready.has(key) || failed.has(key) || asked.has(key)) return;
+    const now = performance.now();
+    for (const [k, at] of asked) if (now - at > ASK_TIMEOUT_MS) asked.delete(k);
+    if (asked.size >= OUTSTANDING) { pending.add(key); return; }
+    ask(key);
+  }
+  function next() {
+    for (const key of pending) {
+      if (asked.size >= OUTSTANDING) return;
+      pending.delete(key);
+      if (!ready.has(key) && !failed.has(key) && !asked.has(key)) ask(key);
+    }
+  }
+  function receive(key, url) {
+    asked.delete(key);
+    if (ListenBridge.coverKey(key) !== key) return next();
+    if (typeof url !== "string" || !/^data:image\/(jpeg|png|webp);base64,/.test(url)) { failed.add(key); return next(); }
+    const img = new Image();
+    img.onload = () => {
+      ready.delete(key); ready.set(key, img);
+      while (ready.size > LIMIT) ready.delete(ready.keys().next().value);
+      for (const f of listeners) { try { f(key); } catch (e) { /* one place failing must not stop the others */ } }
+    };
+    img.onerror = () => failed.add(key);
+    img.src = url;
+    next();
+  }
+  // Fills the canvas like the generated cover does, cropped to its shape.
+  function draw(cv, key) {
+    const img = key && ready.get(key);
+    if (!img || !img.naturalWidth) return false;
+    const c = cv.getContext("2d"), w = cv.width, h = cv.height;
+    const s = Math.max(w / img.naturalWidth, h / img.naturalHeight), dw = img.naturalWidth * s, dh = img.naturalHeight * s;
+    c.drawImage(img, (w - dw) / 2, (h - dh) / 2, dw, dh);
+    return true;
+  }
+  return { want, receive, draw, has: (key) => !!key && ready.has(key), onReady: (f) => listeners.push(f) };
+})();
+// A song's picture: its real cover when the app has sent it, else the generated one (and ask for it).
+function paintSongArt(song, cv, empty = false) {
+  const title = song ? song.title : "";
+  if (!empty && song && Covers.draw(cv, song.cover)) return;
+  paintArt(ListenBridge.hueOf(title), empty, cv, artVariant(title));
+  if (!empty && song) Covers.want(song.cover);
+}
+function coverFadeIn(el) { if (!el) return; el.classList.remove("cover-in"); void el.offsetWidth; el.classList.add("cover-in"); }
 function apply(next) {
   const applyAt = performance.now();
   if (typeof next === "string") { try { next = JSON.parse(next); } catch (e) { return; } }
@@ -220,7 +275,7 @@ function render() {
   // Live songs come with a title only: the music app takes the artist line.
   const artist = t.artist || (S.track && S.track.title && !noApp ? S.source : "");
   setText($("artist"), artist); $("artist").classList.toggle("cjk", isCjk(artist));
-  once("art", [noApp, t.title], () => paintArt(ListenBridge.hueOf(t.title), noApp || !(S.track && S.track.title), $("art"), artVariant(t.title)));
+  once("art", [noApp, t.title, Covers.has(t.cover)], () => paintSongArt(t, $("art"), noApp || !(S.track && S.track.title)));
   const sounding = S.live && S.playing && !isLost && !noApp;
   $("live-dot").classList.toggle("off", !sounding);
   setText($("live-text"), noApp ? "Live off · waiting for a music app" : S.live ? `${S.playing ? "Live" : "Paused"} · ${S.source} on ${S.laptop}` : opens ? "Live off · no music app open yet" : `Live off · ${S.source} on ${S.laptop}`);
@@ -442,12 +497,23 @@ function pkOrient(dt) {
   return moving;
 }
 // The large artwork behind the cards: the focused song, crossfading between two canvases.
+// A cover arrived: repaint where that song is shown (bottom bar, quick-menu cards and background).
+Covers.onReady((key) => {
+  if (S.track && S.track.cover === key) { render(); coverFadeIn($("art")); }
+  const songs = pkSongs();
+  if (!songs) return;
+  for (const row of pkRows.values()) {
+    const song = songs[row.i];
+    if (song && song.cover === key) { const cv = row.el.querySelector(".pk-cover"); paintSongArt(song, cv); coverFadeIn(cv); }
+  }
+  if (songs[pkFocus] && songs[pkFocus].cover === key) { pkBgSong = null; pkBackground(); }
+});
 function pkBackground() {
   const songs = pkSongs();
   if (!songs || pkBgSong === pkFocus) return;
   pkBgSong = pkFocus;
   const a = $("pk-bg-a"), b = $("pk-bg-b"), next = a.classList.contains("on") ? b : a, song = songs[pkFocus];
-  paintArt(ListenBridge.hueOf(song.title), false, next, artVariant(song.title));
+  paintSongArt(song, next);
   next.classList.add("on"); (next === a ? b : a).classList.remove("on");
 }
 function pkRow(i, song) {
@@ -455,7 +521,7 @@ function pkRow(i, song) {
   el.type = "button"; el.className = "pk-row needs-control"; el.dataset.i = i; el.setAttribute("role", "option");
   el.setAttribute("aria-label", song.artist ? `${song.title}, ${song.artist}` : song.title);
   const cv = document.createElement("canvas"); cv.className = "pk-cover"; cv.width = cv.height = 152; cv.setAttribute("aria-hidden", "true");
-  paintArt(ListenBridge.hueOf(song.title), false, cv, artVariant(song.title));
+  paintSongArt(song, cv);
   const meta = document.createElement("span"); meta.className = "pk-meta";
   const b = document.createElement("b"); b.textContent = song.title; if (isCjk(song.title)) b.className = "cjk";
   const sm = document.createElement("small"); sm.textContent = song.artist; if (isCjk(song.artist)) sm.className = "cjk";
@@ -1050,6 +1116,7 @@ function drawLevel() {
 // Dart calls these with runJavaScript(...). Everything else stays private.
 window.YinweiListen = Object.freeze({
   music: (value) => musicSheet.receive(value),
+  cover: (key, dataUrl) => Covers.receive(key, dataUrl), // a real song cover (data: URL), or null when there is none
   soda: (value) => musicSheet.receiveOnline(value),
   version: ListenBridge.VERSION,
   tapReport: ListenBridge.tapReport,

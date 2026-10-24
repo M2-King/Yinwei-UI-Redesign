@@ -1717,12 +1717,21 @@ function updateFire(now) {
 }
 // One pane's picture: the song's generated cover filling the pane, its title and artist on the glass.
 function paneTexture(song, w) {
-  const key = `${song.title}\u0001${song.artist}`;
+  const key = `${song.title}\u0001${song.artist}\u0001${song.cover || ""}`;
   let t = wd.tex.get(key);
   if (t) { wd.tex.delete(key); wd.tex.set(key, t); return t; } // most recently used last
   const { T } = three, cv = document.createElement("canvas");
   cv.width = 432; cv.height = Math.round((432 * WIN.h) / w);
-  paintArt(ListenBridge.hueOf(song.title), false, cv, artVariant(song.title));
+  paintPane(cv, song);
+  t = new T.CanvasTexture(cv); t.encoding = T.sRGBEncoding; t.anisotropy = three.renderer.capabilities.getMaxAnisotropy();
+  t.userData = { song };
+  wd.tex.set(key, t);
+  while (wd.tex.size > 24) { const [k, old] = wd.tex.entries().next().value; old.dispose(); wd.tex.delete(k); }
+  return t;
+}
+// The pane's face: the song's cover (real when sent, else generated), its title and artist on the glass.
+function paintPane(cv, song) {
+  paintSongArt(song, cv);
   const g = cv.getContext("2d"), W = cv.width, H = cv.height;
   const shade = g.createLinearGradient(0, H * 0.52, 0, H);
   shade.addColorStop(0, "rgba(4,7,16,0)"); shade.addColorStop(1, "rgba(4,7,16,0.7)");
@@ -1733,11 +1742,15 @@ function paneTexture(song, w) {
   g.fillText(winFit(g, song.title, W * 0.86), W / 2, H * 0.75);
   g.fillStyle = "rgba(226,232,246,0.66)"; g.font = `400 ${Math.round(W * 0.07)}px ${font}`;
   g.fillText(winFit(g, song.artist, W * 0.86), W / 2, H * 0.8);
-  t = new T.CanvasTexture(cv); t.encoding = T.sRGBEncoding; t.anisotropy = three.renderer.capabilities.getMaxAnisotropy();
-  wd.tex.set(key, t);
-  while (wd.tex.size > 24) { const [k, old] = wd.tex.entries().next().value; old.dispose(); wd.tex.delete(k); }
-  return t;
 }
+// A real cover arrived: repaint the panes that show that song, in place.
+Covers.onReady((key) => {
+  if (!wd || !wd.tex) return;
+  for (const t of wd.tex.values()) {
+    const song = t.userData && t.userData.song;
+    if (song && song.cover === key) { paintPane(t.image, song); t.needsUpdate = true; }
+  }
+});
 // Every frame (room loop): reveal/hide with a stagger outwards from the anchor pane, swap songs when
 // browsing (fade out, new picture, fade in), emphasise the playing song, animate its indicator.
 function updateWindowDisplays(dt, now) {

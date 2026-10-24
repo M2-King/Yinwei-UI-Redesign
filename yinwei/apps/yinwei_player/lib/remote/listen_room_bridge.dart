@@ -2,12 +2,16 @@ import 'listen_tap_trace.dart';
 
 import 'dart:async';
 import 'dart:convert';
+import 'dart:math';
+
+import 'package:crypto/crypto.dart';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:yinwei_player/platform/ios_laptop_listen_output.dart';
 
 import 'laptop_listen_controller.dart';
+import 'listen_cover_cache.dart';
 import 'listen_quality.dart';
 import 'remote_owner_client.dart';
 
@@ -35,7 +39,77 @@ class ListenRoomBridge {
     this.minInterval = const Duration(milliseconds: 100),
     this.laptopLabel = 'your laptop',
     this.canClose = true,
-  });
+    ListenCoverCache? coverCache,
+  }) : covers = coverCache ?? ListenCoverCache();
+
+  /// Real song covers (docs/IMPLEMENTATION_LISTEN_ROOM_COVERS.md): the page
+  /// gets an opaque key per song, new each app run; this side keeps which
+  /// selection it stands for and fetches the image from the laptop.
+  final ListenCoverCache covers;
+  final _coverSecret =
+      List<int>.generate(32, (_) => Random.secure().nextInt(256));
+  final _coverSel =
+      <String, ({String source, String stable, Map<String, String> payload})>{};
+  final _coverAsked = <String>{};
+
+  bool _coversAvailable(Map<String, dynamic> snap) =>
+      session.signedIn && _map(snap['capabilities'])['sodaCovers'] == true;
+
+  /// The page's key for one queue song, or '' when covers are unavailable.
+  String _coverKey(_RoomQueue queue, _RoomQueueSong song) {
+    final source = queue.command == 'library.play' ? 'library' : 'online';
+    final payload = <String, String>{
+      for (final k in source == 'library'
+          ? const ['list', 'snapshot', 'track', 'revision']
+          : const ['track', 'revision'])
+        if (song.ids[k] != null) k: song.ids[k]!,
+    };
+    final stable = ListenCoverCache.keyOf(source, payload);
+    final key = Hmac(sha256, _coverSecret)
+        .convert(utf8.encode(stable))
+        .toString()
+        .substring(0, 16);
+    if (!_coverSel.containsKey(key)) {
+      if (_coverSel.length >= 2000) _coverSel.remove(_coverSel.keys.first);
+      _coverSel[key] = (source: source, stable: stable, payload: payload);
+    }
+    return key;
+  }
+
+  Future<void> _coverRequest(Object? raw) async {
+    if (raw is! String || !RegExp(r'^[0-9a-f]{16}$').hasMatch(raw)) return;
+    final sel = _coverSel[raw];
+    if (sel == null) {
+      await _sendCover(raw, null); // not a key from this run: no cover
+      return;
+    }
+    if (_coverAsked.length >= 8 || !_coverAsked.add(raw)) return;
+    try {
+      var url = await covers.get(sel.stable);
+      if (url == null) {
+        final value = await session.sodaCover({'source': sel.source, ...sel.payload});
+        final mime = value['mime'], data = value['data'];
+        if (mime is String &&
+            const ['image/jpeg', 'image/png', 'image/webp'].contains(mime) &&
+            data is String &&
+            data.length < 720000 &&
+            RegExp(r'^[A-Za-z0-9+/]+={0,2}$').hasMatch(data)) {
+          url = 'data:$mime;base64,$data';
+          await covers.put(sel.stable, url);
+        }
+      }
+      await _sendCover(raw, url);
+    } catch (_) {
+      // Network or laptop trouble: no answer, the page may ask again later.
+    } finally {
+      _coverAsked.remove(raw);
+    }
+  }
+
+  Future<void> _sendCover(String key, String? url) async {
+    if (!_ready || _disposed || _background) return;
+    await run('YinweiListen.cover(${jsonEncode(key)}, ${jsonEncode(url)})');
+  }
 
   /// False when the room is the whole app: the page hides "Back to the
   /// player" and a close request is ignored.
@@ -113,6 +187,8 @@ class ListenRoomBridge {
   int _queueGeneration = 0;
 
   void _clearQueue() {
+    _coverSel.clear();
+    _coverAsked.clear();
     _queue = null;
     _queueRevision++;
     _lastSentQueue = null;
@@ -239,14 +315,27 @@ class ListenRoomBridge {
   Map<String, dynamic>? _queueState(Map<String, dynamic> snap) {
     final queue = _queue;
     if (queue == null) return null;
+    final covered = _coversAvailable(snap);
     return {
       'title': queue.title,
       'playing': _queuePlaying(snap),
       'songs': [
         for (final song in queue.songs)
-          {'title': song.title, 'artist': song.artist}
+          {
+            'title': song.title,
+            'artist': song.artist,
+            if (covered) 'cover': _coverKey(queue, song),
+          }
       ],
     };
+  }
+
+  /// The playing song's cover key when it is a song of the current queue.
+  String? _playingCover(Map<String, dynamic> snap) {
+    final queue = _queue;
+    if (queue == null || !_coversAvailable(snap)) return null;
+    final i = _queuePlaying(snap);
+    return i < 0 ? null : _coverKey(queue, queue.songs[i]);
   }
 
   int _queuePlaying(Map<String, dynamic> snap) {
@@ -504,7 +593,9 @@ class ListenRoomBridge {
           : {
               'title': title,
               'artist': liveRunning ? '' : _text(track['artist']),
+              if (_playingCover(snap) case final cover?) 'cover': cover,
             },
+      'covers': _coversAvailable(snap),
       'volume': volume,
       'level': level,
       'opens': opens.isEmpty ? null : opens,
@@ -670,6 +761,8 @@ class ListenRoomBridge {
         } catch (_) {
           await toast('Could not copy audio diagnostics');
         }
+      case 'coverRequest':
+        unawaited(_coverRequest(m['key']));
       case 'musicClose':
         _musicGeneration++;
         _sodaGeneration++;

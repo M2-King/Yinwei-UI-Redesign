@@ -244,6 +244,18 @@ class RemoteOwnerClient {
     return value;
   }
 
+  /// A song cover (read-only; docs/IMPLEMENTATION_LISTEN_ROOM_COVERS.md):
+  /// `{mime, data}` with base64 data, or `{unavailable: true}`.
+  Future<Map<String, dynamic>> sodaCover(
+      Map<String, dynamic> snapshot, Map<String, dynamic> payload) async {
+    final response = await command(snapshot, '', 'soda.cover', payload);
+    final value = response['cover'];
+    if (value is! Map<String, dynamic>) {
+      throw const FormatException('invalid_cover_response');
+    }
+    return value;
+  }
+
   String _commandId() {
     const alphabet =
         'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';

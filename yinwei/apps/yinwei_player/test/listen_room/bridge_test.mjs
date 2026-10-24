@@ -88,9 +88,16 @@ test('queue keeps only the established metadata contract, never provider artwork
   const input={title:'Queue',playing:0,owner:'private',songs:[{title:'Moon',artist:'Band',artwork:'untrusted',trackId:'123'}]};
   B.merge(S,{v:1,queue:input},{},0);
   assert.deepEqual(Object.keys(S.queue).sort(),['playing','songs','title']);
-  assert.deepEqual(Object.keys(S.queue.songs[0]).sort(),['artist','title']);
+  // cover: only an opaque per-run key from the app (16 hex), never artwork or an identity.
+  assert.deepEqual(Object.keys(S.queue.songs[0]).sort(),['artist','cover','title']);
+  assert.equal(S.queue.songs[0].cover,'');
   input.songs[0].title='Changed outside the bridge';
   assert.equal(S.queue.songs[0].title,'Moon');
+  B.merge(S,{v:1,queue:{title:'Q',playing:0,songs:[
+    {title:'A',artist:'B',cover:'0123456789abcdef'},
+    {title:'C',artist:'D',cover:'https://p3-luna.douyinpic.com/img/x'},
+    {title:'E',artist:'F',cover:'1234567890'}]}},{},0);
+  assert.equal(S.queue.songs.map(s=>s.cover).join(','),'0123456789abcdef,,');
 });
 
 test('queue permits the bounded 500-row catalogue and unknown playing position', () => {

@@ -43,6 +43,7 @@ import 'package:yinwei_player/remote/remote_music_app.dart';
 import 'package:yinwei_player/remote/soda_library.dart';
 import 'package:yinwei_player/remote/soda_track_launcher.dart';
 import 'package:yinwei_player/remote/soda_online.dart';
+import 'package:yinwei_player/remote/soda_cover.dart';
 import 'package:yinwei_player/remote/remote_deployment.dart';
 import 'package:yinwei_player/remote/remote_auth.dart';
 import 'package:yinwei_player/remote/native_output_tap.dart';
@@ -143,6 +144,20 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
   SodaLibrary? _sodaLibrary;
   SodaTrackLauncher? _sodaLauncher;
   SodaOnline? _sodaOnline;
+  SodaCoverStore? _sodaCovers;
+
+  /// A song cover for the iPad room, from the list or search it was shown in.
+  Future<Map<String, dynamic>> _sodaCover(Map<String, dynamic> payload) async {
+    final selection = Map<String, dynamic>.of(payload)..remove('source');
+    final hit = payload['source'] == 'online'
+        ? _sodaOnline?.coverForSelection(selection)
+        : _sodaLibrary?.coverForSelection(selection);
+    final store = _sodaCovers;
+    if (hit == null || store == null) return {'unavailable': true};
+    final image = await store.cover(hit.id, hit.ref);
+    if (image == null) return {'unavailable': true};
+    return {'mime': image.mime, 'data': base64Encode(image.bytes)};
+  }
 
   Future<void> _playOnlineSoda(
       Map<String, dynamic> payload, void Function() beforeDispatch) async {
@@ -250,6 +265,13 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
     if (Platform.isWindows && _backend == EngineBackend.native) {
       _sodaLibrary = SodaLibrary(log: (event) => debugPrint(jsonEncode(event)));
       _sodaLauncher = SodaTrackLauncher();
+      final appData = Platform.environment['LOCALAPPDATA'] ??
+          Platform.environment['APPDATA'];
+      if (appData != null) {
+        _sodaCovers = SodaCoverStore(
+            directory: Directory('$appData${Platform.pathSeparator}Yinwei'
+                '${Platform.pathSeparator}covers'));
+      }
       if (Platform.environment['YINWEI_SODA_ONLINE'] == '1' &&
           _sodaLibrary!.available) {
         _sodaOnline = SodaOnline(
@@ -297,6 +319,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
       libraryPlay: _sodaLibrary?.available == true ? _playSoda : null,
       libraryList: _sodaLibrary?.available == true ? _browseSoda : null,
       sodaMetadata: _sodaOnline?.browse,
+      sodaCover: _sodaCovers == null ? null : _sodaCover,
       sodaPlay: _sodaOnline?.playbackVerified == true ? _playOnlineSoda : null,
       liveSeek: _caps.systemMedia
           ? (seconds) => _mediaKeys != null

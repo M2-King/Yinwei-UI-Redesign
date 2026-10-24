@@ -648,6 +648,18 @@ class LaptopListenController extends ChangeNotifier {
     return value;
   }
 
+  /// One song cover from the laptop (see RemoteOwnerClient.sodaCover).
+  Future<Map<String, dynamic>> sodaCover(Map<String, dynamic> payload) async {
+    final client = _client;
+    final host = snapshot?['hostSessionId'];
+    if (client == null || host == null) throw StateError('Not connected');
+    final value = await client.sodaCover(snapshot!, payload);
+    if (!identical(client, _client) || host != snapshot?['hostSessionId']) {
+      throw StateError('Music host changed');
+    }
+    return value;
+  }
+
   Future<Map<String, dynamic>> browseOnlineSoda(
       String kind, Map<String, dynamic> payload) async {
     final client = _client;

@@ -1,14 +1,17 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:yinwei_player/mobile/ios_laptop_listen_screen.dart';
 import 'package:yinwei_player/mobile/ios_update_notice.dart';
 import 'package:yinwei_player/mobile/listen_room_sign_in.dart';
 import 'package:yinwei_player/platform/macos_webview_host.dart';
 import 'package:yinwei_player/remote/laptop_listen_controller.dart';
+import 'package:yinwei_player/remote/listen_cover_cache.dart';
 import 'package:yinwei_player/remote/listen_room_bridge.dart';
 import 'package:yinwei_player/remote/listen_room_html.dart';
 import 'package:yinwei_player/state/engine_controller.dart';
@@ -127,6 +130,11 @@ class _IosListenRoomScreenState extends State<IosListenRoomScreen>
     _booting = true;
     final driver = (widget.driverFactory ?? WKWebViewDriver.new)();
     final bridge = ListenRoomBridge(
+      // Song covers stay in the app's caches folder (iOS may clear it); the
+      // folder is looked up on the first cover, never while the room opens.
+      coverCache: ListenCoverCache(
+          directoryProvider: () async => Directory(
+              '${(await getApplicationCacheDirectory()).path}${Platform.pathSeparator}covers')),
       session: _session,
       run: (script) async {
         await driver.execute(script);
