@@ -864,7 +864,6 @@ class ListenRoomBridge {
             : _toastText(session.notice ?? 'The laptop did not answer'));
         if (!ok) await push(force: true);
       case 'media':
-        session.recordPageTap(m['tapMs']);
         final liveRunning = snap['liveRunning'] == true;
         final liveMedia = caps['liveMedia'] == true;
         final type = switch (m['a']) {
@@ -1016,7 +1015,7 @@ class ListenRoomBridge {
       if (_takenAway || !await session.takeControl()) {
         await toast(_toastText(session.notice ??
             'Someone at the laptop took control. Tap Take control to change things here.'));
-        await push(force: true);
+        await _commandRefused(type);
         return false;
       }
     }
@@ -1029,14 +1028,21 @@ class ListenRoomBridge {
     }
     if (session.pending) {
       await _musicNotice('Still pending. Try again in a moment');
+      await _commandRefused(type);
       return false;
     }
     ListenTapTrace.mark('bridge.command', {'action': type});
     final ok = await session.command(type, payload);
     final notice = session.notice;
     if (notice != null) await toast(_toastText(notice));
-    if (!ok) await push(force: true);
+    if (!ok) await _commandRefused(type);
     return ok;
+  }
+
+  Future<void> _commandRefused(String type) async {
+    if (!_ready || _disposed || _background) return;
+    await run('YinweiListen.commandRefused(${jsonEncode(type)})');
+    await push(force: true);
   }
 
   // Toasts are short lines without a final full stop.

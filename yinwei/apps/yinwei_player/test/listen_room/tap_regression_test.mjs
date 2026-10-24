@@ -24,15 +24,49 @@ test('unchanged 500-song queue does not count as a queue change', () => {
   console.log('TAP_PAGE_BENCH', JSON.stringify({queueBytes:Buffer.byteLength(JSON.stringify(queue)),mergeP50Us:times[500],mergeP95Us:times[950]}));
 });
 
-test('completed laptop pause snapshot wins over a held optimistic play', () => {
-  const S={playing:true,pending:true}, held={};
-  B.hold(held,'playing',true,0);
-  let renders=0, now=100;
-  const context=vm.createContext({S,held,ListenBridge:B,performance:{now:()=>now},speakerDraft:null,posAt:0,render(){renders++;}});
+function pausedPage() {
+  const S={playing:false,pending:false}, held={};
+  B.hold(held,'playing',false,0);
+  let now=0;
+  const context=vm.createContext({S,held,ListenBridge:B,performance:{now:()=>now},speakerDraft:null,posAt:0,render(){}});
   vm.runInContext(ui.slice(ui.indexOf('function apply(next)'),ui.indexOf('const isCjk')),context);
-  vm.runInContext('apply({v:1,pending:false,playing:false})',context);
-  assert.equal(S.playing,false);
-  assert.equal(renders,1);
+  return {S,held,
+    apply(next,at){now=at;context.next=next;vm.runInContext('apply(next)',context);},
+    refused(type){context.type=type;vm.runInContext('commandRefused(type)',context);}};
+}
+
+test('tap pause survives completed stale playing snapshot until laptop confirms pause', () => {
+  const h=pausedPage();
+  h.apply({v:1,pending:true,playing:true},100);
+  h.apply({v:1,pending:false,playing:true},1000);
+  assert.equal(h.S.playing,false);assert.ok(h.held.playing);
+  h.apply({v:1,pending:false,playing:false},1200);
+  assert.equal(h.S.playing,false);assert.equal(h.held.playing,undefined);
+});
+
+test('unconfirmed pause expires HOLD_MS after the command completes', () => {
+  const h=pausedPage();
+  h.apply({v:1,pending:true,playing:true},100);
+  h.apply({v:1,pending:false,playing:true},5000);
+  assert.equal(h.S.playing,false);
+  h.apply({v:1,pending:false,playing:true},5000+B.HOLD_MS-1);
+  assert.equal(h.S.playing,false);
+  h.apply({v:1,pending:false,playing:true},5000+B.HOLD_MS+1);
+  assert.equal(h.S.playing,true);assert.equal(h.held.playing,undefined);
+});
+
+test('explicit media refusal lets the forced snapshot restore laptop transport immediately', () => {
+  const h=pausedPage();
+  h.apply({v:1,pending:true,playing:true},100);
+  h.refused('media.pause');
+  h.apply({v:1,pending:false,playing:true},200);
+  assert.equal(h.S.playing,true);assert.equal(h.held.playing,undefined);
+});
+
+test('an unrelated command refusal preserves the transport hold', () => {
+  const h=pausedPage();h.refused('array.mode');
+  h.apply({v:1,pending:false,playing:true},100);
+  assert.equal(h.S.playing,false);assert.ok(h.held.playing);
 });
 
 test('telemetry deltas retain queue content and row-only deltas retain song identity',()=>{

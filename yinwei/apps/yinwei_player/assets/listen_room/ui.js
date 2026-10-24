@@ -105,6 +105,11 @@ function apply(next) {
   if (changed.length || Object.keys(held).join() !== heldBefore) render();
   ListenBridge.trace("page.apply", { us: (performance.now() - applyAt) * 1000, queueChanged: changed.includes("queue"), pending: S.pending, playing: S.playing });
 }
+// A completed command may precede its media-session update. Only an explicit
+// refusal releases the optimistic transport hold before confirmation/timeout.
+function commandRefused(type) {
+  if (["play", "pause", "media.play", "media.pause", "live.start"].includes(type)) delete held.playing;
+}
 
 const isCjk = (t) => /[㐀-鿿]/.test(t);
 let toastT = 0;
@@ -1049,6 +1054,7 @@ window.YinweiListen = Object.freeze({
   version: ListenBridge.VERSION,
   tapReport: ListenBridge.tapReport,
   selectionDone,
+  commandRefused,
   apply,                                        // (state) app → page, at most 10 times a second
   toast: (text, holdMs) => { selectionDone(); toast(String(text), Number(holdMs) || 1500); }, // e.g. "Applied on the laptop" after a command succeeds
   suspend: () => { suspended = true; },         // app in the background or off this screen: no rendering

@@ -96,9 +96,6 @@ const ListenBridge = (() => {
       const v = clean(k, next[k]);
       if (v === undefined) continue;
       if (opts.placing && (k === "az" || k === "el" || k === "dist")) continue;
-      // Once the command has completed, transport comes from the laptop even
-      // when a previous optimistic play has not reached its hold deadline.
-      if (k === "playing" && next.pending === false) delete held.playing;
       const h = held[k];
       if (h) { if (h.ok(v) || now > h.until) delete held[k]; else continue; }
       if (k === "az" && opts.orbiting) { const d = wrap(v - S.az); if (Math.abs(d) < 20) { S.az = wrap(S.az + d * 0.3); changed.push(k); continue; } }

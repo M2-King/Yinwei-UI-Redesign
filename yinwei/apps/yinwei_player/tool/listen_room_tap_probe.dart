@@ -1,7 +1,8 @@
 // ignore_for_file: avoid_print
 // Read-only local cache timing probe. Never launches music, changes playback,
-// writes provider/history files, or prints account/selection/song metadata.
+// writes provider/persistent history files, or prints account/selection/song metadata.
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:yinwei_player/remote/listen_tap_trace.dart';
 import 'package:yinwei_player/remote/soda_cache_reader.dart';
@@ -15,6 +16,7 @@ Future<void> main() async {
   }
   final clock = Stopwatch()..start();
   final reads = <int>[], accounts = <int>[];
+  Directory? storage;
   try {
     for (var i = 0; i < 3; i++) {
       clock.reset();
@@ -24,7 +26,8 @@ Future<void> main() async {
       await reader.readAccount();
       accounts.add(clock.elapsedMicroseconds);
     }
-    final library = SodaLibrary(reader: reader, persistHistory: false);
+    storage = await Directory.systemTemp.createTemp('yinwei-tap-probe-');
+    final library = SodaLibrary(reader: reader, storageDirectory: storage);
     final catalog = await library.browse({});
     final lists = catalog['lists'] as List;
     final list =
@@ -62,5 +65,7 @@ Future<void> main() async {
     print('TAP_CACHE_BENCH ${e.code}');
   } on SodaLibraryFailure catch (e) {
     print('TAP_CACHE_BENCH ${e.code}');
+  } finally {
+    if (storage != null) await storage.delete(recursive: true);
   }
 }
