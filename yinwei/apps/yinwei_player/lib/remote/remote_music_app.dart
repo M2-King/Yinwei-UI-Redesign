@@ -2,8 +2,11 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
+
 import 'package:yinwei_player/bridge/system_media.dart';
 import 'package:yinwei_player/remote/remote_protocol.dart';
+import 'package:yinwei_player/bridge/native_process_list.dart';
 
 /// A running music player process (its main process, not a helper).
 typedef RunningMusicApp = ({int pid, String path, String process});
@@ -370,9 +373,17 @@ ConvertTo-Json -InputObject $rows -Compress''');
     }
   }
 
+  @visibleForTesting
+  static Future<String?> processPathForTest(int pid) => _processPath(pid);
+
+  @visibleForTesting
+  static Future<List<RunningMusicApp>> listRunningForTest() => _listRunning();
+
   static Future<String?> _processPath(int pid) async {
-    final result = await _powershell(
-        '(Get-CimInstance Win32_Process -Filter "ProcessId=$pid").ExecutablePath');
+    // Native lookup first (WMI took ~21 s per query on the owner's laptop).
+    final result = await _powershell('$kYinweiProcessListPs\n'
+        'if (Use-YinweiProcList) { [YinweiProcList]::PathOf($pid) } '
+        'else { (Get-CimInstance Win32_Process -Filter "ProcessId=$pid").ExecutablePath }');
     final path = '${result.stdout}'.trim();
     return result.exitCode == 0 && path.isNotEmpty ? path : null;
   }
@@ -383,7 +394,10 @@ ConvertTo-Json -InputObject $rows -Compress''');
         .map((p) => p.replaceAll('.', r'\.'))
         .join('|');
     final result = await _powershell('''
-\$rows = @(Get-CimInstance Win32_Process | Where-Object {
+$kYinweiProcessListPs
+\$all = @(Get-YinweiProcesses -Match '^($pattern)')
+if (\$script:YinweiProcFailed) { \$all = @(Get-CimInstance Win32_Process) }
+\$rows = @(\$all | Where-Object {
   \$_.Name -match '^($pattern)' -and [string]\$_.CommandLine -notmatch '--type=' -and \$_.ExecutablePath
 } | ForEach-Object { @{ pid = [int]\$_.ProcessId; path = [string]\$_.ExecutablePath;
   process = [IO.Path]::GetFileNameWithoutExtension(\$_.Name) } })

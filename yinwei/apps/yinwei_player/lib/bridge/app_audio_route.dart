@@ -6,6 +6,7 @@ import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:yinwei_player/bridge/wet_output_policy.dart';
+import 'native_process_list.dart';
 
 /// Windows per-app output routing (EarTrumpet / AudioPolicyConfig).
 /// Pins the music app to a **silent virtual device** (Steam Streaming
@@ -756,6 +757,7 @@ param(
 )
 $ErrorActionPreference = 'SilentlyContinue'
 Add-Type -AssemblyName System.Runtime.WindowsRuntime | Out-Null
+''' + kYinweiProcessListPs + r'''
 
 $cs = @'
 using System;
@@ -959,6 +961,15 @@ function Invoke-YinweiAction([string]$Action, [string]$Arg1, [string]$Arg2, [str
   }
 
   function Pids-ForRoot([int]$root) {
+    # Native lookup first: WMI took ~21 s per query on the owner's laptop and
+    # Live start timed out. Same answer: every pid with the root's exe name.
+    if (Use-YinweiProcList) {
+      try {
+        $exe = [YinweiProcList]::NameOf($root)
+        if (-not $exe) { return @($root) }
+        return @([YinweiProcList]::All('^' + [regex]::Escape($exe) + '$') | ForEach-Object { [int]$_.ProcessId })
+      } catch {}
+    }
     $rootProc = Get-CimInstance Win32_Process -Filter "ProcessId=$root" -ErrorAction SilentlyContinue
     if (-not $rootProc) { return @($root) }
     $exe = $rootProc.Name

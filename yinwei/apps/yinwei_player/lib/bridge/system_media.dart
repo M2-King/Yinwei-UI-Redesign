@@ -5,6 +5,8 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
 
+import 'native_process_list.dart';
+
 /// Snapshot of Windows System Media Transport Controls (SMTC) session.
 class SystemMediaState {
   const SystemMediaState({
@@ -470,16 +472,22 @@ function Await($WinRtTask, $ResultType) {
 
 /// Shared by the SMTC daemon and the one-shot Start Transfer probe.
 /// Keep aliases in sync with [SmtcLoopbackPicker].
-const _kPidResolveScript = r'''
+const _kPidResolveScript = kYinweiProcessListPs + _kPidResolveBody;
+
+const _kPidResolveBody = r'''
 function Select-LoopbackPid([string]$pattern, [string[]]$exclude) {
   # WASAPI process loopback + include-tree only covers this PID and its children.
   # Electron/Chromium apps (汽水, etc.) spawn many SodaMusic.exe: MAIN has the tree;
   # Get-Process | Select -First 1 often returns a --type=renderer with no audio.
   if ([string]::IsNullOrWhiteSpace($pattern)) { return $null }
   if ($null -eq $exclude) { $exclude = @() }
-  $all = @(Get-CimInstance Win32_Process -ErrorAction SilentlyContinue)
-  if ($all.Count -eq 0) {
-    $all = @(Get-WmiObject Win32_Process -ErrorAction SilentlyContinue)
+  # Native list first: WMI took ~21 s per query on the owner's laptop.
+  $all = @(Get-YinweiProcesses -Match ([regex]::Escape($pattern)))
+  if ($script:YinweiProcFailed) {
+    $all = @(Get-CimInstance Win32_Process -ErrorAction SilentlyContinue)
+    if ($all.Count -eq 0) {
+      $all = @(Get-WmiObject Win32_Process -ErrorAction SilentlyContinue)
+    }
   }
   $rows = @($all | Where-Object {
     if (-not $_.Name) { return $false }
