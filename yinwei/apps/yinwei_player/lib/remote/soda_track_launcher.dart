@@ -1,5 +1,6 @@
 import 'listen_tap_trace.dart';
 
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -17,11 +18,15 @@ class SodaTrackLauncher {
     bool Function(String path)? exists,
     bool? supported,
     DateTime Function()? clock,
-  })  : _inspect = inspect ?? _inspectWindows,
+  })  : _inspect = inspect ?? SodaIdentityHelper.shared.inspect,
         _launch = launch ?? _launchWindows,
         _exists = exists ?? ((path) => File(path).existsSync()),
         _supported = supported ?? Platform.isWindows,
-        _now = clock ?? DateTime.now;
+        _now = clock ?? DateTime.now {
+    // Start the ready PowerShell now, so even the first tap from the iPad's
+    // quick menu (which never browses, so never prefetches) answers fast.
+    if (inspect == null && _supported) SodaIdentityHelper.shared.warmUp();
+  }
 
   /// How long a handler/running-app reading is reused. The reading starts a
   /// PowerShell and takes 4–7 s on a busy laptop, so a tap reuses the one
@@ -137,6 +142,23 @@ class SodaTrackLauncher {
     return executable;
   }
 
+  /// One-off reading in a new PowerShell (4–7 s on a busy laptop). Only the
+  /// fallback now: [SodaIdentityHelper] answers the same query in milliseconds.
+  static Future<SodaLaunchIdentity> inspectOnce() => _inspectWindows();
+
+  static SodaLaunchIdentity parseIdentity(String json) {
+    final value = jsonDecode(json);
+    if (value is! Map ||
+        value['command'] is! String ||
+        value['runningPaths'] is! List) {
+      throw const FormatException('invalid_soda_handler');
+    }
+    return (
+      command: value['command'] as String,
+      runningPaths: (value['runningPaths'] as List).whereType<String>().toList()
+    );
+  }
+
   static Future<SodaLaunchIdentity> _inspectWindows() async {
     const script = r'''
 $ErrorActionPreference = 'Stop'
@@ -162,18 +184,8 @@ $paths = @(Get-Process -Name SodaMusic -ErrorAction SilentlyContinue | ForEach-O
     try {
       final code = await process.exitCode.timeout(const Duration(seconds: 8));
       await stderr;
-      final value = jsonDecode(await stdout);
-      if (code != 0 ||
-          value is! Map ||
-          value['command'] is! String ||
-          value['runningPaths'] is! List) {
-        throw const FormatException('invalid_soda_handler');
-      }
-      return (
-        command: value['command'] as String,
-        runningPaths:
-            (value['runningPaths'] as List).whereType<String>().toList()
-      );
+      if (code != 0) throw const FormatException('invalid_soda_handler');
+      return parseIdentity(await stdout);
     } catch (_) {
       process.kill(); // Only our bounded read-only helper, never the music app.
       rethrow;
@@ -185,4 +197,145 @@ $paths = @(Get-Process -Name SodaMusic -ErrorAction SilentlyContinue | ForEach-O
     await Process.start(executable, args,
         mode: ProcessStartMode.detached, runInShell: false);
   }
+}
+
+/// Answers [SodaTrackLauncher]'s handler/running-app question from one
+/// PowerShell kept ready, like RemoteMediaKeys does for play/pause.
+///
+/// Measured on the owner's iPad (2026-10-24): a quick-menu tap waited 7.9 s on
+/// the laptop, almost all of it starting a new PowerShell for this reading.
+/// The query itself (one registry value, SodaMusic process paths) takes
+/// milliseconds. The script is constant; nothing from a remote is ever written
+/// into it. Any helper failure falls back to the one-off reading.
+class SodaIdentityHelper {
+  SodaIdentityHelper({
+    Future<Process> Function()? start,
+    Future<SodaLaunchIdentity> Function()? fallback,
+    this.timeout = const Duration(seconds: 8),
+  })  : _startProcess = start ?? _startHelper,
+        _fallback = fallback ?? SodaTrackLauncher.inspectOnce;
+
+  static final shared = SodaIdentityHelper();
+
+  final Future<Process> Function() _startProcess;
+  final Future<SodaLaunchIdentity> Function() _fallback;
+  final Duration timeout;
+
+  Process? _process;
+  StreamIterator<String>? _lines;
+  Future<void> _queue = Future.value();
+
+  /// Starts the helper ahead of the first tap. Failures are ignored here.
+  void warmUp() {
+    _enqueue(() => _ready().then((_) {}, onError: (Object _) => _reset()))
+        .ignore();
+  }
+
+  Future<SodaLaunchIdentity> inspect() => _enqueue(() async {
+        try {
+          final lines = await _ready();
+          _process!.stdin.write('Get-YinweiSodaIdentity\r\n');
+          await _process!.stdin.flush();
+          if (!await lines.moveNext().timeout(timeout)) {
+            throw StateError('closed');
+          }
+          return SodaTrackLauncher.parseIdentity(lines.current.trim());
+        } catch (_) {
+          _reset();
+          return _fallback();
+        }
+      });
+
+  Future<T> _enqueue<T>(Future<T> Function() job) {
+    final run = _queue.then((_) => job());
+    _queue = run.then((_) {}, onError: (_) {});
+    return run;
+  }
+
+  Future<StreamIterator<String>> _ready() async {
+    final existing = _lines;
+    if (existing != null) return existing;
+    final process = await _startProcess();
+    final lines = StreamIterator(
+      process.stdout.transform(utf8.decoder).transform(const LineSplitter()),
+    );
+    process.stderr.drain<void>().ignore();
+    _process = process;
+    _lines = lines;
+    process.stdin.write(". '${_scriptPath.replaceAll("'", "''")}'\r\n");
+    await process.stdin.flush();
+    if (!await lines.moveNext().timeout(const Duration(seconds: 20)) ||
+        lines.current.trim() != 'ready') {
+      throw StateError('helper did not start');
+    }
+    return lines;
+  }
+
+  void _reset() {
+    _process?.kill(); // Only this read-only helper, never the music app.
+    _process = null;
+    _lines = null;
+  }
+
+  static final _scriptPath = '${Directory.systemTemp.path}'
+      '${Platform.pathSeparator}yinwei_soda_identity_v1.ps1';
+
+  static Future<Process> _startHelper() async {
+    // UTF-8 BOM so Windows PowerShell 5.1 reads the script as UTF-8.
+    await File(_scriptPath)
+        .writeAsBytes([0xEF, 0xBB, 0xBF, ...utf8.encode(_script)], flush: true);
+    return Process.start('powershell.exe', [
+      '-NoProfile',
+      '-NonInteractive',
+      '-ExecutionPolicy',
+      'Bypass',
+      '-Command',
+      '-',
+    ]);
+  }
+
+  // Same reading as the one-off script in SodaTrackLauncher, one JSON line per
+  // request ('error' on failure, which the caller treats as a failed reading).
+  static const _script = r'''
+[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)
+# Listing processes by name took ~600 ms on the owner's busy laptop and
+# Process.Path walks every module; a native scan of image names takes a few
+# milliseconds. Compiled once, when the helper starts.
+Add-Type -TypeDefinition @'
+using System; using System.Collections.Generic; using System.IO; using System.Text; using System.Runtime.InteropServices;
+public static class YinweiImage {
+  [DllImport("psapi.dll", SetLastError = true)] static extern bool EnumProcesses([Out] int[] ids, int size, out int needed);
+  [DllImport("kernel32.dll", SetLastError = true)] static extern IntPtr OpenProcess(uint access, bool inherit, int pid);
+  [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)] static extern bool QueryFullProcessImageName(IntPtr h, int flags, StringBuilder name, ref int size);
+  [DllImport("kernel32.dll")] static extern bool CloseHandle(IntPtr h);
+  public static string[] Paths(string exe) {
+    var ids = new int[8192]; int needed;
+    var found = new List<string>();
+    if (!EnumProcesses(ids, ids.Length * 4, out needed)) return found.ToArray();
+    for (int i = 0; i < needed / 4; i++) {
+      IntPtr h = OpenProcess(0x1000, false, ids[i]); // query limited information
+      if (h == IntPtr.Zero) continue;
+      try {
+        var b = new StringBuilder(1024); int n = b.Capacity;
+        if (QueryFullProcessImageName(h, 0, b, ref n)) {
+          string path = b.ToString(0, n);
+          if (string.Equals(Path.GetFileName(path), exe, StringComparison.OrdinalIgnoreCase) && !found.Contains(path)) found.Add(path);
+        }
+      } finally { CloseHandle(h); }
+    }
+    return found.ToArray();
+  }
+}
+'@
+function Get-YinweiSodaIdentity {
+  $line = 'error'
+  try {
+    $key = Get-Item -LiteralPath 'Registry::HKEY_CLASSES_ROOT\luna\shell\open\command' -ErrorAction Stop
+    $paths = @([YinweiImage]::Paths('SodaMusic.exe'))
+    $line = @{ command = $key.GetValue(''); runningPaths = $paths } | ConvertTo-Json -Compress
+  } catch { $line = 'error' }
+  [Console]::Out.WriteLine($line); [Console]::Out.Flush()
+}
+[Console]::Out.WriteLine('ready'); [Console]::Out.Flush()
+''';
 }

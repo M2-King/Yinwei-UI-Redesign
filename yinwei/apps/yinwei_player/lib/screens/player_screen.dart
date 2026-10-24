@@ -273,7 +273,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
         'captureHealthy': _live.captureHealthy,
         'playing': _smtc.state.playing,
         // The song's position and length, for the iPad's progress bar.
-        'positionSec': _smtc.state.positionSec,
+        'positionSec': _smtc.state.positionAt(DateTime.now()),
         'durationSec': _smtc.state.durationSec,
         'openApp': _musicApp?.name ?? '',
         // Where the sound is now (Orbit moves it), read from the Live engine
@@ -292,7 +292,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
         if (_live.running) _live.applyLiveMode(mode);
         await _ctrl.setMode(mode);
       },
-      liveMedia: _caps.systemMedia ? _remoteMediaKey : null,
+      liveMedia: _caps.systemMedia ? _remoteMediaVerified : null,
       liveMediaTiming: () => _mediaKeys?.lastTiming ?? const {},
       libraryPlay: _sodaLibrary?.available == true ? _playSoda : null,
       libraryList: _sodaLibrary?.available == true ? _browseSoda : null,
@@ -797,6 +797,43 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
   /// one-off command the laptop's own controls use.
   Future<void> _remoteMediaKey(String action) =>
       _mediaKeys?.send(action) ?? _smtc.sendCommand(action);
+
+  /// The iPad's play/pause: answered only once 汽水's media session shows the
+  /// change. Owner's iPad, 2026-10-24: three plays in a row were "accepted" in
+  /// 4 ms, yet the laptop kept reporting paused, so the iPad showed playing
+  /// for its hold and then flipped back. Play and pause are idempotent, so a
+  /// second try through the one-off command (a fresh session list) is safe.
+  /// Still unchanged: an error, which the iPad shows and then draws the truth.
+  Future<void> _remoteMediaVerified(String action) async {
+    await _remoteMediaKey(action);
+    if (action != 'play' && action != 'pause') return;
+    final playing = action == 'play';
+    if (await _smtcReaches(playing)) return;
+    await _smtc.sendCommand(action);
+    if (!await _smtcReaches(playing)) {
+      throw ProcessException('media', [action], 'unchanged', 2);
+    }
+  }
+
+  /// The media daemon polls every 400 ms; a busy laptop can take longer.
+  Future<bool> _smtcReaches(bool playing,
+      [Duration within = const Duration(seconds: 2)]) async {
+    if (_smtc.state.playing == playing) return true;
+    final reached = Completer<bool>();
+    void check() {
+      if (_smtc.state.playing == playing && !reached.isCompleted) {
+        reached.complete(true);
+      }
+    }
+
+    _smtc.addListener(check);
+    try {
+      return await reached.future
+          .timeout(within, onTimeout: () => _smtc.state.playing == playing);
+    } finally {
+      _smtc.removeListener(check);
+    }
+  }
 
   Future<void> _toggleLiveHrtf() async {
     if (_live.running || _live.starting) {

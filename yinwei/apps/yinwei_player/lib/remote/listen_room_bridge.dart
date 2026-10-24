@@ -1019,7 +1019,11 @@ class ListenRoomBridge {
         return false;
       }
     }
-    for (var i = 0; session.pending && i < 30; ++i) {
+    // A song tap can keep the laptop busy for seconds (汽水's handoff). Play,
+    // pause and skip wait it out instead of being dropped after 3 s: a dropped
+    // pause left the room drawing "playing" (owner's iPad, 2026-10-24).
+    final waits = _transport.contains(type) ? 120 : 30;
+    for (var i = 0; session.pending && i < waits; ++i) {
       await Future<void>.delayed(const Duration(milliseconds: 100));
     }
     if (stillValid != null && !stillValid()) {
@@ -1038,6 +1042,15 @@ class ListenRoomBridge {
     if (!ok) await _commandRefused(type);
     return ok;
   }
+
+  static const _transport = {
+    'play',
+    'pause',
+    'media.play',
+    'media.pause',
+    'media.next',
+    'media.previous',
+  };
 
   Future<void> _commandRefused(String type) async {
     if (!_ready || _disposed || _background) return;

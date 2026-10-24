@@ -18,6 +18,7 @@ class SystemMediaState {
     this.sourceApp = '',
     this.pid = 0,
     this.processName = '',
+    this.positionAtMs = 0,
   });
 
   final bool active;
@@ -30,6 +31,20 @@ class SystemMediaState {
   final String sourceApp;
   final int pid;
   final String processName;
+
+  /// When [positionSec] was true (ms since epoch), or 0 when unknown.
+  /// 汽水 updates its timeline only at song starts, seeks and pauses, so the
+  /// raw position stays at 0.1 s for a whole song (measured 2026-10-24).
+  final int positionAtMs;
+
+  /// The song position now: the reported one plus the time played since.
+  double positionAt(DateTime now) {
+    if (!playing || positionAtMs <= 0) return positionSec;
+    final ahead = (now.millisecondsSinceEpoch - positionAtMs) / 1000;
+    if (ahead <= 0 || ahead > 6 * 3600) return positionSec;
+    final value = positionSec + ahead;
+    return durationSec > 0 ? value.clamp(0.0, durationSec).toDouble() : value;
+  }
 
   static const empty = SystemMediaState(active: false);
 
@@ -289,13 +304,26 @@ class SystemMediaService extends ChangeNotifier {
       }
       lastActiveAt = DateTime.now();
       final rawStatus = map['playbackStatus'] as String? ?? '';
+      final playing = _coercePlaying(rawStatus, state.playing);
+      final position = (map['position'] as num?)?.toDouble() ?? 0;
+      final updated = (map['updated'] as num?)?.toInt() ?? 0;
+      // Count from the app's own timestamp. A resume the app did not stamp
+      // counts from now, so paused time is never added to the song.
+      if (updated != _stampMs || position != _stampPosition) {
+        _anchorMs = updated;
+      } else if (playing && !state.playing) {
+        _anchorMs = DateTime.now().millisecondsSinceEpoch;
+      }
+      _stampMs = updated;
+      _stampPosition = position;
       _set(SystemMediaState(
         active: true,
         title: _b64(map['title']),
         artist: _b64(map['artist']),
         album: _b64(map['album']),
-        playing: _coercePlaying(rawStatus, state.playing),
-        positionSec: (map['position'] as num?)?.toDouble() ?? 0,
+        playing: playing,
+        positionSec: position,
+        positionAtMs: _anchorMs,
         durationSec: (map['duration'] as num?)?.toDouble() ?? 0,
         sourceApp: map['source'] as String? ?? '',
         pid: (map['pid'] as num?)?.toInt() ?? 0,
@@ -314,6 +342,9 @@ class SystemMediaService extends ChangeNotifier {
       lastError = e.toString();
     }
   }
+
+  int _stampMs = 0, _anchorMs = 0;
+  double _stampPosition = -1;
 
   void _set(SystemMediaState next) {
     final changed = next.active != state.active ||
@@ -598,6 +629,7 @@ function Emit-Once {
     playbackStatus = [string]$playback.PlaybackStatus
     position = [math]::Round($timeline.Position.TotalSeconds, 2)
     duration = [math]::Round($timeline.EndTime.TotalSeconds, 2)
+    updated = [long]$timeline.LastUpdatedTime.ToUnixTimeMilliseconds()
     source = $src
     pid = [int]$resolved.pid
     process = [string]$resolved.name
@@ -636,12 +668,17 @@ function Await($WinRtTask, $ResultType) {
 [void][Windows.Media.Control.GlobalSystemMediaTransportControlsSessionManager,Windows.Media.Control,ContentType=WindowsRuntime]
 $mgr = Await ([Windows.Media.Control.GlobalSystemMediaTransportControlsSessionManager]::RequestAsync()) ([Windows.Media.Control.GlobalSystemMediaTransportControlsSessionManager])
 $sessions = $mgr.GetSessions()
+$current = ''
+try { $c = $mgr.GetCurrentSession(); if ($c) { $current = [string]$c.SourceAppUserModelId } } catch {}
 $best = $null; $bestScore = 0
 foreach ($s in $sessions) {
   $pb = $s.GetPlaybackInfo()
   $st = [string]$pb.PlaybackStatus
   $score = 1
-  if ($st -eq 'Playing') { $score = 3 } elseif ($st -eq 'Paused') { $score = 2 }
+  if ($st -eq 'Playing') { $score = 5 }
+  elseif ($st -eq 'Changing' -or $st -eq 'Opened') { $score = 4 }
+  elseif ($st -eq 'Paused') { $score = 2 }
+  if ($current -and ([string]$s.SourceAppUserModelId) -eq $current) { $score += 2 }
   if ($score -gt $bestScore) { $bestScore = $score; $best = $s }
 }
 if (-not $best) { exit 3 }

@@ -172,19 +172,34 @@ function Await($WinRtTask, $ResultType) {
 }
 [void][Windows.Media.Control.GlobalSystemMediaTransportControlsSessionManager,Windows.Media.Control,ContentType=WindowsRuntime]
 $mgr = Await ([Windows.Media.Control.GlobalSystemMediaTransportControlsSessionManager]::RequestAsync()) ([Windows.Media.Control.GlobalSystemMediaTransportControlsSessionManager])
+# The session the laptop shows (same scoring as the media daemon): Playing,
+# then Changing/Opened, then Paused, with Windows' current session winning
+# ties. The old "first Paused session" could send Play to another app's
+# paused session while the room showed Soda. A fresh manager per key, so a
+# restarted music app's session is never missed.
+function Find-YinweiSession {
+  $m = Await ([Windows.Media.Control.GlobalSystemMediaTransportControlsSessionManager]::RequestAsync()) ([Windows.Media.Control.GlobalSystemMediaTransportControlsSessionManager])
+  $current = ''
+  try { $c = $m.GetCurrentSession(); if ($c) { $current = [string]$c.SourceAppUserModelId } } catch {}
+  $best = $null; $bestScore = 0
+  foreach ($s in $m.GetSessions()) {
+    $st = [string]$s.GetPlaybackInfo().PlaybackStatus
+    $score = 1
+    if ($st -eq 'Playing') { $score = 5 }
+    elseif ($st -eq 'Changing' -or $st -eq 'Opened') { $score = 4 }
+    elseif ($st -eq 'Paused') { $score = 2 }
+    if ($current -and ([string]$s.SourceAppUserModelId) -eq $current) { $score += 2 }
+    if ($score -gt $bestScore) { $bestScore = $score; $best = $s }
+  }
+  return $best
+}
 $methods = @{ play = 'TryPlayAsync'; pause = 'TryPauseAsync'; next = 'TrySkipNextAsync'; previous = 'TrySkipPreviousAsync' }
 function Send-YinweiKey([string]$line) {
   $reply = 'error'
   try {
     $method = $methods[$line.Trim()]
     if ($method) {
-      $best = $null; $bestScore = 0
-      foreach ($s in $mgr.GetSessions()) {
-        $st = [string]$s.GetPlaybackInfo().PlaybackStatus
-        $score = 1
-        if ($st -eq 'Playing') { $score = 3 } elseif ($st -eq 'Paused') { $score = 2 }
-        if ($score -gt $bestScore) { $bestScore = $score; $best = $s }
-      }
+      $best = Find-YinweiSession
       if (-not $best) { $reply = 'nosession' }
       elseif (Await ($best.$method()) ([bool])) { $reply = 'ok' }
       else { $reply = 'refused' }
@@ -195,13 +210,7 @@ function Send-YinweiKey([string]$line) {
 function Send-YinweiSeek([double]$seconds) {
   $reply = 'error'
   try {
-    $best = $null; $bestScore = 0
-    foreach ($s in $mgr.GetSessions()) {
-      $st = [string]$s.GetPlaybackInfo().PlaybackStatus
-      $score = 1
-      if ($st -eq 'Playing') { $score = 3 } elseif ($st -eq 'Paused') { $score = 2 }
-      if ($score -gt $bestScore) { $bestScore = $score; $best = $s }
-    }
+    $best = Find-YinweiSession
     if (-not $best) { $reply = 'nosession' }
     elseif (Await ($best.TryChangePlaybackPositionAsync([long]($seconds * 10000000))) ([bool])) { $reply = 'ok' }
     else { $reply = 'refused' }
