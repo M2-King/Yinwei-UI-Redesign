@@ -153,6 +153,7 @@ button:disabled { cursor: default; }
 .choice[aria-pressed="true"] { border-color: rgba(140, 175, 255, 0.55); background: rgba(111, 155, 255, 0.12); }
 .choice[aria-pressed="true"] .ms { color: var(--blue-hi); }
 .choice:disabled { opacity: 0.4; }
+
 .slider { display: flex; flex-direction: column; gap: 4px; }
 .slider-head { display: flex; justify-content: space-between; align-items: baseline; font-size: var(--t-label); color: var(--text-2); }
 .slider-head output { color: var(--text); font-variant-numeric: tabular-nums; }
@@ -174,8 +175,11 @@ input[type="range"]:disabled { opacity: 0.4; }
   border-radius: var(--r-lg); padding: var(--s-4) var(--s-5);
   display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: var(--s-5);
 }
-.now { display: flex; align-items: center; gap: var(--s-4); min-width: 0; }
-.art { flex: none; width: 118px; height: 118px; border-radius: var(--r-sm); display: block; box-shadow: 0 12px 30px rgba(0, 0, 0, 0.5); }
+.now { display: flex; align-items: center; gap: var(--s-4); min-width: 0; border-radius: var(--r-sm); padding: var(--s-1); margin: calc(-1 * var(--s-1)); cursor: pointer; transition: background 0.15s; -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; touch-action: none; }
+.now:hover { background: rgba(255, 255, 255, 0.05); }
+.now[aria-expanded="true"] { background: rgba(111, 155, 255, 0.12); }
+.now.pressing .art { transform: scale(0.95); filter: brightness(0.9); }
+.art { flex: none; width: 118px; height: 118px; border-radius: var(--r-sm); display: block; box-shadow: 0 12px 30px rgba(0, 0, 0, 0.5); transition: transform 0.18s cubic-bezier(0.22, 1, 0.36, 1); }
 .meta { min-width: 0; display: flex; flex-direction: column; gap: 4px; flex: 1; }
 .title { font-size: var(--t-title); font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .title.cjk, .artist.cjk { font-family: var(--font-cjk); }
@@ -377,6 +381,7 @@ input[type="range"]:disabled { opacity: 0.4; }
 .music-sheet button:not(.round), .music-snapshots { font: inherit; color: inherit; border: 1px solid #ffffff16; border-radius: 12px; background: #ffffff06; cursor: pointer; }
 .music-nav button, .music-pages button { padding: 10px 14px; font-size: 12px !important; }
 .music-nav button[hidden] { display: none; }
+.music-nav button[aria-pressed="true"] { background: #ffffff12; border-color: #ffffff36; }
 .music-sheet button:disabled { opacity: .4; cursor: default; }
 .music-sheet button:focus-visible, .music-snapshots:focus-visible { outline: 2px solid #9abaff; outline-offset: 3px; }
 #music-status { font-size: 13px; line-height: 1.5; color: #b9c9e6; }
@@ -388,6 +393,9 @@ input[type="range"]:disabled { opacity: 0.4; }
 .music-track { display: flex; align-items: center; justify-content: space-between; width: 100%; text-align: left; padding: 13px 14px; margin-top: 7px; gap: 16px; }
 .music-track-meta { min-width: 0; }
 .music-track .music-note { margin-top: 2px; }
+.music-sheet .music-track:disabled { opacity: 1; }
+.music-track:disabled .music-name, .music-track:disabled .music-note,
+.music-track:disabled .music-track-action { opacity: .45; }
 .music-play { font-size: 23px; color: #a8c5ff; }
 .music-track-action { flex: none; display: flex; gap: 18px; align-items: center; }
 .music-duration { font-size: 11px; color: #aab5c8; font-variant-numeric: tabular-nums; }
@@ -397,3 +405,111 @@ input[type="range"]:disabled { opacity: 0.4; }
 #music-btn { flex-shrink: 0; font: 24px Georgia, serif; }
 .toast { z-index: 90; }
 @media (max-width: 650px) { .music-backdrop { padding: 12px 12px max(12px, env(safe-area-inset-bottom)); } .music-sheet { padding: 21px; border-radius: 23px; max-height: 90vh; } .music-head h2 { font-size: 23px; } }
+
+
+/* ---------------------------------------------------------------- music browsing: album · compact · window
+   Tune here: glass, spacing, curvature and timing of the compact song picker (ui.js PK / room.js WIN for the rest). */
+:root {
+  --pk-t: 460ms; --pk-spring: cubic-bezier(0.25, 1.1, 0.42, 1); --pk-fade: 300ms;   /* restrained spring, little overshoot */
+  --pk-tint: rgba(170, 190, 235, 0.075); --pk-edge: rgba(235, 242, 255, 0.14); --pk-blur: 16px; /* clear, lightly tinted glass */
+  --pk-radius: 22px; --pk-row: 96px; --pk-cover: 76px; --pk-pad: 10px; --pk-width: 276px;
+}
+/* The album page (player bar) steps aside in compact and window modes. */
+.app .player { transition: opacity 0.3s ease, translate var(--pk-t) var(--pk-spring); }
+.app.browse .player { opacity: 0; translate: 0 24px; pointer-events: none; }
+.now .art:focus-visible { outline: 2px solid rgba(220, 230, 255, 0.7); outline-offset: 3px; }
+.now { cursor: default; }
+.now .art { cursor: pointer; }
+/* Compact: a floating clear-glass Cover Flow on the left of the room. */
+.pk { position: absolute; z-index: 4; left: clamp(16px, 7vw, 110px); top: 46%; width: var(--pk-width); height: 0; transform-origin: 0 0; transform: scale(var(--pk-k, 1));
+  transition: opacity 0.32s ease, transform var(--pk-t) var(--pk-spring); }
+.pk.away { opacity: 0; transform: translateX(-14px) scale(calc(var(--pk-k, 1) * 0.97)); pointer-events: none; } /* window mode */
+.pk-list { position: absolute; left: 0; top: -260px; width: 100%; height: 520px; perspective: var(--pk3-persp); perspective-origin: 50% 50%; touch-action: none; -webkit-user-select: none; user-select: none; }
+.pk-row {
+  position: absolute; left: 0; top: calc(50% - var(--pk-row) / 2); width: 100%; height: var(--pk-row);
+  display: flex; align-items: center; gap: 16px; padding: 0 18px 0 var(--pk-pad);
+  border-radius: var(--pk-radius); border: 1px solid var(--pk3-edge); background: var(--pk3-card); color: var(--text); text-align: left;
+  box-shadow: 0 14px 30px rgba(0, 0, 0, 0.3); backface-visibility: hidden;
+  transform-origin: calc(var(--pk-pad) + var(--pk-cover) / 2) 50%;
+  transition: transform var(--pk-t) var(--pk-spring), opacity var(--pk-fade) ease, background 0.28s ease, border-color 0.28s ease, box-shadow 0.28s ease;
+  will-change: transform, opacity;
+}
+.pk-row.snap { transition: none !important; }
+.pk-row.far { pointer-events: none; }
+.pk-row.focus { /* no backdrop blur: it would flatten the 3D group */
+  background: var(--pk3-card-focus); border-color: var(--pk3-edge-focus);
+  box-shadow: 0 22px 48px rgba(0, 0, 0, 0.42), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+.pk-cover { flex: none; width: var(--pk-cover); height: var(--pk-cover); border-radius: 12px; display: block; box-shadow: 0 8px 20px rgba(0, 0, 0, 0.35); }
+.pk-meta { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 4px; transition: opacity 0.26s ease 0.1s; }
+.pk-meta b { font-weight: 500; font-size: 19px; letter-spacing: 0.005em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-shadow: 0 1px 10px rgba(0, 0, 0, 0.35); }
+.pk-meta small { font-size: 14px; color: var(--text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-shadow: 0 1px 8px rgba(0, 0, 0, 0.35); }
+.pk-eq { flex: none; display: none; align-items: flex-end; gap: 3px; height: 18px; transition: opacity 0.26s ease 0.1s; }
+.pk-row.playing .pk-eq { display: flex; } /* only the song that plays (not the one you browse to) */
+.pk-eq i { width: 3px; height: 100%; border-radius: 1px; background: var(--text); transform-origin: bottom; animation: pkEq 0.9s ease-in-out infinite alternate; }
+.pk-eq i:nth-child(2) { animation-delay: -0.35s; }
+.pk-eq i:nth-child(3) { animation-delay: -0.6s; }
+.pk-eq i:nth-child(4) { animation-delay: -0.15s; }
+.pk.paused .pk-eq i { animation-play-state: paused; }
+@keyframes pkEq { from { transform: scaleY(0.3); } to { transform: scaleY(1); } }
+.pk-row.wait { animation: pkWait 1.2s ease-in-out infinite; } /* sent to the laptop, not playing yet */
+@keyframes pkWait { 50% { border-color: rgba(200, 215, 255, 0.42); } }
+.pk.at-cover .pk-meta, .pk.at-cover .pk-eq { opacity: 0; transition-delay: 0s; }
+.pk.at-cover .pk-row { background: transparent; border-color: transparent; box-shadow: none; }
+.pk.at-cover .pk-bgart { opacity: 0; }
+.pk-expand {
+  position: absolute; left: var(--pk-pad); top: 214px; display: inline-flex; align-items: center; gap: 10px; min-height: 44px; padding: 0 18px;
+  border-radius: 999px; font-size: 15px; color: var(--text); background: rgba(170, 190, 235, 0.06); border: 1px solid rgba(235, 242, 255, 0.12);
+  backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+  transition: opacity 0.3s ease 0.12s, transform var(--pk-t) var(--pk-spring);
+}
+.pk-expand svg { width: 16px; height: 16px; }
+.pk-expand:disabled { opacity: 0.4; }
+.pk.at-cover .pk-expand { opacity: 0; transform: translateY(10px); pointer-events: none; transition-delay: 0s; }
+.pk-empty { position: absolute; left: 0; top: -60px; width: 100%; margin: 0; font-size: 15px; line-height: 1.5; color: var(--text-2); }
+.pk:not(.empty) .pk-empty { display: none; }
+/* The mode pill: 快捷歌单 × (compact) / 窗景歌单 收起 (window). */
+.pk-bar {
+  position: absolute; z-index: 6; left: 50%; top: calc(env(safe-area-inset-top, 0px) + 22px); translate: -50% 0;
+  display: flex; align-items: center; gap: 12px; padding: 2px 2px 2px 18px; border-radius: 999px; font-size: 15px; color: var(--text);
+  transition: opacity 0.3s ease;
+}
+.app:not(.browse) ~ .pk-bar, .app:not(.browse) .pk-bar { opacity: 0; pointer-events: none; }
+.pk-note { font-size: 17px; }
+.pk-sep { width: 1px; height: 18px; background: rgba(235, 242, 255, 0.18); }
+.pk-bar button { min-width: 44px; min-height: 44px; padding: 0 10px; border-radius: 999px; display: inline-flex; align-items: center; justify-content: center; gap: 4px; font-size: 15px; color: var(--text); }
+.pk-bar button:hover { background: rgba(255, 255, 255, 0.08); }
+.pk-bar svg { width: 18px; height: 18px; }
+@media (max-width: 700px) { :root { --pk-row: 84px; --pk-cover: 64px; --pk-width: 240px; } .pk-bar { top: 74px; } }
+@media (prefers-reduced-motion: reduce) {
+  .pk, .pk-row, .pk-expand, .app .player { transition-duration: 1ms !important; transition-delay: 0s !important; }
+  .pk-eq i, .pk-row.wait { animation: none; }
+}
+#view-btn:disabled { opacity: 0.35; pointer-events: none; } /* no top view while browsing */
+
+/* ---------------------------------------------------------------- the quick menu as a 3D group
+   (ui.js PK3: depths and turn range). Cards: dark, slightly see-through; the artwork behind: dimmed, dot grid. */
+:root {
+  --pk3-persp: 1100px;
+  --pk3-card: rgba(14, 16, 22, 0.62); --pk3-card-focus: rgba(22, 25, 32, 0.84);
+  --pk3-edge: rgba(255, 255, 255, 0.05); --pk3-edge-focus: rgba(255, 255, 255, 0.16);
+  --pk3-bg-bright: 0.42;   /* the artwork behind the cards */
+  --pk3-dot: 6px; --pk3-dot-r: 1.9px; --pk3-dot-gap: 0.3; /* dot grid: pitch, dot radius, what shows between dots */
+}
+.pk-group { position: absolute; inset: 0; transform-style: preserve-3d; transform-origin: 50% 50%; }
+.pk-bgart { position: absolute; left: -30%; top: -4%; width: 140%; height: 108%; transform: translateZ(-320px); /* PK3.bgZ */
+  opacity: var(--pk3-bg-bright); transition: opacity 0.4s ease; pointer-events: none; backface-visibility: hidden;
+  -webkit-mask-image: radial-gradient(closest-side, #000 62%, transparent 100%); mask-image: radial-gradient(closest-side, #000 62%, transparent 100%); }
+.pk-bgdots { position: absolute; inset: 0;
+  -webkit-mask-image: radial-gradient(circle, #000 0 var(--pk3-dot-r), rgba(0, 0, 0, var(--pk3-dot-gap)) calc(var(--pk3-dot-r) + 0.9px));
+  mask-image: radial-gradient(circle, #000 0 var(--pk3-dot-r), rgba(0, 0, 0, var(--pk3-dot-gap)) calc(var(--pk3-dot-r) + 0.9px));
+  -webkit-mask-size: var(--pk3-dot) var(--pk3-dot); mask-size: var(--pk3-dot) var(--pk3-dot); }
+.pk-bgdots canvas { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; transition: opacity 0.5s ease; }
+.pk-bgdots canvas.on { opacity: 1; }
+
+/* Accessible window list: reveal its selected song when keyboard focused. */
+.win-list { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+.win-list:focus-within { z-index: 7; left: 50%; bottom: 24px; translate: -50% 0; width: auto; height: auto; clip-path: none; }
+.win-list button { display: block; padding: 12px 18px; border-radius: 18px; background: #161b29; }
+.win-list:focus-within button:not(:focus) { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+@media (prefers-reduced-motion: reduce) { .pk-bgdots canvas, .pk-bgart { transition: none; } }

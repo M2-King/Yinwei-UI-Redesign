@@ -57,8 +57,8 @@
   <div class="pop glass" id="pop" role="dialog" hidden></div>
 
   <footer class="player glass" id="player">
-    <div class="now">
-      <canvas class="art" id="art" width="236" height="236" aria-hidden="true"></canvas>
+    <div class="now" id="now-card">
+      <canvas class="art" id="art" width="236" height="236" role="button" tabindex="0" aria-haspopup="dialog" aria-controls="pk" aria-expanded="false" aria-label="Show the playlist"></canvas>
       <div class="meta">
         <div class="title" id="title"></div>
         <div class="artist" id="artist"></div>
@@ -79,6 +79,15 @@
     </div>
     <div class="right" id="right"></div>
   </footer>
+
+  <!-- Music browsing (ui.js): the compact song picker; window mode is drawn on the room's own windows. -->
+  <div class="pk" id="pk" role="dialog" aria-labelledby="pk-bar-title" hidden inert>
+    <p class="pk-empty"></p>
+    <div class="pk-list" id="pk-list" role="listbox" aria-label="Songs"><div class="pk-group" id="pk-group"><div class="pk-bgart" aria-hidden="true"><div class="pk-bgdots"><canvas id="pk-bg-a" width="560" height="560"></canvas><canvas id="pk-bg-b" width="560" height="560"></canvas></div></div></div></div>
+    <button class="pk-expand" id="pk-expand" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 4h6v6M20 4l-7 7M10 20H4v-6M4 20l7-7" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg><span></span></button>
+  </div>
+  <div class="win-list" id="win-list" role="listbox" aria-label="Window songs" hidden></div>
+  <div class="pk-bar glass" id="pk-bar" hidden><span class="pk-note" aria-hidden="true">♫</span><span id="pk-bar-title"></span><i class="pk-sep" aria-hidden="true"></i><button id="pk-bar-btn" type="button"></button></div>
 </div>
 
 <div class="menu glass" id="menu" role="menu" hidden>
@@ -109,7 +118,8 @@
 <div class="music-backdrop" id="music-backdrop" hidden>
   <section class="music-sheet glass" role="dialog" aria-modal="true" aria-labelledby="music-heading" tabindex="-1">
     <header class="music-head"><div><small>汽水 · ON YOUR LAPTOP</small><h2 id="music-heading">Music</h2></div><button id="music-close" class="round" type="button" aria-label="Close music">×</button></header>
-    <p class="music-hint">Cached playlists from your laptop. Playing brings 汽水 to the front on your laptop and changes its queue.</p>
+    <p class="music-hint">My Lists are imported on your laptop using Yinwei’s My Lists button. To play, 汽水 must be installed, logged in and running there. Playing brings 汽水 to the front and changes its queue.</p>
+    <nav class="music-nav" aria-label="Music source"><button id="music-cache" type="button" aria-pressed="true">汽水 cache</button><button id="music-my-lists" type="button" aria-pressed="false">My Lists</button></nav>
     <input id="music-search" class="music-search" type="search" placeholder="Search your cached songs" aria-label="Search your cached songs" maxlength="120" autocomplete="off" autocapitalize="off" spellcheck="false" hidden>
     <nav class="music-nav"><button id="music-back" type="button" hidden>‹ Playlists</button><button id="music-refresh" type="button">Read cache again</button><button id="music-modes" type="button" hidden>Listening modes</button></nav>
     <div id="music-status" role="status" aria-live="polite"></div>

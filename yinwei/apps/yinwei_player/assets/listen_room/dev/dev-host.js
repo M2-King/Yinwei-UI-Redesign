@@ -12,6 +12,8 @@
     { title: "晴天", artist: "周杰伦" }, { title: "富士山下", artist: "陈奕迅" }, { title: "红豆", artist: "王菲" },
     { title: "夜曲", artist: "周杰伦" }, { title: "Vienna", artist: "Billy Joel" },
   ];
+  // The review library's songs (the music sheet below lists the same ones).
+  const titles = ["Quiet water", "归途", "Moonlight", "Soft rain", "远方", "After the evening", "Don't Stop", "Home"];
   let ti = 0;
   const M = {
     v: 1, laptop: "TIM-LAPTOP", connection: "connected", source: "汽水音乐", live: true, playing: true,
@@ -20,7 +22,10 @@
     stats: { received: 18240, bufferMs: 160, underruns: 0 }, opens: null, pending: false, progress: null,
     pos: 42, dur: 245, seekable: true, quality: "high", stream: "high", opus: true,
     speakers: [], selectedSpeakerIndex: 0, arrayRevision: 1, maxSpeakers: 8, speakerControl: true, matrixLinked: false, matrixSpread: 1, music: true, musicSearch: true, musicOnline: true, updates: true, appBuild: "61",
+    // The list the current song plays from (state.queue): the review library's own songs.
+    queue: { title: "Liked songs", playing: 0, songs: [...tracks.map((t) => ({ ...t })), ...titles.map((title, n) => ({ title, artist: n % 2 ? "Review artist" : "Night band" }))] },
   };
+  M.track = { ...M.queue.songs[M.queue.playing] }; // the stack opens on the song that is playing
   function seedSpeakers(count) {
     M.speakers = Array.from({ length: count }, (_, index) => ({ index,
       label: index === 0 ? "L" : index === 1 ? "R" : String(index + 1),
@@ -44,7 +49,6 @@
           { id: "annual", title: "2025年度歌单", cached: 8, total: 33, updatedAt: "2026-10-21T02:53:09Z", historyCount: 1 },
           { id: "evening", title: "Evening listening", cached: 42, total: 42, updatedAt: "2026-10-21T02:54:54Z", historyCount: 0 },
         ];
-        const titles = ["Quiet water", "归途", "Moonlight", "Soft rain", "远方", "After the evening", "Don't Stop", "Home"];
         if (i.query) {
           const fold = s => s.toLowerCase().replace(/[‘’‛′＇]/g, "'").replace(/[“”‟″＂]/g, '"');
           const terms = fold(i.query).split(/\s+/).filter(Boolean);
@@ -80,6 +84,11 @@
       }
       case "musicOnlinePlay":
       case "musicPlay": say("Review only · no song was sent to the laptop"); break;
+      case "queuePlay": {
+        const n = M.queue && M.queue.songs[i.i];
+        if (n) { M.queue.playing = i.i; Object.assign(M, { track: { ...n }, playing: true, pos: 0 }); say(`Review only · would play ${n.title}`); }
+        break;
+      }
       case "musicClose": break;
       case "listen":
         M.listening = "connecting";
@@ -96,7 +105,7 @@
       case "take": later(150, () => { M.control = "mine"; if (M.notice === "taken") M.notice = "none"; say("You're in control"); }); break;
       case "media":
         later(150, () => {
-          if (i.a === "next" || i.a === "prev") { ti = (ti + (i.a === "next" ? 1 : tracks.length - 1)) % tracks.length; M.track = { ...tracks[ti] }; M.playing = true; }
+          if (i.a === "next" || i.a === "prev") { const n = M.queue.songs.length; M.queue.playing = (M.queue.playing + (i.a === "next" ? 1 : n - 1)) % n; M.track = { ...M.queue.songs[M.queue.playing] }; M.playing = true; }
           else M.playing = i.a === "play";
         });
         break;

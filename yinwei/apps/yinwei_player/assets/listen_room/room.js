@@ -28,7 +28,44 @@ function snapDirection() {
   if (to === null) return;
   if (reduced) { S.az = wrap(to); renderPlace(); } else snapAnim = { t0: 0, from: S.az, to };
 }
-function resetView() { fling = null; cam.tYaw = YAW_3D; cam.tLift = LIFT_3D; cam.tZoom = 1; }
+function resetView() { if (browseMode === "compact") { browseCamera("compact"); return; } if (camLocked()) return; fling = null; cam.tYaw = YAW_3D; cam.tLift = LIFT_3D; cam.tZoom = 1; }
+// Browse camera: while the song picker (compact) or the window displays show, the camera holds one
+// framing chosen for them. Compact permits bounded look-around; pinch, zoom, fling and
+// top view stay locked, so the picker always sits on a calm part of the room. Leaving browsing brings back the
+// view you had. Tuning: BROWSE_CAM (yaw radians, + turns the view left; lift; zoom, > 1 steps back).
+const BROWSE_CAM = {
+  compact: { yaw: -0.5, lift: 14 * DEG, zoom: 0.6 },  // a close-up just behind the chair (closer than the normal zoom limit); the large picker over the lake
+  window: { yaw: -0.17, lift: 9 * DEG, zoom: 1.15 },  // facing the middle of the window wall, a little lower to show the panes whole
+  compactTall: { yaw: 0.1, lift: 24 * DEG, zoom: 0.6 }, // portrait: higher and turned so the side-table lamp stays out of the lens
+};
+const browsePose = (mode) => BROWSE_CAM[innerHeight > innerWidth * 1.1 && BROWSE_CAM[`${mode}Tall`] ? `${mode}Tall` : mode];
+let camSaved = null, lookBackAt = 0;
+// With the picker open you can still look around a little (drag), then the view settles back.
+const BROWSE_LOOK = { on: true, yaw: 0.5, lift: 9 * DEG, back: 0 }; // drag to look around the close-up; back: s before it settles (0: it stays)
+// The range a look drag may move the camera in (and springs back into).
+function lookLimits() {
+  if (browseMode !== "compact") return { y: YAW_LIM, l: LIFT_LIM, gy: 0.12, gl: 0.07 };
+  const pose = browsePose("compact");
+  return { y: [Math.max(YAW_LIM[0], pose.yaw - BROWSE_LOOK.yaw), Math.min(YAW_LIM[1], pose.yaw + BROWSE_LOOK.yaw)],
+    l: [Math.max(LIFT_LIM[0], pose.lift - BROWSE_LOOK.lift), Math.min(LIFT_LIM[1], pose.lift + BROWSE_LOOK.lift)], gy: 0.05, gl: 0.025 };
+}
+function updateBrowseLook(now) {
+  if (browseMode !== "compact") { lookBackAt = 0; return; }
+  if (BROWSE_LOOK.back > 0 && lookBackAt && !dragging && now > lookBackAt) { lookBackAt = 0; browseCamera("compact"); }
+}
+const camLocked = () => typeof browseMode !== "undefined" && browseMode !== "album";
+function browseCamera(mode) {
+  const pose = browsePose(mode);
+  finishOpening(); entrance = null;
+  if (pose) {
+    if (!camSaved) camSaved = { yaw: cam.tYaw, lift: cam.tLift, zoom: cam.tZoom, k: cam.tK };
+    fling = null; lookBackAt = 0; Object.assign(cam, { tYaw: pose.yaw, tLift: pose.lift, tZoom: pose.zoom, tK: 0 });
+  } else if (camSaved) {
+    fling = null; Object.assign(cam, { tYaw: camSaved.yaw, tLift: camSaved.lift, tZoom: camSaved.zoom, tK: camSaved.k }); camSaved = null;
+  }
+  if (reduced) Object.assign(cam, { yaw: cam.tYaw, lift: cam.tLift, zoom: cam.tZoom, k: cam.tK });
+  camMoving = true;
+}
 // One render of everything, hidden parts included, into an off-screen buffer.
 // Building shaders is not all: the GPU also prepares each drawing setup the
 // first time it is used. This way that happens while the camera still waits,
@@ -758,12 +795,13 @@ function buildScene() {
   rug.scale.set(1.25, 1, 1);
 
   // ---------------------------------------------------------------- window wall
-  const WR = 6.5, A0 = -62, A1 = 82, STEP = 18;
+  const WR = 6.5, A0 = -62, A1 = 82, STEP = 18, panes = []; // panes: the glass between two mullions (window-mode song displays)
   for (let a = A0; a <= A1 + 0.01; a += STEP) {
     add(rbox(0.07, 3.5, 0.1, 0.02, 2), M.blackMetal, [WR * Math.sin(a * DEG), 1.75, -WR * Math.cos(a * DEG)], [0, -a * DEG, 0]);
     if (a + STEP <= A1 + 0.01) {
       const mid = a + STEP / 2, w = 2 * (WR - 0.02) * Math.sin((STEP / 2) * DEG);
       add(new T.PlaneGeometry(w, 3.42), M.glass, [(WR - 0.02) * Math.sin(mid * DEG), 1.75, -(WR - 0.02) * Math.cos(mid * DEG)], [0, -mid * DEG, 0], { cast: false, receive: false });
+      panes.push({ mid, w, r: WR - 0.02 });
     }
   }
   for (let a = A0; a < A1; a += 3) { // sill, head rail and the warm cove strip
@@ -1186,7 +1224,7 @@ function buildScene() {
   };
   startSurfaces((name, px) => { try { targets[name](maps(px)); } catch (e) { console.error("Surface", name, e); } });
 
-  three = { T, renderer, composer, grade, bloom, floorFinish, water, sparkles, skipReflection: false, flame, candleLight, mirror, scene, camera, source, dome, halo, blue, speakerMid, hit, sourceRings, sourceGlow, beam, beamGeo, orbit, guides, speakers, speakerFx, raycaster: new T.Raycaster(), v: new T.Vector3(), ceilingParts: [ceiling, skylight, cove], lampL, lampS, readLight, skyFill, cove, titleCard };
+  three = { T, renderer, composer, grade, bloom, floorFinish, water, sparkles, skipReflection: false, flame, candleLight, mirror, scene, camera, source, dome, halo, blue, speakerMid, hit, sourceRings, sourceGlow, beam, beamGeo, orbit, guides, speakers, speakerFx, raycaster: new T.Raycaster(), v: new T.Vector3(), ceilingParts: [ceiling, skylight, cove], lampL, lampS, readLight, sky, panes, skyFill, cove, titleCard };
   three.base = { exposure: renderer.toneMappingExposure, bloom: bloom ? bloom.strength : 0, lampL: lampL.intensity, lampS: lampS.intensity, read: readLight.intensity, sky: skyFill.intensity, cove: cove.material.color.clone() };
 }
 
@@ -1397,6 +1435,9 @@ function frame(now) {
       cam.yaw = cam.tYaw = -0.6 + 1.2 * (0.5 - 0.5 * Math.cos(u * Math.PI * 2));
     }
     placeCamera();
+    updateBrowseLook(now);
+    if (pkOrient(dt)) camMoving = true; // the quick menu's 3D group turns with your view (ui.js)
+    updateWindowDisplays(dt, now);
 
     const point = S.mode === "point";
     source.visible = beam.visible = sourceGlow.visible = point;
@@ -1507,6 +1548,266 @@ function frame(now) {
   }
 }
 
+// ---------------------------------------------------------------- window mode: one song per window pane
+// In the "window" browse mode (ui.js browseMode) each glass pane between two mullions shows one song:
+// its generated cover across the whole pane, the title and artist on it, and a small playing indicator
+// on the song that plays. The surfaces sit just inside the real glass, in each pane's own position and
+// turn, so they keep their perspective when the camera moves, and the chair and lamps occlude them.
+// The lake behind dims while they show. Songs map onto panes around winOffset, anchored on winAnchor
+// (the pane in front of you when the mode opened); browsing shifts the songs, the frames stay put.
+// World metres: x right, y up, z towards the room-view camera. A pane at angle a sits at
+// (r sin a, y, -r cos a), turned -a about y, its face towards the room (same as the glass).
+// Tuning: WIN below (inset, brightness, dimming, timing, stagger).
+const WIN = {
+  inset: 0.05, trim: 0.08, h: 3.34, y: 1.76,       // inside the glass; clear of mullions and rails
+  dur: 0.45, fade: 0.14, stagger: 0.085,           // mode transition (s), song swap fade (s), pane stagger
+  bright: 1.08, dim: 0.46, glass: 0.93, glassDim: 0.8, // playing / other panes, and how opaque (glass shows through)
+  sky: [0.56, 0.58, 0.68],                         // the lake view's tint while the panes show songs
+};
+let wd = null, winK = 0, winGrab = null;
+// Compact -> window: the songs are fired out of the focused cover in the picker, one quick shot per
+// pane (nearest the anchor first), each trailing a thin light streak. A shot flies fast and eases in,
+// turns from facing you to the pane's angle, grows to the pane's size and lands with a soft flash, and
+// only then does that pane show its song. The muzzle stays where the cover was on screen while the
+// camera turns to the window framing (it is kept in camera space). Reduced motion: no shots, a fade.
+const FIRE = {
+  gap: 55, flight: 340,      // ms between shots / ms in the air
+  depth: 1.4,                // m in front of the camera where the shots leave (the cover)
+  arc: 0.18,                 // m the path bows upward
+  trail: 110, trailW: 0.03,  // ms of path the streak covers / its width (m)
+  land: 120, flash: 300,     // ms for a pane to fill once hit / ms of the landing glow
+  flashGain: 0.6,            // how much brighter a pane is as its shot lands
+};
+let fire = null;
+const winEase = (x) => { x = clamp(x, 0, 1); return x * x * (3 - 2 * x); };
+function winFit(g, text, max) {
+  let t = String(text || "");
+  if (g.measureText(t).width <= max) return t;
+  while (t.length > 1 && g.measureText(`${t}…`).width > max) t = t.slice(0, -1);
+  return `${t}…`;
+}
+// The pane in front of you (the camera looks along angle -yaw; its resting yaw, even mid-move).
+function frontPane() {
+  if (!three || !three.panes || !three.panes.length) return 3;
+  const look = -cam.tYaw / DEG;
+  let best = 0;
+  three.panes.forEach((p, i) => { if (Math.abs(p.mid - look) < Math.abs(three.panes[best].mid - look)) best = i; });
+  return best;
+}
+// The first and last pane whose centre is on screen from a browse pose (clear of the side panel).
+function panesInView(mode) {
+  const pose = browsePose(mode);
+  if (!three || !three.panes || !pose) return null;
+  const keep = { yaw: cam.yaw, lift: cam.lift, zoom: cam.zoom, k: cam.k }, v = new three.T.Vector3(), seen = [];
+  Object.assign(cam, { yaw: pose.yaw, lift: pose.lift, zoom: pose.zoom, k: 0 }); placeCamera(); three.camera.updateMatrixWorld();
+  three.panes.forEach((p, i) => { v.set(p.r * Math.sin(p.mid * DEG), WIN.y, -p.r * Math.cos(p.mid * DEG)).project(three.camera); if (v.x > -0.82 && v.x < 0.7 && v.z < 1) seen.push(i); });
+  Object.assign(cam, keep); placeCamera(); three.camera.updateMatrixWorld();
+  return seen.length ? [seen[0], seen[seen.length - 1]] : null;
+}
+function ensureWindowDisplays() {
+  if (wd && wd.scene === three.scene) return wd; // (rebuilt after a GPU reset)
+  const { T, scene } = three;
+  const group = new T.Group(); group.visible = false; scene.add(group);
+  const panes = three.panes.map((p, i) => {
+    const r = p.r - WIN.inset, w = p.w - WIN.trim;
+    const mat = new T.MeshBasicMaterial({ transparent: true, opacity: 0, depthWrite: false, toneMapped: false });
+    const mesh = new T.Mesh(new T.PlaneGeometry(w, WIN.h), mat);
+    mesh.position.set(r * Math.sin(p.mid * DEG), WIN.y, -r * Math.cos(p.mid * DEG));
+    mesh.rotation.y = -p.mid * DEG; mesh.renderOrder = 3; mesh.visible = false; mesh.userData.pane = i;
+    group.add(mesh);
+    return { mesh, mat, w, cur: -1, want: -1, alpha: 0, key: null };
+  });
+  // The playing indicator: four small bars, moved onto the playing song's pane, above its title.
+  const eq = new T.Group(), barMat = new T.MeshBasicMaterial({ color: new T.Color("#dfe7ff"), transparent: true, opacity: 0, depthWrite: false, toneMapped: false });
+  const barGeo = new T.PlaneGeometry(0.036, 0.2); barGeo.translate(0, 0.1, 0);
+  const bars = [0, 1, 2, 3].map((j) => { const b = new T.Mesh(barGeo, barMat); b.position.set((j - 1.5) * 0.07, 0, 0.002); b.renderOrder = 4; eq.add(b); return b; });
+  eq.position.set(0, WIN.h / 2 - WIN.h * 0.66, 0.001);
+  // Shot pool: a cover (the pane's own picture) and its streak, one pair per pane.
+  const tcv = document.createElement("canvas"); tcv.width = 128; tcv.height = 16;
+  const tg = tcv.getContext("2d"), grad = tg.createLinearGradient(0, 0, 128, 0);
+  grad.addColorStop(0, "rgba(215,226,255,0)"); grad.addColorStop(1, "rgba(215,226,255,1)");
+  tg.fillStyle = grad; tg.fillRect(0, 0, 128, 16);
+  const vg = tg.createLinearGradient(0, 0, 0, 16); vg.addColorStop(0, "rgba(0,0,0,1)"); vg.addColorStop(0.5, "rgba(0,0,0,0)"); vg.addColorStop(1, "rgba(0,0,0,1)");
+  tg.globalCompositeOperation = "destination-out"; tg.fillStyle = vg; tg.fillRect(0, 0, 128, 16);
+  const trailTex = new T.CanvasTexture(tcv);
+  const shots = panes.map(() => {
+    const cover = new T.Mesh(new T.PlaneGeometry(1, 1), new T.MeshBasicMaterial({ transparent: true, depthWrite: false, toneMapped: false }));
+    const trail = new T.Mesh(new T.PlaneGeometry(1, 1), new T.MeshBasicMaterial({ map: trailTex, transparent: true, opacity: 0, depthWrite: false, blending: T.AdditiveBlending, toneMapped: false }));
+    cover.renderOrder = 6; trail.renderOrder = 5; cover.visible = trail.visible = false; cover.frustumCulled = trail.frustumCulled = false;
+    scene.add(cover, trail);
+    return { cover, trail };
+  });
+  wd = { scene, group, panes, eq, bars, barMat, tex: new Map(), hits: [], shots };
+  if (document.fonts) document.fonts.ready.then(() => { if (!wd) return; for (const t of wd.tex.values()) t.dispose(); wd.tex.clear(); wd.panes.forEach((p) => (p.key = null)); }).catch(() => {});
+  return wd;
+}
+// ui.js calls this as window mode opens: clientX/Y and size (px) of the focused cover in the picker.
+function fireToWindows(cx, cy, size) {
+  stopFire();
+  if (reduced || !three || !three.panes) { fire = null; return; }
+  const s = ensureWindowDisplays(), q = S.queue, n = q ? q.songs.length : 0, { T, camera } = three;
+  const rect = $("gl").getBoundingClientRect();
+  if (!rect.width) return;
+  camera.updateMatrixWorld();
+  three.raycaster.setFromCamera({ x: ((cx - rect.left) / rect.width) * 2 - 1, y: -((cy - rect.top) / rect.height) * 2 + 1 }, camera);
+  const ray = three.raycaster.ray, fwd = camera.getWorldDirection(new T.Vector3());
+  const world = ray.at(FIRE.depth / Math.max(0.3, ray.direction.dot(fwd)), new T.Vector3());
+  const viewH = 2 * FIRE.depth * Math.tan((camera.fov * DEG) / 2);
+  const order = s.panes.map((pn, i) => i).filter((i) => { const idx = winOffset + (i - winAnchor); return idx >= 0 && idx < n; })
+    .sort((a, b) => Math.abs(a - winAnchor) - Math.abs(b - winAnchor) || a - b);
+  s.offset = winOffset; s.queue = pkList;
+  fire = { t0: performance.now(), local: camera.worldToLocal(world.clone()), size: (size / rect.height) * viewH, shots: new Map() };
+  order.forEach((i, k) => {
+    const pn = s.panes[i], song = q.songs[winOffset + (i - winAnchor)];
+    pn.cur = pn.want = winOffset + (i - winAnchor); pn.alpha = 1;
+    pn.mat.map = paneTexture(song, pn.w); pn.mat.needsUpdate = true; pn.key = `${song.title}\u0001${song.artist}`;
+    const shot = s.shots[i]; shot.cover.material.map = pn.mat.map; shot.cover.material.needsUpdate = true;
+    fire.shots.set(i, { delay: k * FIRE.gap, landed: 0 });
+  });
+}
+function stopFire() {
+  if (wd) wd.shots.forEach((sh) => { sh.cover.visible = sh.trail.visible = false; });
+  fire = null;
+}
+const fireV = {};
+// Move the shots in flight; returns true while any is still flying or glowing.
+function updateFire(now) {
+  if (!fire) return false;
+  const { T, camera } = three, s = wd;
+  if (!fireV.a) Object.assign(fireV, { a: new T.Vector3(), b: new T.Vector3(), c: new T.Vector3(), d: new T.Vector3(), y: new T.Vector3(), cam: new T.Vector3(), o: new T.Vector3(), m: new T.Matrix4() });
+  camera.updateMatrixWorld();
+  const origin = camera.localToWorld(fireV.o.copy(fire.local)), camPos = camera.getWorldPosition(fireV.cam);
+  const at = (i, t, out) => { // where a shot is t ms after it left
+    const target = s.panes[i].mesh.position, e = 1 - Math.pow(1 - clamp(t / FIRE.flight, 0, 1), 3);
+    out.copy(origin).lerp(target, e);
+    out.y += FIRE.arc * Math.sin(Math.PI * e);
+    return out;
+  };
+  let live = false;
+  for (const [i, f] of fire.shots) {
+    const t = now - fire.t0 - f.delay, { cover, trail } = s.shots[i], pn = s.panes[i];
+    if (t < 0) { cover.visible = trail.visible = false; live = true; continue; }
+    if (t >= FIRE.flight) {
+      if (!f.landed) f.landed = fire.t0 + f.delay + FIRE.flight;
+      cover.visible = trail.visible = false;
+      if (now - f.landed < FIRE.flash) live = true;
+      continue;
+    }
+    live = true;
+    const u = t / FIRE.flight, e = 1 - Math.pow(1 - u, 3);
+    at(i, t, cover.position);
+    cover.quaternion.copy(camera.quaternion).slerp(pn.mesh.quaternion, e);
+    const w0 = fire.size * 0.8, h0 = (w0 * WIN.h) / pn.w; // the pane's own proportions from the start
+    const g = Math.pow(e, 3); // stays cover-sized in flight, opens up to the pane as it arrives
+    cover.scale.set(w0 + (pn.w - w0) * g, h0 + (WIN.h - h0) * g, 1);
+    cover.visible = true;
+    // The streak: from where the shot was a moment ago to where it is now, turned to face the camera.
+    const head = cover.position, tail = at(i, Math.max(0, t - FIRE.trail), fireV.a), dir = fireV.b.subVectors(head, tail), len = dir.length();
+    if (len < 0.01) { trail.visible = false; continue; }
+    dir.divideScalar(len);
+    const mid = fireV.c.addVectors(head, tail).multiplyScalar(0.5), z = fireV.d.subVectors(camPos, mid);
+    z.addScaledVector(dir, -z.dot(dir)).normalize();
+    fireV.y.crossVectors(z, dir);
+    fireV.m.makeBasis(dir, fireV.y, z); trail.quaternion.setFromRotationMatrix(fireV.m);
+    trail.position.copy(mid); trail.scale.set(len, FIRE.trailW * (1 - 0.6 * u), 1);
+    trail.material.opacity = 0.75 * (1 - u * u); trail.visible = true;
+  }
+  if (!live) stopFire();
+  return live;
+}
+// One pane's picture: the song's generated cover filling the pane, its title and artist on the glass.
+function paneTexture(song, w) {
+  const key = `${song.title}\u0001${song.artist}`;
+  let t = wd.tex.get(key);
+  if (t) { wd.tex.delete(key); wd.tex.set(key, t); return t; } // most recently used last
+  const { T } = three, cv = document.createElement("canvas");
+  cv.width = 432; cv.height = Math.round((432 * WIN.h) / w);
+  paintArt(ListenBridge.hueOf(song.title), false, cv, artVariant(song.title));
+  const g = cv.getContext("2d"), W = cv.width, H = cv.height;
+  const shade = g.createLinearGradient(0, H * 0.52, 0, H);
+  shade.addColorStop(0, "rgba(4,7,16,0)"); shade.addColorStop(1, "rgba(4,7,16,0.7)");
+  g.fillStyle = shade; g.fillRect(0, H * 0.52, W, H * 0.48);
+  const font = '"Outfit", "PingFang SC", "Hiragino Sans", "Microsoft YaHei", "Helvetica Neue", sans-serif';
+  g.textAlign = "center"; g.textBaseline = "alphabetic"; g.shadowColor = "rgba(0,0,0,0.35)"; g.shadowBlur = 8;
+  g.fillStyle = "rgba(240,243,250,0.96)"; g.font = `500 ${Math.round(W * 0.118)}px ${font}`;
+  g.fillText(winFit(g, song.title, W * 0.86), W / 2, H * 0.75);
+  g.fillStyle = "rgba(226,232,246,0.66)"; g.font = `400 ${Math.round(W * 0.07)}px ${font}`;
+  g.fillText(winFit(g, song.artist, W * 0.86), W / 2, H * 0.8);
+  t = new T.CanvasTexture(cv); t.encoding = T.sRGBEncoding; t.anisotropy = three.renderer.capabilities.getMaxAnisotropy();
+  wd.tex.set(key, t);
+  while (wd.tex.size > 24) { const [k, old] = wd.tex.entries().next().value; old.dispose(); wd.tex.delete(k); }
+  return t;
+}
+// Every frame (room loop): reveal/hide with a stagger outwards from the anchor pane, swap songs when
+// browsing (fade out, new picture, fade in), emphasise the playing song, animate its indicator.
+function updateWindowDisplays(dt, now) {
+  if (!three || !three.panes) return;
+  const want = browseMode === "window" ? 1 : 0;
+  if (!wd && !want) return;
+  const s = ensureWindowDisplays();
+  if ((!want || winOffset !== s.offset || pkList !== s.queue) && fire) stopFire();
+  s.offset = winOffset; s.queue = pkList; // a changed list cancels in-flight artwork
+  // // left window mode mid-volley
+  winK = clamp(winK + ((want ? 1 : -1) * dt) / (reduced ? 0.12 : WIN.dur), 0, 1);
+  let busy = winK !== want;
+  if (updateFire(now)) busy = true;
+  const k = winEase(winK);
+  three.sky.material.color.setRGB(1 + (WIN.sky[0] - 1) * k, 1 + (WIN.sky[1] - 1) * k, 1 + (WIN.sky[2] - 1) * k);
+  s.group.visible = winK > 0;
+  s.hits.length = 0;
+  if (!s.group.visible) { s.hits.length = 0; s.eq.visible = false; if (busy) camMoving = true; return; }
+  const q = S.queue, n = q ? q.songs.length : 0, playing = q ? q.playing : -1;
+  let playingPane = null;
+  s.panes.forEach((p, i) => {
+    const idx = winOffset + (i - winAnchor);
+    p.want = idx >= 0 && idx < n ? idx : -1;
+    if (p.cur >= n) { p.cur = -1; p.key = null; p.alpha = 0; }
+    if (p.cur >= 0) {
+      const song = q.songs[p.cur];
+      if (p.key !== `${song.title}\u0001${song.artist}`) p.key = null;
+    }
+    if (p.cur !== p.want) {
+      p.alpha = Math.max(0, p.alpha - dt / WIN.fade); busy = true;
+      if (p.alpha === 0 || p.cur < 0) { p.cur = p.want; p.key = null; }
+    } else if (p.cur >= 0 && p.alpha < 1) { p.alpha = Math.min(1, p.alpha + dt / (WIN.fade * 1.4)); busy = true; }
+    if (p.cur >= 0 && !p.key) { const song = q.songs[p.cur]; p.mat.map = paneTexture(song, p.w); p.mat.needsUpdate = true; p.key = `${song.title}\u0001${song.artist}`; }
+    const shot = fire && fire.shots.get(i);
+    let reveal = winEase(winK * (1 + WIN.stagger * 6) - Math.abs(i - winAnchor) * WIN.stagger), glow = 0;
+    if (fire) { // during the volley a pane fills only once its shot has landed
+      reveal = shot && shot.landed ? winEase((now - shot.landed) / FIRE.land) : 0;
+      glow = shot && shot.landed ? Math.max(0, 1 - (now - shot.landed) / FIRE.flash) : 0;
+    }
+    const on = p.cur >= 0 && p.cur === playing;
+    p.mat.color.setScalar((on ? WIN.bright : WIN.dim) * (1 + FIRE.flashGain * glow * glow));
+    p.mat.opacity = p.cur >= 0 && p.mat.map ? (on ? WIN.glass : WIN.glassDim) * reveal * p.alpha : 0;
+    p.mesh.visible = p.mat.opacity > 0.004;
+    if (p.mesh.visible && reveal > 0.9) s.hits.push(p.mesh);
+    if (on && p.mesh.visible) playingPane = p;
+  });
+  if (playingPane && s.eq.parent !== playingPane.mesh) playingPane.mesh.add(s.eq);
+  s.eq.visible = !!playingPane;
+  s.barMat.opacity = playingPane ? playingPane.mat.opacity : 0;
+  const moving = !!playingPane && S.playing;
+  s.bars.forEach((b, j) => { b.scale.y = moving ? 0.35 + 0.65 * Math.abs(Math.sin(now * 0.0055 + j * 1.6)) : [0.5, 0.85, 0.6, 0.95][j]; });
+  if (busy || moving) camMoving = true;
+}
+// Which song's pane is under the finger, or null.
+function windowHitTest(x, y) {
+  if (!wd || winK < 0.9 || !wd.hits.length) return null;
+  three.raycaster.setFromCamera(ndc(x, y), three.camera);
+  const hit = three.raycaster.intersectObjects(wd.hits, false)[0];
+  if (!hit) return null;
+  // Respect the same opaque furniture and frames that occlude the printed faces.
+  const visible = (o) => { for (; o; o = o.parent) if (!o.visible) return false; return true; };
+  const blocked = three.raycaster.intersectObjects(three.scene.children, true).some((h) =>
+    h.distance < hit.distance - 0.01 && h.object.isMesh && visible(h.object) && h.object.material &&
+    h.object.material.visible !== false &&
+    h.object.material.depthWrite !== false && h.object.material.opacity > 0.5);
+  if (blocked) return null;
+  const p = wd.panes[hit.object.userData.pane];
+  return p && p.cur >= 0 ? { song: p.cur } : null;
+}
+
 // ---------------------------------------------------------------- input
 let dragging = null, downAt = null, moved = 0, startCam = null, pinch = null, vel = null, lastTap = null;
 let input = null, glRect = null, grab = [0, 0]; // the latest finger position, applied once per frame
@@ -1525,12 +1826,13 @@ function applyInput(now) {
   input.fresh = false; input.used = performance.now();
   if (dragging === "pinch" && pointers.size === 2) {
     const [a, b] = [...pointers.values()];
-    cam.tZoom = clamp((pinch.z * pinch.d) / Math.max(20, Math.hypot(a[0] - b[0], a[1] - b[1])), 0.82, 1.25);
+    if (!camLocked()) cam.tZoom = clamp((pinch.z * pinch.d) / Math.max(20, Math.hypot(a[0] - b[0], a[1] - b[1])), 0.82, 1.25);
   } else if (dragging === "speaker") moveSpeakerTo(input.x + grab[0], input.y + grab[1]);
   else if (dragging === "source") moveSourceTo(input.x + grab[0], input.y + grab[1], 0);
-  else if (dragging === "look" && downAt && moved > 4 && cam.tK === 0) {
-    cam.tYaw = band(startCam.yaw - (input.x - downAt[0]) * 0.0042, YAW_LIM[0], YAW_LIM[1], 0.12);
-    cam.tLift = band(startCam.lift + (input.y - downAt[1]) * 0.0026, LIFT_LIM[0], LIFT_LIM[1], 0.07);
+  else if (dragging === "look" && downAt && moved > 4 && cam.tK === 0 && (!camLocked() || (browseMode === "compact" && BROWSE_LOOK.on))) {
+    const lim = lookLimits(); lookBackAt = 0;
+    cam.tYaw = band(startCam.yaw - (input.x - downAt[0]) * 0.0042, lim.y[0], lim.y[1], lim.gy);
+    cam.tLift = band(startCam.lift + (input.y - downAt[1]) * 0.0026, lim.l[0], lim.l[1], lim.gl);
     // smoothed velocity, for the glide after you let go
     if (vel && now > vel.t) { const k = 1 / (now - vel.t); vel = { t: now, yaw: 0.7 * (cam.tYaw - vel.y0) * k + 0.3 * vel.yaw, lift: 0.7 * (cam.tLift - vel.l0) * k + 0.3 * vel.lift, y0: cam.tYaw, l0: cam.tLift }; }
     else if (!vel) vel = { t: now, yaw: 0, lift: 0, y0: cam.tYaw, l0: cam.tLift };
@@ -1573,8 +1875,8 @@ function bindInput() {
     if (pointers.size === 2) { speakerDraft = null; const [a, b] = [...pointers.values()]; pinch = { d: Math.hypot(a[0] - b[0], a[1] - b[1]), z: cam.tZoom }; dragging = "pinch"; return; }
     downAt = [x, y]; moved = 0; startCam = { yaw: cam.tYaw, lift: cam.tLift }; vel = null; fling = null;
     dragging = "look";
-    if (canMove()) { three.raycaster.setFromCamera(ndc(x, y), three.camera); if (three.raycaster.intersectObject(three.hit).length) dragging = "source"; }
-    if (canEditSpeakers() && S.screen === "room") {
+    if (!camLocked() && canMove()) { three.raycaster.setFromCamera(ndc(x, y), three.camera); if (three.raycaster.intersectObject(three.hit).length) dragging = "source"; }
+    if (!camLocked() && canEditSpeakers() && S.screen === "room") {
       three.raycaster.setFromCamera(ndc(x, y), three.camera);
       const hit = three.raycaster.intersectObjects(three.speakerFx.filter(s => s.enabled).map(s => s.cab), true)[0];
       if (hit) {
@@ -1588,6 +1890,8 @@ function bindInput() {
         }
       }
     }
+    if (browseMode === "window") { const hit = windowHitTest(x, y); dragging = "win"; winGrab = { song: hit ? hit.song : -1, last: x }; }
+    else if (camLocked()) dragging = "look";
     if (dragging === "source") {
       // Drag by the sound's floor point (the foot of its dotted line), kept at the
       // same offset from the finger. The floor is always below the camera, so the
@@ -1604,6 +1908,7 @@ function bindInput() {
     pointers.set(e.pointerId, [x, y]);
     if (downAt) moved = Math.max(moved, Math.hypot(x - downAt[0], y - downAt[1]));
     input = { x, y, ts: e.timeStamp, fresh: true };
+    if (dragging === "win" && moved > 8 && Math.abs(x - winGrab.last) >= 90) { winBrowse(x < winGrab.last ? 1 : -1); winGrab.last = x; } // drag the songs along the windows
     if (dragging) perf.touchMoves++;
   });
   const end = (e) => {
@@ -1612,28 +1917,33 @@ function bindInput() {
     if (!dragging) return;
     const [x, y] = local(e);
     applyInput(performance.now()); // a move that arrived after the last frame still counts
-    if (dragging === "look") { cam.tYaw = clamp(cam.tYaw, YAW_LIM[0], YAW_LIM[1]); cam.tLift = clamp(cam.tLift, LIFT_LIM[0], LIFT_LIM[1]); } // spring back inside the limits
+    if (dragging === "look") { // spring back inside the limits
+      const lim = lookLimits(); cam.tYaw = clamp(cam.tYaw, lim.y[0], lim.y[1]); cam.tLift = clamp(cam.tLift, lim.l[0], lim.l[1]);
+      if (browseMode === "compact" && moved > 4) lookBackAt = performance.now() + BROWSE_LOOK.back * 1000; // then back to the picker's framing
+    }
     if (dragging === "speaker") {
       if (e.type === "pointercancel" || !speakerDraft) { speakerDraft = null; renderSpeakerPlace(); }
       else if (moved < 5) { const index = speakerDraft.index; speakerDraft = null; speakerIntent("speakerSelect", { index }); }
       else commitSpeaker();
     }
     else if (dragging === "source") { snapDirection(); commitPlace(); }
+    else if (dragging === "win") { if (moved < 5 && e.type !== "pointercancel") winTap(winGrab.song); winGrab = null; }
     else if (moved < 5 && canMove() && S.panel === "place" && moveSourceTo(x, y, 0)) { snapDirection(); commitPlace(); }
     else if (dragging === "look") {
       if (moved < 5) {
         if (S.panel && S.panel !== "place") closePop(); // a tap on the room closes Layout, Motion and the room card
+        // (the song picker stays open: you look around it by dragging the room; double-tap = its front view)
         const t = performance.now();
         if (lastTap && t - lastTap.t < 330 && Math.hypot(x - lastTap.x, y - lastTap.y) < 30 && S.panel !== "place") { resetView(); lastTap = null; } // double-tap: back to the normal view
         else lastTap = { t, x, y };
-      } else if (!reduced && vel && performance.now() - vel.t < 90) fling = { yaw: vel.yaw * 0.35, lift: vel.lift * 0.35 };
+      } else if (!reduced && !camLocked() && vel && performance.now() - vel.t < 90) fling = { yaw: vel.yaw * 0.35, lift: vel.lift * 0.35 };
     }
     dragging = null; downAt = null; glRect = null; input = null;
     gl.classList.remove("dragging");
   };
   gl.addEventListener("pointerup", end);
   gl.addEventListener("pointercancel", end);
-  gl.addEventListener("wheel", (e) => { e.preventDefault(); cam.tZoom = clamp(cam.tZoom * Math.exp(e.deltaY * 0.001), 0.82, 1.25); }, { passive: false });
+  gl.addEventListener("wheel", (e) => { e.preventDefault(); if (browseMode === "window") { winWheel(Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY); return; } if (camLocked()) return; cam.tZoom = clamp(cam.tZoom * Math.exp(e.deltaY * 0.001), 0.82, 1.25); }, { passive: false });
   gl.addEventListener("dblclick", resetView);
 }
 

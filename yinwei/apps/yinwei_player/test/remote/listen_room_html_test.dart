@@ -33,6 +33,16 @@ void main() {
     expect(positions, everyElement(greaterThanOrEqualTo(0)));
     expect([...positions]..sort(), positions);
 
+    for (final id in ['pk', 'pk-group', 'pk-bg-a', 'pk-bg-b', 'pk-expand',
+      'pk-bar', 'pk-bar-btn', 'win-list']) {
+      expect(html, contains('id="$id"'));
+    }
+    expect(html, contains('role="button" tabindex="0"'));
+    for (final retired in ['cover-trigger', 'queue-stack.js', 'ListenQueueStack',
+      'q-pedestal', 'id="list-btn"']) {
+      expect(html, isNot(contains(retired)));
+    }
+
     // The review stand-in never ships, and no inline script is cut short.
     // (ui.js names dev/dev-host.js only to load it with ?dev, which the app never adds.)
     expect(html, isNot(contains('Listen Room · P1 review')));

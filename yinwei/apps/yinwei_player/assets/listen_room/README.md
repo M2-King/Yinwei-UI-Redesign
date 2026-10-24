@@ -20,6 +20,23 @@ offline page for the app's WebView. Plan: `docs/IMPLEMENTATION_IPAD_LISTEN_ROOM.
 
 The page is a view. The app (Dart) owns all state.
 
+Browsing has one transient state: album ↔ compact ↔ window. Tap, hold (450 ms),
+or press Enter/Space on the album cover to open the compact picker. Its persistent
+dark cards share a CSS 3D group and turn with bounded room look-around. Scrolling,
+dragging and arrow keys browse without playing; choosing a song sends `queuePlay {i}`.
+The app's queue remains authoritative for playback. The mode pill and Escape step
+back through compact and return focus to the cover on close.
+
+Expanding fires the song covers onto real Three.js window panes, nearest first,
+with streaks and landing glows. Furniture occludes the panes; tap, drag or wheel
+along the windows to select or browse. A hidden DOM list provides keyboard and
+screen-reader access. Reduced motion uses a plain fade and snaps the camera.
+Zoom, fling and top view lock while browsing; the previous camera targets return
+on close. Scene coordinates remain display metres (X right, Y up, -Z toward the
+windows); browsing does not change engine coordinates or spatial state.
+The former prompt-10 pedestal stack, floor anchoring and table-hiding presentation
+have been retired, including `queue-stack.js`.
+
 - **App → page:** `YinweiListen.apply(state)` with the version-1 fields in `bridge.js` (`FIELDS`),
   at most 10 times a second. Also `toast(text)`, `suspend()` / `resume()`, `setQuality("auto" | "full" | "light")`,
   and, for developer diagnostics only, `devOverlay(on)`, `speedReport()` and `speedTest()`.

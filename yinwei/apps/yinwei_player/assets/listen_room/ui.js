@@ -28,7 +28,8 @@ const S = {
   az: 0, el: 0, dist: 2, track: null, volume: 1, level: 0, stats: { received: 0, bufferMs: 0, underruns: 0 }, opens: null,
   pending: false, progress: null, pos: 0, dur: 0, seekable: false,
   quality: "high", stream: null, opus: false, // sound quality chosen / sent now / Opus possible
-  canClose: true, updates: false, appBuild: null, music: false, // the room as the whole app: no way back; updates checked here
+  canClose: true, updates: false, appBuild: null, music: false, queue: null, // the room as the whole app: no way back; updates checked here. queue: the list the current song plays from
+
   screen: "room", view: "3d", panel: null,
   speakers: [], selectedSpeakerIndex: 0, arrayRevision: 0, maxSpeakers: 8, speakerControl: false, matrixLinked: false, matrixSpread: 1,
 };
@@ -109,14 +110,67 @@ const otherHasControl = () => S.control !== "mine" || S.notice === "taken";
 
 // ---------------------------------------------------------------- cover art
 // No artwork comes from the laptop yet: a calm moon-over-water cover, tinted per song.
-function paintArt(hue, empty) {
-  const cv = $("art"), c = cv.getContext("2d"), w = cv.width, h = cv.height;
+// Which generated scene a song's cover uses (the laptop sends no artwork).
+const artVariant = (title) => { let h = 7; for (const ch of String(title || "")) h = (h * 33 + ch.codePointAt(0)) >>> 0; return h % 3; };
+// Variant 1: crescent over soft clouds. Variant 2: mountains, a lake and shore lights.
+function paintArtScene(c, w, h, hue, variant) {
+  let seed = hue * 7 + variant * 131 + 1;
+  const rnd = () => ((seed = (seed * 9301 + 49297) % 233280) / 233280);
+  const stars = (n, maxY) => { for (let i = 0; i < n; i++) { const s = w * (0.004 + rnd() * 0.006); c.fillStyle = `rgba(255,255,255,${(0.2 + rnd() * 0.55).toFixed(2)})`; c.fillRect(rnd() * w, rnd() * h * maxY, s, s); } };
+  if (variant === 1) {
+    const sky = c.createLinearGradient(0, 0, 0, h);
+    sky.addColorStop(0, `hsl(${hue} 50% 8%)`); sky.addColorStop(0.7, `hsl(${hue + 8} 42% 26%)`); sky.addColorStop(1, `hsl(${hue + 14} 38% 36%)`);
+    c.fillStyle = sky; c.fillRect(0, 0, w, h);
+    stars(30, 0.6);
+    const mx = w * 0.56, my = h * 0.36, mr = w * 0.15;
+    const glow = c.createRadialGradient(mx, my, 0, mx, my, mr * 3.2);
+    glow.addColorStop(0, "rgba(255,240,222,0.32)"); glow.addColorStop(1, "rgba(255,240,222,0)");
+    c.fillStyle = glow; c.fillRect(0, 0, w, h);
+    const m = document.createElement("canvas"); m.width = m.height = Math.ceil(mr * 2 + 4);
+    const mc = m.getContext("2d"), o = m.width / 2;
+    mc.fillStyle = "#fff6e8"; mc.beginPath(); mc.arc(o, o, mr, 0, Math.PI * 2); mc.fill();
+    mc.globalCompositeOperation = "destination-out"; mc.beginPath(); mc.arc(o + mr * 0.45, o - mr * 0.25, mr * 0.9, 0, Math.PI * 2); mc.fill();
+    c.drawImage(m, mx - o, my - o);
+    for (let i = 0; i < 9; i++) {
+      const cx = rnd() * w, cy = h * (0.7 + rnd() * 0.28), rx = w * (0.2 + rnd() * 0.25), ry = h * (0.07 + rnd() * 0.07);
+      const g = c.createRadialGradient(cx, cy, 0, cx, cy, rx);
+      g.addColorStop(0, `rgba(222,230,250,${(0.3 + rnd() * 0.25).toFixed(2)})`); g.addColorStop(1, "rgba(222,230,250,0)");
+      c.fillStyle = g; c.beginPath(); c.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2); c.fill();
+    }
+    return true;
+  }
+  if (variant === 2) {
+    const sky = c.createLinearGradient(0, 0, 0, h * 0.6);
+    sky.addColorStop(0, `hsl(${hue} 52% 9%)`); sky.addColorStop(0.75, `hsl(${hue + 12} 40% 30%)`); sky.addColorStop(1, "hsl(328 32% 44%)");
+    c.fillStyle = sky; c.fillRect(0, 0, w, h * 0.6);
+    stars(40, 0.45);
+    const ridge = (top, amp, color) => {
+      c.fillStyle = color; c.beginPath(); c.moveTo(0, h * 0.6);
+      for (let x = 0; x <= w + 1; x += w / 12) c.lineTo(x, h * (top - amp * (0.4 + rnd() * 0.6)));
+      c.lineTo(w, h * 0.6); c.closePath(); c.fill();
+    };
+    ridge(0.5, 0.14, `hsl(${hue} 30% 20%)`); ridge(0.58, 0.1, `hsl(${hue} 35% 11%)`);
+    const lake = c.createLinearGradient(0, h * 0.6, 0, h);
+    lake.addColorStop(0, `hsl(${hue + 6} 36% 26%)`); lake.addColorStop(1, `hsl(${hue} 50% 6%)`);
+    c.fillStyle = lake; c.fillRect(0, h * 0.6, w, h * 0.4);
+    for (let i = 0; i < 14; i++) {
+      const x = rnd() * w, s = w * 0.008;
+      c.fillStyle = "rgba(255,206,150,0.95)"; c.fillRect(x, h * 0.595, s, s);
+      c.fillStyle = "rgba(255,206,150,0.25)"; c.fillRect(x, h * 0.61, s, h * (0.04 + rnd() * 0.08));
+    }
+    return true;
+  }
+  return false;
+}
+function paintArt(hue, empty, cv = $("art"), variant = 0) {
+  const c = cv.getContext("2d"), w = cv.width, h = cv.height;
   if (empty) { // nothing playing: a quiet, empty cover
     const g = c.createLinearGradient(0, 0, 0, h); g.addColorStop(0, "#151b2b"); g.addColorStop(1, "#0b0f19");
     c.fillStyle = g; c.fillRect(0, 0, w, h);
     c.strokeStyle = "rgba(200,215,255,0.18)"; c.lineWidth = 3; c.beginPath(); c.arc(w / 2, h / 2, w * 0.16, 0, Math.PI * 2); c.stroke();
     return;
   }
+  if (variant && paintArtScene(c, w, h, hue, variant)) return;
   const sky = c.createLinearGradient(0, 0, 0, h * 0.62);
   sky.addColorStop(0, `hsl(${hue} 45% 10%)`); sky.addColorStop(1, `hsl(${hue + 12} 42% 42%)`);
   c.fillStyle = sky; c.fillRect(0, 0, w, h * 0.62);
@@ -156,7 +210,7 @@ function render() {
   // Live songs come with a title only: the music app takes the artist line.
   const artist = t.artist || (S.track && S.track.title && !noApp ? S.source : "");
   setText($("artist"), artist); $("artist").classList.toggle("cjk", isCjk(artist));
-  once("art", [noApp, t.title], () => paintArt(ListenBridge.hueOf(t.title), noApp || !(S.track && S.track.title)));
+  once("art", [noApp, t.title], () => paintArt(ListenBridge.hueOf(t.title), noApp || !(S.track && S.track.title), $("art"), artVariant(t.title)));
   const sounding = S.live && S.playing && !isLost && !noApp;
   $("live-dot").classList.toggle("off", !sounding);
   setText($("live-text"), noApp ? "Live off · waiting for a music app" : S.live ? `${S.playing ? "Live" : "Paused"} · ${S.source} on ${S.laptop}` : opens ? "Live off · no music app open yet" : `Live off · ${S.source} on ${S.laptop}`);
@@ -242,6 +296,7 @@ function render() {
   setText($("d-stream"), { high: "Opus 320 kbps", max: "Opus 510 kbps", lossless: "48 kHz · lossless" }[S.stream] || "–");
   setText($("d-recv"), Number(S.stats.received || 0).toLocaleString());
   setText($("d-buffer"), S.stats.bufferMs ? `${Math.round(S.stats.bufferMs)} ms` : "–");
+  syncBrowse();
   if (S.panel) renderPop();
 }
 
@@ -270,6 +325,368 @@ function openPop(kind, viaKeyboard = false) {
   placePop();
   if (viaKeyboard) { const first = pop.querySelector("button:not(:disabled), input:not(:disabled)"); if (first) first.focus(); }
   if (kind === "place" && S.mode === "point" && firstPlace()) toast("Tip: tap the floor to move the sound there", 3200);
+}
+// ---------------------------------------------------------------- music browsing: album · compact · window
+// One stable state at a time: "album" (the player bar and its cover), "compact" (a clear floating song
+// picker: tap or hold the cover) and "window" (each window pane shows one song,
+// room.js). The song data is S.queue (the list the current song plays from). Covers are generated
+// (paintArt): the laptop sends no artwork. A mode change never touches playback; only choosing a song
+// plays one. Visuals follow the state with CSS transitions (picker) and eased values (room.js), so an
+// interrupted transition simply turns round from where it is.
+// Tuning: the --pk-* tokens in ui.css, PK / PK_TEXT here, WIN in room.js.
+const PK = {
+  holdMs: 450,                  // a deliberate long press on the cover
+  y: [0, 88, 150, 202],         // the focused row, then rows 1 / 2 / 3 away (px, Cover Flow)
+  s: [1, 0.78, 0.68, 0.6],      // their scale
+  o: [1, 0.86, 0.5, 0],         // and opacity (3 away: gone)
+  tilt: 16,                     // degrees of tilt per row away (2 at most)
+  dragStep: 46, wheelStep: 60,  // px per song when dragging / scrolling the picker
+  winWheel: 80,                 // wheel px per song along the windows
+  ms: reduced ? 0 : 460,        // mode transition length (must match --pk-t)
+};
+// The picker is one 3D group (#pk-group, preserve-3d inside #pk-list's perspective): the song cards
+// at different depths, the focused one forward, the others smaller and further back along the
+// curve, and a large dimmed artwork of the focused song well behind them. Looking around the
+// close-up room (dragging the room, room.js BROWSE_LOOK) turns the whole group with your view, about
+// its centre, so the layers show real perspective and parallax; the cards keep their places in it
+// and never turn on their own. Group space: CSS px, x right, y down, z towards you; yaw = rotateY
+// (+ turns the right side away, as when you drag right), pitch = rotateX (+ tips the top away).
+// Double-tap the room (or close and reopen) for the front view. Tuning: PK3, --pk3-* in ui.css.
+const PK3 = {
+  focusZ: 70, depth: [0, 70, 130, 180],   // px forward for the focused card / back for cards 1-3 away
+  yaw: 70, pitch: 15,                     // degrees at the end of the room's look range (BROWSE_LOOK)
+  follow: 6,                              // 1/s: how promptly the group turns after the view (frame-rate independent)
+  bgZ: -320,                              // px: the artwork behind the cards
+};
+let pkYaw = 0, pkPitch = 0, pkBgSong = null, pkBgTimer = 0;
+const PK_TEXT = {
+  compact: "快捷歌单", window: "窗景歌单", expand: "在窗上展开", collapse: "收起",
+  open: "Show the playlist", close: "Close the playlist", collapseLabel: "Collapse to the song picker", expandLabel: "Expand onto the windows",
+  empty: "Only the song playing now is visible. Play from a list in Yinwei to see the whole playlist here.",
+};
+const PK_SVG = {
+  close: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7l10 10M17 7L7 17" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>',
+  chevron: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 10l5 5 5-5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+};
+let browseMode = "album", modeAt = -1e9, pkFocus = 0, pkList = null, pkSync = "", pkWait = -1, pkHide = 0;
+let pkArt = null, pkDrag = null, pkSuppress = false, pkWheel = 0, pkK = 1;
+// The picker is drawn large: scaled so its rows and button fill most of the room's height (below the
+// mode pill), but never wider than about half the screen. Tuning: PK_FIT.
+const PK_FIT = { fillH: 0.88, maxW: 0.5, min: 1, max: 2.2, top: 68, bottom: 16, button: 214 + 44 };
+function pkFit() {
+  const pk = $("pk"), app = $("app"), cs = getComputedStyle(pk);
+  const row = parseFloat(cs.getPropertyValue("--pk-row")) || 96, width = parseFloat(cs.getPropertyValue("--pk-width")) || 276;
+  const above = PK.y[2] + (row * PK.s[2]) / 2, span = above + PK_FIT.button; // two rows above the focus ... the button below
+  const H = app.clientHeight, W = app.clientWidth, room = H - PK_FIT.top - PK_FIT.bottom;
+  pkK = clamp(Math.min((PK_FIT.fillH * room) / span, (PK_FIT.maxW * W) / width), PK_FIT.min, PK_FIT.max);
+  pk.style.transition = "none"; // the size applies at once (only the rows animate), so covers start exactly on the album cover
+  pk.style.setProperty("--pk-k", pkK.toFixed(3));
+  pk.style.top = `${(PK_FIT.top + (room - span * pkK) / 2 + above * pkK).toFixed(1)}px`; // the focused row's centre line
+  void pk.offsetWidth; pk.style.transition = "";
+}
+let winOffset = 0, winAnchor = 3, winWheelAcc = 0;
+const pkRows = new Map();
+const pkSongs = () => (S.queue && S.queue.songs.length ? S.queue.songs : null);
+const pkSig = () => { const q = S.queue; return q && q.songs.length ? JSON.stringify([q.title, q.songs]) : ""; };
+// Where the album cover sits while the player shows: the picker grows from it and folds back into it.
+function measureArt() {
+  const r = $("art").getBoundingClientRect();
+  if (r.width) pkArt = { x: r.left + r.width / 2, y: r.top + r.height / 2 - ($("app").classList.contains("browse") ? 24 : 0), w: r.width };
+}
+// The transform that lays a row's cover exactly over the album cover (rows scale around their cover).
+function pkCoverTransform() {
+  const list = $("pk-list").getBoundingClientRect(), cs = getComputedStyle($("pk"));
+  const pad = parseFloat(cs.getPropertyValue("--pk-pad")) || 10, cover = parseFloat(cs.getPropertyValue("--pk-cover")) || 76;
+  if (!pkArt || !list.width) return "translateY(0px) scale(0.6)";
+  const k = pkK, cx = list.left + (pad + cover / 2) * k, cy = list.top + list.height / 2; // the picker is scaled by k
+  return `translate(${((pkArt.x - cx) / k).toFixed(1)}px, ${((pkArt.y - cy) / k).toFixed(1)}px) scale(${(pkArt.w / (cover * k)).toFixed(3)})`;
+}
+// Cover Flow: d rows from the focused one.
+function pkFlow(d) {
+  const a = Math.min(Math.abs(d), 3), sg = Math.sign(d), z = d === 0 ? PK3.focusZ : -PK3.depth[a] - Math.max(0, Math.abs(d) - 3) * 40;
+  return `translate3d(0px, ${sg * (PK.y[a] + Math.max(0, Math.abs(d) - 3) * 40)}px, ${z}px) rotateX(${-sg * Math.min(a, 2) * PK.tilt}deg) scale(${PK.s[a]})`;
+}
+// Every frame (room.js): turn the group with the look-around (its target, eased like the camera).
+function pkOrient(dt) {
+  if (browseMode !== "compact" && !pkYaw && !pkPitch) return false;
+  let ty = 0, tp = 0;
+  if (browseMode === "compact" && BROWSE_LOOK.on) {
+    const pose = browsePose("compact"), lim = lookLimits(); // each side of the look range reaches the full turn
+    const side = (v, p, lo, hi) => (v >= p ? (v - p) / Math.max(1e-3, hi - p) : (v - p) / Math.max(1e-3, p - lo));
+    ty = clamp(-side(cam.tYaw, pose.yaw, lim.y[0], lim.y[1]), -1.1, 1.1) * PK3.yaw;
+    tp = clamp(-side(cam.tLift, pose.lift, lim.l[0], lim.l[1]), -1.1, 1.1) * PK3.pitch;
+  }
+  const f = reduced ? 1 : 1 - Math.exp(-dt * PK3.follow);
+  pkYaw += (ty - pkYaw) * f; pkPitch += (tp - pkPitch) * f;
+  const moving = Math.abs(ty - pkYaw) + Math.abs(tp - pkPitch) > 0.01;
+  if (!moving) { pkYaw = ty; pkPitch = tp; } // lands exactly: the front view is exact
+  $("pk-group").style.transform = `rotateX(${pkPitch.toFixed(3)}deg) rotateY(${pkYaw.toFixed(3)}deg)`;
+  return moving;
+}
+// The large artwork behind the cards: the focused song, crossfading between two canvases.
+function pkBackground() {
+  const songs = pkSongs();
+  if (!songs || pkBgSong === pkFocus) return;
+  pkBgSong = pkFocus;
+  const a = $("pk-bg-a"), b = $("pk-bg-b"), next = a.classList.contains("on") ? b : a, song = songs[pkFocus];
+  paintArt(ListenBridge.hueOf(song.title), false, next, artVariant(song.title));
+  next.classList.add("on"); (next === a ? b : a).classList.remove("on");
+}
+function pkRow(i, song) {
+  const el = document.createElement("button");
+  el.type = "button"; el.className = "pk-row needs-control"; el.dataset.i = i; el.setAttribute("role", "option");
+  el.setAttribute("aria-label", song.artist ? `${song.title}, ${song.artist}` : song.title);
+  const cv = document.createElement("canvas"); cv.className = "pk-cover"; cv.width = cv.height = 152; cv.setAttribute("aria-hidden", "true");
+  paintArt(ListenBridge.hueOf(song.title), false, cv, artVariant(song.title));
+  const meta = document.createElement("span"); meta.className = "pk-meta";
+  const b = document.createElement("b"); b.textContent = song.title; if (isCjk(song.title)) b.className = "cjk";
+  const sm = document.createElement("small"); sm.textContent = song.artist; if (isCjk(song.artist)) sm.className = "cjk";
+  meta.append(b, sm);
+  const eq = document.createElement("span"); eq.className = "pk-eq"; eq.setAttribute("aria-hidden", "true"); eq.innerHTML = "<i></i><i></i><i></i><i></i>";
+  el.append(cv, meta, eq);
+  el.addEventListener("click", () => { if (pkSuppress) { pkSuppress = false; return; } pkSelect(i); });
+  return { i, el };
+}
+// Keep rows for the songs around the focused one; new rows slide in from one step further out.
+function pkEnsureRows() {
+  const songs = pkSongs(), list = $("pk-list");
+  if (!songs) return;
+  for (let i = Math.max(0, pkFocus - 4); i <= Math.min(songs.length - 1, pkFocus + 4); i++) {
+    if (pkRows.has(i)) continue;
+    const row = pkRow(i, songs[i]), d = i - pkFocus;
+    row.el.classList.add("snap"); row.el.style.opacity = "0"; row.el.style.transform = pkFlow(d + Math.sign(d));
+    $("pk-group").append(row.el); void row.el.offsetWidth; row.el.classList.remove("snap");
+    pkRows.set(i, row);
+  }
+  for (const [i, row] of pkRows) if (Math.abs(i - pkFocus) > 5) { row.el.remove(); pkRows.delete(i); }
+}
+function pkBuildIfNeeded() {
+  const sig = pkSig();
+  if (sig === pkList) return;
+  pkList = sig; pkSync = ""; pkBgSong = null;
+  for (const row of pkRows.values()) row.el.remove();
+  pkRows.clear();
+  const q = S.queue;
+  pkFocus = q && q.playing >= 0 ? q.playing : 0; pkWait = -1;
+  $("pk").classList.toggle("empty", !sig); $("pk-expand").disabled = !sig;
+}
+// phase "flow": the Cover Flow; "fromCover": start with the focused song on the album cover and unfold;
+// "toCover": fold the neighbours in and return the focused song to the cover.
+function pkLayout(phase = "flow", stagger = false) {
+  if (!pkSongs()) return;
+  pkEnsureRows();
+  const pk = $("pk"), playing = S.queue.playing;
+  if (phase === "fromCover") {
+    const cover = pkCoverTransform();
+    for (const [i, row] of pkRows) {
+      row.el.classList.add("snap");
+      row.el.style.transform = i === pkFocus ? cover : "translateY(0px) scale(0.92)";
+      row.el.style.opacity = i === pkFocus ? "1" : "0";
+    }
+    pk.classList.add("at-cover"); void pk.offsetWidth;
+    for (const row of pkRows.values()) row.el.classList.remove("snap");
+    pk.classList.remove("at-cover");
+  }
+  pk.classList.toggle("at-cover", phase === "toCover");
+  const cover = phase === "toCover" ? pkCoverTransform() : "";
+  for (const [i, row] of pkRows) {
+    const d = i - pkFocus, a = Math.min(Math.abs(d), 3), el = row.el;
+    el.style.transitionDelay = !stagger && phase === "flow" ? "0ms"
+      : phase === "toCover" ? (d === 0 ? "70ms" : "0ms") : `${d === 0 ? 0 : 110 + (a - 1) * 45}ms`;
+    if (phase === "toCover") { el.style.transform = d === 0 ? cover : "translateY(0px) scale(0.92)"; el.style.opacity = d === 0 ? "1" : "0"; }
+    else { el.style.transform = pkFlow(d); el.style.opacity = Math.abs(d) > 3 ? "0" : String(PK.o[a]); }
+    el.classList.toggle("focus", d === 0);
+    el.classList.toggle("playing", i === playing);
+    el.classList.toggle("wait", i === pkWait && i !== playing);
+    el.classList.toggle("far", Math.abs(d) > 2 || phase === "toCover");
+    el.setAttribute("aria-selected", d === 0 ? "true" : "false");
+    el.tabIndex = d === 0 ? 0 : -1;
+    el.disabled = !pkCanPlay();
+    el.setAttribute("aria-current", String(i === playing));
+    el.setAttribute("aria-hidden", String(Math.abs(d) > 2));
+  }
+  clearTimeout(pkBgTimer); pkBgTimer = setTimeout(pkBackground, pkBgSong === null ? 0 : 140);
+}
+function pkBrowse(step) {
+  const songs = pkSongs();
+  if (!songs || browseMode !== "compact") return;
+  const next = clamp(pkFocus + step, 0, songs.length - 1);
+  if (next === pkFocus) return;
+  pkFocus = next; pkLayout("flow");
+  const row = pkRows.get(next);
+  if (row && $("pk").contains(document.activeElement)) row.el.focus({ preventScroll: true });
+}
+// Choosing a song plays it (browsing alone never does); the picker stays open.
+function pkSelect(i) {
+  const songs = pkSongs();
+  if (!songs || i < 0 || i >= songs.length || browseMode !== "compact" || !pkCanPlay()) return;
+  pkFocus = i;
+  if (i !== S.queue.playing) { pkWait = i; act(`queue play ${i}`); send({ t: "queuePlay", i }); }
+  pkLayout("flow");
+}
+function winBrowse(step) { const songs = pkSongs(); if (songs) { stopFire(); winOffset = clamp(winOffset + step, 0, songs.length - 1); syncWindowList(); camMoving = true; } }
+function winWheel(dy) {
+  winWheelAcc += dy;
+  while (winWheelAcc >= PK.winWheel) { winBrowse(1); winWheelAcc -= PK.winWheel; }
+  while (winWheelAcc <= -PK.winWheel) { winBrowse(-1); winWheelAcc += PK.winWheel; }
+}
+// A pane tapped in window mode plays its song; window mode stays open.
+function winTap(i) {
+  const songs = pkSongs();
+  if (!songs || i < 0 || i >= songs.length || browseMode !== "window" || !pkCanPlay()) return;
+  if (i !== S.queue.playing) { pkWait = i; act(`window play ${i}`); send({ t: "queuePlay", i }); }
+}
+const pkCanPlay = () => !otherHasControl() && !lost() && !S.pending && S.connection === "connected";
+// Window songs also have a keyboard/screen-reader representation; the room draws their faces.
+function syncWindowList() {
+  const list = $("win-list"), songs = pkSongs() || [];
+  const key = JSON.stringify([songs, S.queue && S.queue.playing, winOffset, pkCanPlay()]);
+  if (list.dataset.key === key) return;
+  const focused = list.contains(document.activeElement);
+  list.dataset.key = key; list.replaceChildren();
+  songs.forEach((song, i) => {
+    const row = document.createElement("button"); row.type = "button";
+    row.textContent = song.artist ? `${song.title}, ${song.artist}` : song.title;
+    row.setAttribute("role", "option"); row.setAttribute("aria-selected", String(i === winOffset));
+    row.setAttribute("aria-current", String(i === S.queue.playing));
+    row.tabIndex = i === winOffset ? 0 : -1; row.disabled = !pkCanPlay();
+    row.onclick = () => winTap(i); list.append(row);
+  });
+  if (focused && list.children[winOffset]) list.children[winOffset].focus({ preventScroll: true });
+}
+function pkRenderBar() {
+  const win = browseMode === "window", btn = $("pk-bar-btn");
+  $("pk-bar-title").textContent = win ? PK_TEXT.window : PK_TEXT.compact;
+  btn.innerHTML = win ? `<span>${PK_TEXT.collapse}</span>${PK_SVG.chevron}` : PK_SVG.close;
+  btn.setAttribute("aria-label", win ? PK_TEXT.collapseLabel : PK_TEXT.close);
+}
+// The only way modes change. Allowed: album <-> compact <-> window (album and window go through compact).
+function setBrowseMode(next) {
+  if (!["album", "compact", "window"].includes(next)) return;
+  const prev = browseMode;
+  if (prev === "album" && next === "window") next = "compact";
+  if (prev === "window" && next === "album") next = "compact";
+  if (next === prev || (next === "window" && !pkSongs())) return;
+  const pk = $("pk"), app = $("app"), now = performance.now(), mid = now - modeAt < PK.ms + 60;
+  if (prev === "album" && !mid) measureArt();
+  closePop(); closeMenus();
+  clearTimeout(pkHide);
+  if (prev === "window") stopFire();
+  pkDrag = null; pkWheel = winWheelAcc = 0;
+  browseMode = next; modeAt = now;
+  act(`browse ${next}`);
+  app.classList.toggle("browse", next !== "album");          // the album page steps aside
+  app.classList.toggle("browse-window", next === "window");
+  pk.hidden = false; $("pk-bar").hidden = false;
+  pk.classList.toggle("away", next === "window");
+  pk.toggleAttribute("inert", next !== "compact");
+  $("win-list").hidden = next !== "window";
+  $("player").inert = false;
+  pkRenderBar();
+  $("art").setAttribute("aria-expanded", String(next !== "album"));
+  browseCamera(next); // the camera frames the picker / windows and holds still (room.js)
+  $("view-btn").disabled = next !== "album";
+  if (next === "compact") {
+    pkFit();
+    pkBuildIfNeeded();
+    if (prev === "album") {
+      if (S.queue && S.queue.playing >= 0) pkFocus = S.queue.playing; // the cover is the playing song
+      pkLayout(mid ? "flow" : "fromCover", true);
+    } else { pkFocus = clamp(winOffset, 0, pkSongs() ? pkSongs().length - 1 : 0); pkLayout("flow", true); } // back from the windows, where you browsed to
+    const row = pkRows.get(pkFocus);
+    (row ? row.el : $("pk-bar-btn")).focus({ preventScroll: true });
+  } else if (next === "window") {
+    // The pane in front of you anchors the song you browsed to; near either end of the list it shifts
+    // so the songs still fill every pane (no blank glass while there are songs to show).
+    const P = three && three.panes ? three.panes.length : 8, n = pkSongs().length;
+    winAnchor = n >= P ? clamp(frontPane(), P - n + pkFocus, pkFocus) : pkFocus + Math.floor((P - n) / 2);
+    const seen = panesInView("window"); // ...but always on a pane you can see
+    if (seen) winAnchor = clamp(winAnchor, seen[0], seen[1]);
+    winOffset = pkFocus;
+    syncWindowList();
+    const cover = pkRows.get(pkFocus) && pkRows.get(pkFocus).el.querySelector(".pk-cover"), cr = cover && cover.getBoundingClientRect();
+    if (cr && cr.width) fireToWindows(cr.left + cr.width / 2, cr.top + cr.height / 2, cr.width); // the songs fly out of the cover (room.js)
+    // The song you browsed to anchors there; the playing one stays lit wherever it is.
+    $("pk-bar-btn").focus({ preventScroll: true });
+  } else {
+    pkLayout("toCover", true);
+    pkHide = setTimeout(() => { if (browseMode === "album") { pk.hidden = true; $("pk-bar").hidden = true; } }, PK.ms + 180);
+    $("art").focus({ preventScroll: true }); // back to the cover it opened from
+  }
+  $("player").inert = next !== "album";
+}
+// Called by render(): follow a new list, the playing song and pause, without moving the browse position.
+function syncBrowse() {
+  if (browseMode === "album") { if (!pkArt && performance.now() - modeAt > PK.ms + 200) measureArt(); return; }
+  if (pkSig() !== pkList) { pkBuildIfNeeded(); if (browseMode === "compact") pkLayout("flow"); }
+  if (browseMode === "window") {
+    if (!pkSongs()) { setBrowseMode("compact"); return; }
+    winOffset = clamp(winOffset, 0, pkSongs().length - 1); syncWindowList();
+  }
+  const q = S.queue, key = `${q ? q.playing : -1}|${S.playing ? 1 : 0}|${pkCanPlay()}`;
+  if (key === pkSync) return;
+  pkSync = key;
+  if (q && pkWait === q.playing) pkWait = -1;
+  $("pk").classList.toggle("paused", !S.playing);
+  if (browseMode === "compact") pkLayout("flow");
+}
+function initBrowse() {
+  const pk = $("pk"), list = $("pk-list"), art = $("art"), card = $("now-card");
+  $("pk-expand").querySelector("span").textContent = PK_TEXT.expand;
+  $("pk-expand").setAttribute("aria-label", PK_TEXT.expandLabel);
+  pk.querySelector(".pk-empty").textContent = PK_TEXT.empty;
+  art.setAttribute("aria-label", PK_TEXT.open);
+  $("pk-bar-btn").onclick = () => setBrowseMode(browseMode === "window" ? "compact" : "album");
+  $("pk-expand").onclick = () => setBrowseMode("window");
+  // The cover opens the quick menu: a tap, or a hold (~450 ms, with a subtle press). A drag off it does not.
+  let hold = null, hx = 0, hy = 0;
+  const cancel = () => { if (hold) { clearTimeout(hold); hold = null; } card.classList.remove("pressing"); };
+  art.addEventListener("pointerup", (e) => { if (hold && e.type === "pointerup") { cancel(); setBrowseMode("compact"); } }); // a tap (before the hold fires)
+  art.addEventListener("keydown", (e) => { if ((e.key === "Enter" || e.key === " ") && browseMode === "album") { e.preventDefault(); setBrowseMode("compact"); } });
+  art.addEventListener("pointerdown", (e) => {
+    if (browseMode !== "album" || (e.button != null && e.button > 0)) return;
+    if (e.isPrimary === false) return;
+    cancel(); hx = e.clientX; hy = e.clientY; card.classList.add("pressing");
+    try { art.setPointerCapture(e.pointerId); } catch (err) { /* synthetic pointer */ }
+    hold = setTimeout(() => { hold = null; card.classList.remove("pressing"); setBrowseMode("compact"); }, PK.holdMs);
+  });
+  art.addEventListener("pointermove", (e) => { if (hold && Math.hypot(e.clientX - hx, e.clientY - hy) > 10) cancel(); });
+  ["pointerup", "pointercancel", "pointerleave", "lostpointercapture"].forEach((t) => art.addEventListener(t, cancel));
+  art.addEventListener("contextmenu", (e) => e.preventDefault());
+  addEventListener("blur", cancel);
+  document.addEventListener("visibilitychange", cancel);
+  // The picker: drag or scroll to browse (never selects), tap to choose. Gestures stay off the room camera.
+  list.addEventListener("pointerdown", (e) => { pkSuppress = false; pkDrag = { y: e.clientY, last: e.clientY, moved: false }; });
+  list.addEventListener("pointermove", (e) => {
+    if (!pkDrag) return;
+    if (!pkDrag.moved && Math.abs(e.clientY - pkDrag.y) > 8) { pkDrag.moved = true; try { list.setPointerCapture(e.pointerId); } catch (err) { /* released */ } }
+    if (pkDrag.moved && Math.abs(e.clientY - pkDrag.last) >= PK.dragStep * pkK) { pkBrowse(e.clientY < pkDrag.last ? 1 : -1); pkDrag.last = e.clientY; }
+  });
+  const end = () => { if (pkDrag && pkDrag.moved) pkSuppress = true; pkDrag = null; };
+  list.addEventListener("pointerup", end); list.addEventListener("pointercancel", end);
+  list.addEventListener("wheel", (e) => {
+    e.preventDefault(); pkWheel += e.deltaY;
+    while (pkWheel >= PK.wheelStep) { pkBrowse(1); pkWheel -= PK.wheelStep; }
+    while (pkWheel <= -PK.wheelStep) { pkBrowse(-1); pkWheel += PK.wheelStep; }
+  }, { passive: false });
+  document.addEventListener("keydown", (e) => {
+    if (browseMode === "album" || (e.target.closest && e.target.closest("input, textarea")) || isOpen($("pop")) || isOpen($("menu"))) return;
+    if (browseMode === "compact") {
+      if (e.key === "ArrowDown" || e.key === "ArrowUp") { e.preventDefault(); pkBrowse(e.key === "ArrowDown" ? 1 : -1); }
+      else if (e.key === "Escape") setBrowseMode("album");
+    } else {
+      if (e.key === "ArrowRight" || e.key === "ArrowLeft") { e.preventDefault(); winBrowse(e.key === "ArrowRight" ? 1 : -1); }
+      else if (e.key === "Enter" && e.target === document.body) winTap(winOffset);
+      else if (e.key === "Escape") setBrowseMode("compact");
+    }
+  });
+  addEventListener("resize", () => {
+    if (browseMode === "album") { measureArt(); return; }
+    browseCamera(browseMode); // rotated: the framing for the new shape
+    pkFit();
+    if (browseMode === "compact") pkLayout("flow");
+  });
+  requestAnimationFrame(measureArt);
 }
 function placePop() {
   const pop = $("pop");
@@ -300,7 +717,8 @@ function renderPop() {
   // Rebuilt only when what the panel shows changes; live values (orbit speed,
   // position) are updated in place so a slider is never replaced mid-drag.
   const sig = S.panel === "layout" ? [S.panel, S.mode] : S.panel === "motion" ? [S.panel, S.mode, S.motion]
-    : S.panel === "place" ? [S.panel, S.mode, S.motion, S.speakers.length, S.speakerControl] : [S.panel, S.laptop, S.source, S.live, isLost];
+    : S.panel === "place" ? [S.panel, S.mode, S.motion, S.speakers.length, S.speakerControl]
+    : [S.panel, S.laptop, S.source, S.live, isLost];
   once("pop", sig, () => {
     if (S.panel === "layout") {
       pop.innerHTML = `<h3>Layout</h3>
@@ -528,6 +946,7 @@ $("si-layout").onclick = (e) => { e.stopPropagation(); openPop("layout", e.detai
 $("si-motion").onclick = (e) => { e.stopPropagation(); openPop("motion", e.detail === 0); };
 $("si-place").onclick = (e) => { e.stopPropagation(); openPop("place", e.detail === 0); };
 $("room-btn").onclick = (e) => { e.stopPropagation(); openPop("room", e.detail === 0); };
+initBrowse();
 // Escape closes the open panel or menu and puts focus back where it came from.
 document.addEventListener("keydown", (e) => {
   if (e.key !== "Escape") return;
@@ -547,7 +966,7 @@ document.addEventListener("click", (e) => {
   if (isOpen(menu) && !menu.contains(e.target)) closeMenus();
   const pop = $("pop");
   // A choice inside the panel re-renders it, so its button is gone by now: that is not an outside tap.
-  if (isOpen(pop) && e.target.isConnected && !pop.contains(e.target) && !e.target.closest(".side-item") && !e.target.closest("#room-btn") && e.target !== $("gl")) closePop();
+  if (isOpen(pop) && e.target.isConnected && !pop.contains(e.target) && !e.target.closest(".side-item") && !e.target.closest("#room-btn") && !e.target.closest("#now-card") && e.target !== $("gl")) closePop();
 });
 $("m-stop-listen").onclick = () => { closeMenus(); setLocal({ listening: "off" }); send({ t: "stopListening" }); render(); };
 $("m-signout").onclick = () => { closeMenus(); send({ t: "signOut" }); };
