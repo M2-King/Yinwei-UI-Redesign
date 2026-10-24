@@ -590,6 +590,26 @@ function Resolve-Pid([string]$src) {
 ''';
 
 const _kDaemonScriptTail = r'''
+# Resolve-Pid lists every process through WMI. On the owner's laptop with
+# ~540 processes that took 24 s (2026-10-24), so each poll took 24 s, the
+# session looked stale and Live start timed out. The music app's main
+# process is remembered per source; a cheap Get-Process check confirms it is
+# still the same app. A miss is retried at most every 10 s.
+$script:pidSrc = $null; $script:pidHit = $null; $script:pidAt = [DateTime]::MinValue
+function Resolve-PidCached([string]$src) {
+  $c = $script:pidHit
+  if ($null -ne $c -and $script:pidSrc -eq $src) {
+    if ([int]$c.pid -gt 0) {
+      $p = Get-Process -Id ([int]$c.pid) -ErrorAction SilentlyContinue
+      if ($p -and $p.ProcessName -eq [string]$c.name) { return $c }
+    } elseif (([DateTime]::UtcNow - $script:pidAt).TotalSeconds -lt 10) {
+      return $c
+    }
+  }
+  $r = Resolve-Pid $src
+  $script:pidSrc = $src; $script:pidHit = $r; $script:pidAt = [DateTime]::UtcNow
+  return $r
+}
 function Emit-Once {
   [void][Windows.Media.Control.GlobalSystemMediaTransportControlsSessionManager,Windows.Media.Control,ContentType=WindowsRuntime]
   $mgr = Await ([Windows.Media.Control.GlobalSystemMediaTransportControlsSessionManager]::RequestAsync()) ([Windows.Media.Control.GlobalSystemMediaTransportControlsSessionManager])
@@ -620,7 +640,7 @@ function Emit-Once {
   $playback = $best.GetPlaybackInfo()
   $timeline = $best.GetTimelineProperties()
   $src = [string]$best.SourceAppUserModelId
-  $resolved = Resolve-Pid $src
+  $resolved = Resolve-PidCached $src
   $obj = @{
     status = 'active'
     title = [Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes([string]$info.Title))
