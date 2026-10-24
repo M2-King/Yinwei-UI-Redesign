@@ -99,6 +99,185 @@ class ListenRoomBridge {
   int _sodaGeneration = 0;
   bool _musicPlaying = false;
 
+  // Browse selections stay on this iPad. Only queue labels go to the room.
+  final _cachedQueues = <String, _RoomQueue>{};
+  final _onlineQueues = <String, _RoomQueue>{};
+  _RoomQueue? _queue;
+  String? _libraryRevision, _queueHost;
+  bool _queueSignedIn = false;
+  int _queueGeneration = 0;
+
+  void _clearQueue() {
+    _queue = null;
+    _cachedQueues.clear();
+    _onlineQueues.clear();
+    _libraryRevision = null;
+    _queueGeneration++;
+    _musicGeneration++;
+    _sodaGeneration++;
+  }
+
+  void _syncQueueHost() {
+    final host = _text(session.snapshot?['hostSessionId']);
+    final signedIn = session.signedIn;
+    if (host != _queueHost || (!signedIn && _queueSignedIn)) _clearQueue();
+    _queueHost = host;
+    _queueSignedIn = signedIn;
+  }
+
+  static bool _selectionId(Object? value) =>
+      value is String && RegExp(r'^[A-Za-z0-9_-]{1,160}$').hasMatch(value);
+
+  static String _queueText(Object? value, [int max = 200]) {
+    final text = _text(value);
+    return text.length <= max ? text : text.substring(0, max);
+  }
+
+  bool _queueCurrent(_RoomQueue queue) => queue.command == 'library.play'
+      ? queue.revision == _libraryRevision
+      : _onlineQueues[queue.key]?.revision == queue.revision;
+
+  // Keep the last displayed page for each list/snapshot (no background reads
+  // or merging unseen pages). Cached search results carry their own list ids.
+  void _rememberBrowse(Map<String, dynamic> value, {bool online = false}) {
+    final revision = value['revision'];
+    if (!_selectionId(revision) || value['error'] != null) return;
+    late final String key, title, command;
+    late final List rows;
+    String? listId, snapshotId;
+    var playable = true;
+    if (online) {
+      if (value['kind'] != 'search' || value['rows'] is! List) return;
+      key = _text(value['query']);
+      title = 'Search: $key';
+      command = 'soda.play';
+      rows = value['rows'] as List;
+      playable = value['playbackReady'] == true;
+    } else {
+      if (_libraryRevision != revision) _cachedQueues.clear();
+      _libraryRevision = revision as String;
+      final list = _map(value['list']), page = _map(value['page']);
+      if (page['rows'] is List &&
+          _selectionId(list['id']) &&
+          _selectionId(page['snapshot'])) {
+        listId = list['id'] as String;
+        snapshotId = page['snapshot'] as String;
+        key = jsonEncode([listId, snapshotId]);
+        title = list['liked'] == true
+            ? 'Liked songs'
+            : _queueText(list['title'], 120);
+        rows = page['rows'] as List;
+        final snapshots = list['snapshots'];
+        final selected = snapshots is List
+            ? snapshots
+                .whereType<Map>()
+                .where((v) => v['id'] == snapshotId)
+                .firstOrNull
+            : null;
+        playable = page['historical'] != true &&
+            list['historical'] != true &&
+            selected != null &&
+            selected['historical'] != true;
+      } else {
+        final search = _map(value['search']);
+        if (search['rows'] is! List) return;
+        key = jsonEncode(['search', _text(search['query'])]);
+        title = 'Search: ${_text(search['query'])}';
+        rows = search['rows'] as List;
+      }
+      command = 'library.play';
+    }
+    if (rows.isEmpty || rows.length > 500) return;
+    final songs = <_RoomQueueSong>[];
+    for (final raw in rows) {
+      final row = _map(raw);
+      final ids = <String, String>{'revision': revision as String};
+      final values = <String, dynamic>{
+        if (!online) 'list': listId ?? row['list'],
+        if (!online) 'snapshot': snapshotId ?? row['snapshot'],
+        'track': row['id'],
+      };
+      if (!values.values.every(_selectionId)) return;
+      ids.addAll(values.cast<String, String>());
+      songs.add(_RoomQueueSong(
+          _queueText(row['title']),
+          _queueText(row['artist']),
+          Map.unmodifiable(ids),
+          playable && row['playable'] == true));
+    }
+    final queue = _RoomQueue(_queueText(title, 120), command,
+        revision as String, key, List.unmodifiable(songs));
+    final results = online ? _onlineQueues : _cachedQueues;
+    results.remove(key);
+    results[key] = queue;
+    // Bounded metadata cache; the active cached queue owns its own song copy.
+    while (results.length > 16) {
+      results.remove(results.keys.first);
+    }
+  }
+
+  _RoomQueue? _queueFor(String command, Map<String, dynamic> payload) {
+    final results = command == 'library.play' ? _cachedQueues : _onlineQueues;
+    for (final queue in results.values.toList().reversed) {
+      if (_queueCurrent(queue) &&
+          queue.songs.any((song) =>
+              song.playable &&
+              song.ids.entries.every((id) => payload[id.key] == id.value))) {
+        return queue;
+      }
+    }
+    return null;
+  }
+
+  Map<String, dynamic>? _queueState(Map<String, dynamic> snap) {
+    final queue = _queue;
+    if (queue == null) return null;
+    final track = _map(snap['track']);
+    return {
+      'title': queue.title,
+      'playing': queue.songs.indexWhere((song) =>
+          song.title == _queueText(track['title']) &&
+          song.artist == _queueText(track['artist'])),
+      'songs': [
+        for (final song in queue.songs)
+          {'title': song.title, 'artist': song.artist}
+      ],
+    };
+  }
+
+  Future<void> _playMusic(String command, Map<String, dynamic> payload,
+      {_RoomQueue? queue}) async {
+    final cap = command == 'library.play' ? 'sodaLibrary' : 'sodaOnlinePlay';
+    if (!session.signedIn ||
+        _map(session.snapshot?['capabilities'])[cap] != true ||
+        _musicPlaying ||
+        session.pending) {
+      return;
+    }
+    final generation = _queueGeneration, host = _queueHost;
+    bool current() {
+      _syncQueueHost();
+      return !_disposed &&
+          session.signedIn &&
+          generation == _queueGeneration &&
+          host == _queueHost &&
+          _map(session.snapshot?['capabilities'])[cap] == true &&
+          (queue == null || _queueCurrent(queue));
+    }
+
+    if (!current()) return;
+    _musicPlaying = true;
+    try {
+      if (await _command(command, payload, current) && current()) {
+        // Do not invent a list for a selection whose browse result was not seen.
+        _queue = queue;
+        schedule();
+      }
+    } finally {
+      _musicPlaying = false;
+    }
+  }
+
   /// The app is in the background: nothing is sent to the page. iPadOS
   /// freezes the hidden WebView, and each update would wait on the main
   /// thread, which also hands audio packets to the speaker.
@@ -125,7 +304,7 @@ class ListenRoomBridge {
 
   void dispose() {
     _disposed = true;
-    _musicGeneration++;
+    _clearQueue();
     _timer?.cancel();
     session.removeListener(_changed);
     _iosOutput?.level.removeListener(schedule);
@@ -143,6 +322,7 @@ class ListenRoomBridge {
 
   /// The page state, version 1.
   Map<String, dynamic> state() {
+    _syncQueueHost();
     final s = session;
     final snap = s.snapshot ?? const <String, dynamic>{};
     final caps = _map(snap['capabilities']);
@@ -272,6 +452,7 @@ class ListenRoomBridge {
           : _num(pose['azimuthDeg'])?.clamp(-180.0, 180.0) ?? 0,
       'el': _num(pose['elevationDeg'])?.clamp(-90.0, 90.0) ?? 0,
       'dist': _num(pose['distanceM'])?.clamp(0.5, 10.0) ?? 2,
+      'queue': _queueState(snap),
       'track': title.isEmpty
           ? null
           : {
@@ -322,7 +503,10 @@ class ListenRoomBridge {
               caps['remoteLive'] == true &&
               _map(snap['track'])['hasFile'] != true));
 
-  void _changed() => schedule();
+  void _changed() {
+    _syncQueueHost();
+    schedule();
+  }
 
   /// Sends the state soon: at once, or when [minInterval] has passed since
   /// the last send.
@@ -355,6 +539,7 @@ class ListenRoomBridge {
   /// One message from the page.
   Future<void> handle(String raw) async {
     if (_disposed) return;
+    _syncQueueHost();
     Map<String, dynamic> m;
     try {
       final data = jsonDecode(raw);
@@ -442,6 +627,7 @@ class ListenRoomBridge {
             host != session.snapshot?['hostSessionId']) {
           return;
         }
+        _rememberBrowse(value, online: true);
         await run('YinweiListen.soda(${jsonEncode({
               'request': requestId,
               ...value
@@ -461,12 +647,8 @@ class ListenRoomBridge {
           }
           payload[key] = value;
         }
-        _musicPlaying = true;
-        try {
-          await _command('soda.play', payload);
-        } finally {
-          _musicPlaying = false;
-        }
+        await _playMusic('soda.play', payload,
+            queue: _queueFor('soda.play', payload));
       case 'musicBrowse':
         if (caps['sodaLibrary'] != true || !session.signedIn) return;
         final requestId = m['request'];
@@ -515,6 +697,7 @@ class ListenRoomBridge {
             host != session.snapshot?['hostSessionId']) {
           return;
         }
+        _rememberBrowse(value);
         await run('YinweiListen.music(${jsonEncode({
               'request': requestId,
               ...value
@@ -529,12 +712,20 @@ class ListenRoomBridge {
           if (value is! String || value.isEmpty || value.length > 160) return;
           payload[key] = value;
         }
-        _musicPlaying = true;
-        try {
-          await _command('library.play', payload);
-        } finally {
-          _musicPlaying = false;
+        await _playMusic('library.play', payload,
+            queue: _queueFor('library.play', payload));
+      case 'queuePlay':
+        final queue = _queue, index = m['i'];
+        if (queue == null ||
+            index is! int ||
+            index < 0 ||
+            index >= queue.songs.length ||
+            !_queueCurrent(queue)) {
+          return;
         }
+        final song = queue.songs[index];
+        if (!song.playable) return;
+        await _playMusic(queue.command, song.ids, queue: queue);
       case 'rects':
         final r = m['airplay'];
         final valid = r is List &&
@@ -710,7 +901,9 @@ class ListenRoomBridge {
         // Keep the page's original revision through lease renewal/retry.
         await _command(type, payload);
       case 'signOut':
+        _clearQueue();
         await session.signOut();
+        schedule();
       default:
         return; // `airplay` (browser only) and anything unknown
     }
@@ -721,7 +914,9 @@ class ListenRoomBridge {
   /// the result as a toast. A refusal re-sends the state, so the page's value
   /// gives way to the laptop's at once.
   Future<bool> _command(String type,
-      [Map<String, dynamic> payload = const {}]) async {
+      [Map<String, dynamic> payload = const {},
+      bool Function()? stillValid]) async {
+    if (stillValid != null && !stillValid()) return false;
     if (!session.hasControl) {
       if (_takenAway || !await session.takeControl()) {
         await toast(_toastText(session.notice ??
@@ -733,6 +928,7 @@ class ListenRoomBridge {
     for (var i = 0; session.pending && i < 30; ++i) {
       await Future<void>.delayed(const Duration(milliseconds: 100));
     }
+    if (stillValid != null && !stillValid()) return false;
     final ok = await session.command(type, payload);
     final notice = session.notice;
     if (notice != null) await toast(_toastText(notice));
@@ -759,4 +955,19 @@ class ListenRoomBridge {
   static String _text(Object? value) => value is String ? value.trim() : '';
   static double? _num(Object? value) =>
       value is num && value.isFinite ? value.toDouble() : null;
+}
+
+// Private routing identities are deliberately separate from serialized page state.
+class _RoomQueueSong {
+  const _RoomQueueSong(this.title, this.artist, this.ids, this.playable);
+  final String title, artist;
+  final Map<String, String> ids;
+  final bool playable;
+}
+
+class _RoomQueue {
+  const _RoomQueue(
+      this.title, this.command, this.revision, this.key, this.songs);
+  final String title, command, revision, key;
+  final List<_RoomQueueSong> songs;
 }

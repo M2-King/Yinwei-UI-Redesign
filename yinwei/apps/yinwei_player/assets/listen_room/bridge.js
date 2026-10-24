@@ -16,7 +16,7 @@ const ListenBridge = (() => {
   const FIELDS = ["laptop", "connection", "source", "live", "playing", "listening", "control", "notice",
     "mode", "motion", "orbitHz", "az", "el", "dist", "track", "volume", "level", "stats", "opens",
     "pending", "progress", "pos", "dur", "seekable", "canClose", "updates", "appBuild", "quality", "stream", "opus",
-    "speakers", "selectedSpeakerIndex", "arrayRevision", "maxSpeakers", "speakerControl", "matrixLinked", "matrixSpread", "music", "musicSearch", "musicOnline"];
+    "speakers", "selectedSpeakerIndex", "arrayRevision", "maxSpeakers", "speakerControl", "matrixLinked", "matrixSpread", "music", "musicSearch", "musicOnline", "queue"];
   const wrap = (a) => { a = ((a + 180) % 360 + 360) % 360 - 180; return a === -180 ? 180 : a; };
   // Values the app may send, so a bad message can't put the page in a state it can't draw.
   const ENUMS = {
@@ -60,6 +60,19 @@ const ListenBridge = (() => {
     // The music app the laptop opens on Start when none is open; null when it can't.
     if (k === "opens") return typeof v === "string" && v ? v.slice(0, 80) : null;
     if (k === "track") return v && typeof v === "object" ? { title: String(v.title || "").slice(0, 200), artist: String(v.artist || "").slice(0, 200) } : null;
+    // The list last played from the iPad music sheet: its name, which row is playing
+    // (-1 = none / not in the list), and up to 500 songs. null when the iPad
+    // has not received a sheet selection yet.
+    if (k === "queue") {
+      if (!v || typeof v !== "object" || !Array.isArray(v.songs) || v.songs.length > 500) return null;
+      const songs = [];
+      for (const s of v.songs) {
+        if (!s || typeof s !== "object") return null;
+        songs.push({ title: String(s.title || "").slice(0, 200), artist: String(s.artist || "").slice(0, 200) });
+      }
+      const playing = Number.isInteger(v.playing) && v.playing >= -1 && v.playing < songs.length ? v.playing : -1;
+      return { title: String(v.title || "").slice(0, 120), playing, songs };
+    }
     if (k === "stats") return v && typeof v === "object" ? { received: Number(v.received) || 0, bufferMs: Number(v.bufferMs) || 0, underruns: Number(v.underruns) || 0 } : undefined;
     return undefined;
   }

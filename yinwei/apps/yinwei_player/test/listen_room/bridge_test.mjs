@@ -50,6 +50,27 @@ test('rejects values the page cannot draw and clamps numbers', () => {
   assert.equal(S.live, false, 'booleans must be booleans');
 });
 
+test('the playlist queue is cleaned, bounded and its playing row validated', () => {
+  const S = base();
+  B.merge(S, {v: 1, queue: {title: '我喜欢的音乐', playing: 1, songs: [{title: 'A', artist: 'x'}, {title: 'B', artist: 'y'}]}}, {}, 0);
+  assert.equal(S.queue.title, '我喜欢的音乐');
+  assert.equal(S.queue.playing, 1);
+  assert.equal(S.queue.songs.length, 2);
+  assert.equal(S.queue.songs[0].title, 'A');
+  assert.equal(S.queue.songs[1].artist, 'y');
+  // playing out of range → -1 (none highlighted), not a crash
+  B.merge(S, {v: 1, queue: {title: 'x', playing: 9, songs: [{title: 'A', artist: ''}]}}, {}, 0);
+  assert.equal(S.queue.playing, -1);
+  // title/artist coerced to strings; over-long song list and bad shapes rejected to null
+  B.merge(S, {v: 1, queue: {title: 7, playing: 0, songs: [{title: 5, artist: null}]}}, {}, 0);
+  assert.equal(S.queue.songs[0].title, '5');
+  assert.equal(S.queue.songs[0].artist, '');
+  for (const bad of [null, 'nope', {songs: 'no'}, {songs: Array(501).fill({title: 'a', artist: 'b'})}, {songs: [1]}]) {
+    B.merge(S, {v: 1, queue: bad}, {}, 0);
+    assert.equal(S.queue, null, `queue ${JSON.stringify(bad)} → null`);
+  }
+});
+
 test('the app build is a short plain label or nothing', () => {
   const S = base();
   B.merge(S, {v: 1, appBuild: '61'}, {}, 0);
@@ -60,6 +81,24 @@ test('the app build is a short plain label or nothing', () => {
     B.merge(S, {v: 1, appBuild: bad}, {}, 0);
     assert.equal(S.appBuild, null, `refuses ${JSON.stringify(bad)}`);
   }
+});
+
+test('queue keeps only the established metadata contract, never provider artwork or identities', () => {
+  const S=base();
+  const input={title:'Queue',playing:0,owner:'private',songs:[{title:'Moon',artist:'Band',artwork:'untrusted',trackId:'123'}]};
+  B.merge(S,{v:1,queue:input},{},0);
+  assert.deepEqual(Object.keys(S.queue).sort(),['playing','songs','title']);
+  assert.deepEqual(Object.keys(S.queue.songs[0]).sort(),['artist','title']);
+  input.songs[0].title='Changed outside the bridge';
+  assert.equal(S.queue.songs[0].title,'Moon');
+});
+
+test('queue permits the bounded 500-row catalogue and unknown playing position', () => {
+  const S=base();
+  B.merge(S,{v:1,queue:{title:'Queue',playing:-1,songs:Array.from({length:500},(_,i)=>({title:`Song ${i}`,artist:''}))}},{},0);
+  assert.equal(S.queue.songs.length,500);assert.equal(S.queue.playing,-1);
+  B.merge(S,{v:1,queue:{title:'Queue',playing:500,songs:[{title:'A',artist:''}]}},{},1);
+  assert.equal(S.queue.playing,-1);
 });
 
 test('a value you just set is kept until the app confirms it', () => {
@@ -161,4 +200,23 @@ test('sound quality: known choices only; stream null until audio; opus a boolean
   assert.equal(S.quality, 'max', 'an unknown choice is ignored');
   assert.equal(S.stream, null, 'an unknown stream shows as none');
   assert.equal(S.opus, true, 'a non-boolean is ignored');
+});
+
+test('queue enforces text limits and integer-only playing indices including empty lists', () => {
+  const S = base();
+  B.merge(S, {v: 1, queue: {title: 'T'.repeat(150), playing: 0,
+    songs: [{title: 'A'.repeat(250), artist: 'B'.repeat(250),
+      list: 'private_list', snapshot: 'private_snapshot', track: 'private_track', revision: 'private_revision'}]}}, {}, 0);
+  assert.equal(S.queue.title.length, 120);
+  assert.equal(S.queue.songs[0].title.length, 200);
+  assert.equal(S.queue.songs[0].artist.length, 200);
+  assert.ok(!JSON.stringify(S.queue).includes('private_'));
+  for (const playing of [-2, 0.5, '0', true, NaN, 1]) {
+    B.merge(S, {v: 1, queue: {title: 'Q', playing, songs: [{title: 'A', artist: 'B'}]}}, {}, 1);
+    assert.equal(S.queue.playing, -1);
+  }
+  B.merge(S, {v: 1, queue: {title: 'Empty', playing: 0, songs: []}}, {}, 2);
+  assert.equal(S.queue.playing, -1);
+  B.merge(S, {v: 1, queue: null}, {}, 3);
+  assert.equal(S.queue, null);
 });
