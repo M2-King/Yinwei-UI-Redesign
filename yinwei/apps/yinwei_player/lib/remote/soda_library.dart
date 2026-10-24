@@ -414,20 +414,45 @@ class SodaLibrary {
       throw const SodaLibraryFailure('soda_invalid_selection');
     }
     // Re-read the account and coherent source snapshot even inside the browse
-    // debounce. No stale selection may launch content in another account.
+    // debounce. No stale selection may launch content in another account: an
+    // account change clears every list, so old list/snapshot/track tokens can
+    // no longer resolve at all.
     await refresh();
-    if (revision is! String || revision != _revision) {
+    if (revision is! String) {
       throw const SodaLibraryFailure('soda_stale_selection');
     }
     final list =
         _lists.values.where((l) => l.token == payload['list']).firstOrNull;
     final s = list?.latest;
-    if (s == null || list!.current == false || payload['snapshot'] != s.token) {
+    if (s == null || list!.current == false) {
       throw const SodaLibraryFailure('soda_stale_selection');
     }
-    final track =
-        s.tracks.where((t) => t.token == payload['track']).firstOrNull;
-    if (track == null) throw const SodaLibraryFailure('soda_invalid_selection');
+    _Track? track;
+    if (payload['snapshot'] == s.token) {
+      track = s.tracks.where((t) => t.token == payload['track']).firstOrNull;
+      if (track == null) {
+        throw const SodaLibraryFailure('soda_invalid_selection');
+      }
+    } else {
+      // 汽水 re-fetched this list since it was shown (the cache time moves even
+      // when the songs do not), so the selection names an older copy of the
+      // same list. Play that same song if it is still in the current list;
+      // otherwise the selection is stale. (The library revision is not
+      // compared: it changes on any cache rewrite, which made most taps from
+      // the iPad quick menu fail. 2026-10-24)
+      final old = list.snapshots
+          .where((x) => x.token == payload['snapshot'])
+          .firstOrNull;
+      final picked =
+          old?.tracks.where((t) => t.token == payload['track']).firstOrNull;
+      if (picked == null) {
+        throw const SodaLibraryFailure('soda_stale_selection');
+      }
+      track = s.tracks.where((t) => t.id == picked.id).firstOrNull;
+      if (track == null) {
+        throw const SodaLibraryFailure('soda_stale_selection');
+      }
+    }
     if (!track.supported) {
       throw const SodaLibraryFailure('soda_track_unavailable');
     }

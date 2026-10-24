@@ -242,12 +242,43 @@ void main() {
     await expectLater(
         library.browse({'list': '456'}), throwsA(isA<SodaLibraryFailure>()));
   });
-  test('new source revision rejects a queued old command; no automatic retry',
+  test('a re-fetched list still plays the same song from an older view',
       () async {
     final top = await library.browse({});
     final id = top['lists'][0]['id'];
     final view = await library.browse({'list': id});
+    final song = view['page']['rows'][0];
+    // 汽水 re-fetched the list: new cache time and revision, same songs.
     reader.state = frame(['1000'], revision: 'newsource', time: 4000);
+    expect(
+        await library.resolveTrack({
+          'list': id,
+          'snapshot': view['page']['snapshot'],
+          'track': song['id'],
+          'revision': view['revision']
+        }),
+        '1000');
+  });
+  test('an older view of a song no longer in the list is stale', () async {
+    final top = await library.browse({});
+    final id = top['lists'][0]['id'];
+    final view = await library.browse({'list': id});
+    reader.state = frame(['2000'], revision: 'replaced', time: 4000);
+    await expectLater(
+        library.resolveTrack({
+          'list': id,
+          'snapshot': view['page']['snapshot'],
+          'track': view['page']['rows'][0]['id'],
+          'revision': view['revision']
+        }),
+        throwsA(isA<SodaLibraryFailure>()
+            .having((e) => e.code, 'code', 'soda_stale_selection')));
+  });
+  test('an account change never resolves an old selection', () async {
+    final top = await library.browse({});
+    final id = top['lists'][0]['id'];
+    final view = await library.browse({'list': id});
+    reader.state = frame(['1000'], account: '999', revision: 'other', time: 4000);
     await expectLater(
         library.resolveTrack({
           'list': id,

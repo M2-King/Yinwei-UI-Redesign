@@ -25,6 +25,9 @@ class SodaOnline {
   final Duration timeout;
   final _random = Random.secure();
   final _cache = <String, _OnlinePage>{};
+  /// How long a shown search result can still be played (it was 60 s, which
+  /// made a quick-menu tap on a search result fail a minute later).
+  static const playableFor = Duration(minutes: 15);
   Future<Map<String, String>>? _identity;
   HttpClient? _active;
   Future<void>? _inFlight;
@@ -333,9 +336,10 @@ class SodaOnline {
     }
     for (final page in _cache.values) {
       if (page.public['revision'] != payload['revision']) continue;
-      if (_clock().difference(page.created) >= const Duration(seconds: 60)) {
-        break;
-      }
+      // A shown result stays playable for playableFor (the iPad quick menu keeps
+      // the list you played from); an older page is skipped, not the end of the
+      // search (it used to stop at the first expired page).
+      if (_clock().difference(page.created) >= playableFor) continue;
       final id = page.tracks[payload['track']];
       final rows = page.public['rows'] as List;
       if (id != null &&

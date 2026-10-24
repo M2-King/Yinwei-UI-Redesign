@@ -168,7 +168,11 @@ void main() {
         throwsA(failure('soda_stale_selection')));
     expect(() => service.resolveTrack({...selection, 'url': 'luna://anything'}),
         throwsA(failure('soda_invalid_selection')));
+    // Still playable a minute later (the iPad quick menu keeps the list)...
     now = now.add(const Duration(seconds: 60));
+    expect(service.resolveTrack(selection), '7399000000000000001');
+    // ...until playableFor has passed.
+    now = now.add(SodaOnline.playableFor);
     expect(() => service.resolveTrack(selection),
         throwsA(failure('soda_stale_selection')));
   });
