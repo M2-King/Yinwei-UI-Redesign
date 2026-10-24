@@ -375,7 +375,12 @@ void main() {
     liveSource = '';
     await signIn();
     expect(await listen.takeControl(), isTrue);
-    for (final code in ['music_app_no_song', 'music_app_open_failed']) {
+    for (final code in [
+      'music_app_no_song',
+      'music_app_open_failed',
+      // An interrupted Live session left 汽水 rerouted: explain it, keep control.
+      'audio_route_restore_failed',
+    ]) {
       startFailure = RemoteFailure(code);
       expect(await listen.command('live.start'), isFalse);
       expect(listen.hasControl, isTrue, reason: code);

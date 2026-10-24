@@ -774,6 +774,7 @@ class LaptopListenController extends ChangeNotifier {
             'music_app_open_failed',
             'music_app_no_song',
             'live_start_failed',
+            'audio_route_restore_failed',
             'array_active',
             'invalid_payload',
             'stale_array',
@@ -830,7 +831,7 @@ class LaptopListenController extends ChangeNotifier {
         'live_start_failed' =>
           'Live Transfer did not start on the laptop. Check the laptop.',
         'audio_route_restore_failed' =>
-          'A running music process could not be restored to its normal audio output. Close that music app on the laptop, then try again.',
+          'A running music process is still switched from an interrupted Live session. Fully quit 汽水 on the laptop (including its tray icon), reopen it, then press Play.',
         'media_command_failed' =>
           'The laptop music app did not accept that command.',
         'array_active' => 'Orbit is off in 2.0 mode.',
