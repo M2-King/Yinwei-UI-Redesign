@@ -1,3 +1,5 @@
+import 'listen_tap_trace.dart';
+
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
@@ -407,7 +409,10 @@ class SodaLibrary {
     };
   }
 
-  Future<String> resolveTrack(Map<String, dynamic> payload) async {
+  /// A final launcher fence may reuse a snapshot younger than one second,
+  /// but always re-reads the account. Slow handler checks do a full refresh.
+  Future<String> resolveTrack(Map<String, dynamic> payload,
+      {bool revalidate = false}) async {
     final revision = payload['revision'];
     if (payload.keys.any((key) =>
         !const ['list', 'snapshot', 'track', 'revision'].contains(key))) {
@@ -417,7 +422,30 @@ class SodaLibrary {
     // debounce. No stale selection may launch content in another account: an
     // account change clears every list, so old list/snapshot/track tokens can
     // no longer resolve at all.
-    await refresh();
+    final clock = Stopwatch()..start();
+    ListenTapTrace.mark('host.resolve.start');
+    final age = _lastRead == null ? null : _clock().difference(_lastRead!);
+    final reuse = revalidate && _pending == null && age != null &&
+        !age.isNegative && age < const Duration(seconds: 1);
+    if (reuse) {
+      String active;
+      try {
+        active = await reader.readAccount();
+      } on SodaCacheFailure catch (e) {
+        _invalidate();
+        throw SodaLibraryFailure(e.code == 'soda_no_account' ? 'soda_unavailable' : e.code);
+      } catch (_) {
+        _invalidate();
+        throw const SodaLibraryFailure('soda_source_busy');
+      }
+      if (active != _account) {
+        _invalidate();
+        throw const SodaLibraryFailure('soda_stale_selection');
+      }
+    } else {
+      await refresh();
+    }
+    ListenTapTrace.mark('host.resolve.refresh', {'us': clock.elapsedMicroseconds, 'accountOnly': reuse});
     if (revision is! String) {
       throw const SodaLibraryFailure('soda_stale_selection');
     }
@@ -456,6 +484,7 @@ class SodaLibrary {
     if (!track.supported) {
       throw const SodaLibraryFailure('soda_track_unavailable');
     }
+    ListenTapTrace.mark('host.resolve.end', {'us': clock.elapsedMicroseconds});
     return track.id;
   }
 

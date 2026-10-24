@@ -1,3 +1,5 @@
+import 'listen_tap_trace.dart';
+
 import 'dart:async';
 import 'dart:convert';
 
@@ -103,15 +105,20 @@ class ListenRoomBridge {
   final _cachedQueues = <String, _RoomQueue>{};
   final _onlineQueues = <String, _RoomQueue>{};
   _RoomQueue? _queue;
-  String? _libraryRevision, _queueHost;
+  String? _queueHost;
+  bool _queueSent = false;
+  int _queueRevision = 0;
+  _RoomQueue? _lastSentQueue;
   bool _queueSignedIn = false;
   int _queueGeneration = 0;
 
   void _clearQueue() {
     _queue = null;
+    _queueRevision++;
+    _lastSentQueue = null;
     _cachedQueues.clear();
     _onlineQueues.clear();
-    _libraryRevision = null;
+    _queueSent = false;
     _queueGeneration++;
     _musicGeneration++;
     _sodaGeneration++;
@@ -133,9 +140,8 @@ class ListenRoomBridge {
     return text.length <= max ? text : text.substring(0, max);
   }
 
-  bool _queueCurrent(_RoomQueue queue) => queue.command == 'library.play'
-      ? queue.revision == _libraryRevision
-      : _onlineQueues[queue.key]?.revision == queue.revision;
+  // The laptop validates opaque tokens against its current account/catalog.
+  // Browse revisions never invalidate a displayed selection on this iPad.
 
   // Keep the last displayed page for each list/snapshot (no background reads
   // or merging unseen pages). Cached search results carry their own list ids.
@@ -154,8 +160,6 @@ class ListenRoomBridge {
       rows = value['rows'] as List;
       playable = value['playbackReady'] == true;
     } else {
-      if (_libraryRevision != revision) _cachedQueues.clear();
-      _libraryRevision = revision as String;
       final list = _map(value['list']), page = _map(value['page']);
       if (page['rows'] is List &&
           _selectionId(list['id']) &&
@@ -218,8 +222,11 @@ class ListenRoomBridge {
 
   _RoomQueue? _queueFor(String command, Map<String, dynamic> payload) {
     final results = command == 'library.play' ? _cachedQueues : _onlineQueues;
-    for (final queue in results.values.toList().reversed) {
-      if (_queueCurrent(queue) &&
+    for (final queue in [
+      ...results.values.toList().reversed,
+      if (_queue != null) _queue!
+    ]) {
+      if (queue.command == command &&
           queue.songs.any((song) =>
               song.playable &&
               song.ids.entries.every((id) => payload[id.key] == id.value))) {
@@ -232,12 +239,9 @@ class ListenRoomBridge {
   Map<String, dynamic>? _queueState(Map<String, dynamic> snap) {
     final queue = _queue;
     if (queue == null) return null;
-    final track = _map(snap['track']);
     return {
       'title': queue.title,
-      'playing': queue.songs.indexWhere((song) =>
-          song.title == _queueText(track['title']) &&
-          song.artist == _queueText(track['artist'])),
+      'playing': _queuePlaying(snap),
       'songs': [
         for (final song in queue.songs)
           {'title': song.title, 'artist': song.artist}
@@ -245,13 +249,45 @@ class ListenRoomBridge {
     };
   }
 
+  int _queuePlaying(Map<String, dynamic> snap) {
+    final queue = _queue;
+    if (queue == null) return -1;
+    final live = snap['liveRunning'] == true;
+    final track = _map(snap[live ? 'live' : 'track']);
+    final title = _queueText(track['title']);
+    final artist = _queueText(track['artist']);
+    final matches = <int>[
+      for (var i = 0; i < queue.songs.length; i++)
+        if (queue.songs[i].title == title &&
+            (!live || artist.isNotEmpty
+                ? queue.songs[i].artist == artist
+                : true))
+          i
+    ];
+    // Live metadata currently has no artist. Ambiguous titles stay unknown.
+    return matches.length == 1 ? matches.single : -1;
+  }
+
+  Future<void> _musicNotice(String text) async {
+    ListenTapTrace.mark('bridge.play.refused', {'reason': text});
+    await toast(text);
+  }
+
   Future<void> _playMusic(String command, Map<String, dynamic> payload,
       {_RoomQueue? queue}) async {
+    ListenTapTrace.mark('bridge.play.guards',
+        {'busy': _musicPlaying, 'pending': session.pending});
     final cap = command == 'library.play' ? 'sodaLibrary' : 'sodaOnlinePlay';
-    if (!session.signedIn ||
-        _map(session.snapshot?['capabilities'])[cap] != true ||
-        _musicPlaying ||
-        session.pending) {
+    if (!session.signedIn) {
+      await _musicNotice('Sign in to play a song');
+      return;
+    }
+    if (_map(session.snapshot?['capabilities'])[cap] != true) {
+      await _musicNotice('Playback is unavailable on this laptop');
+      return;
+    }
+    if (_musicPlaying || session.pending) {
+      await _musicNotice('Still pending. Try again in a moment');
       return;
     }
     final generation = _queueGeneration, host = _queueHost;
@@ -261,20 +297,26 @@ class ListenRoomBridge {
           session.signedIn &&
           generation == _queueGeneration &&
           host == _queueHost &&
-          _map(session.snapshot?['capabilities'])[cap] == true &&
-          (queue == null || _queueCurrent(queue));
+          _map(session.snapshot?['capabilities'])[cap] == true;
     }
 
-    if (!current()) return;
+    if (!current()) {
+      await _musicNotice('The connection changed. Open the music list again');
+      return;
+    }
     _musicPlaying = true;
     try {
       if (await _command(command, payload, current) && current()) {
         // Do not invent a list for a selection whose browse result was not seen.
+        if (!identical(_queue, queue)) _queueRevision++;
         _queue = queue;
         schedule();
       }
     } finally {
       _musicPlaying = false;
+      if (_ready && !_disposed && !_background) {
+        await run('YinweiListen.selectionDone()');
+      }
     }
   }
 
@@ -315,13 +357,15 @@ class ListenRoomBridge {
   void pageReloaded() {
     _ready = false;
     _lastJson = null;
+    _lastSentQueue = null;
+    _queueSent = false;
     _setAirplayRect(null);
   }
 
   // ------------------------------------------------------------ state out
 
   /// The page state, version 1.
-  Map<String, dynamic> state() {
+  Map<String, dynamic> state({bool includeQueue = true}) {
     _syncQueueHost();
     final s = session;
     final snap = s.snapshot ?? const <String, dynamic>{};
@@ -452,7 +496,9 @@ class ListenRoomBridge {
           : _num(pose['azimuthDeg'])?.clamp(-180.0, 180.0) ?? 0,
       'el': _num(pose['elevationDeg'])?.clamp(-90.0, 90.0) ?? 0,
       'dist': _num(pose['distanceM'])?.clamp(0.5, 10.0) ?? 2,
-      'queue': _queueState(snap),
+      'queueRevision': _queueRevision,
+      'queuePlaying': _queuePlaying(snap),
+      if (includeQueue) 'queue': _queueState(snap),
       'track': title.isEmpty
           ? null
           : {
@@ -520,13 +566,54 @@ class ListenRoomBridge {
   }
 
   /// Sends the state now, if it changed (or always, with [force]).
-  Future<void> push({bool force = false}) async {
+  Future<void>? _pushJob;
+  bool _pushRequested = false, _forceRequested = false;
+
+  Future<void> push({bool force = false}) {
+    _pushRequested = true;
+    _forceRequested |= force;
+    return _pushJob ??= _drainPushes();
+  }
+
+  Future<void> _drainPushes() async {
+    // Yield once so _pushJob is installed even for a synchronous/no-op send.
+    await Future<void>.value();
+    try {
+      while (_pushRequested) {
+        _pushRequested = false;
+        final force = _forceRequested;
+        _forceRequested = false;
+        await _pushState(force: force);
+      }
+    } finally {
+      _pushJob = null;
+    }
+  }
+
+  Future<void> _pushState({bool force = false}) async {
     if (!_ready || _disposed || _background) return;
-    final json = jsonEncode(state());
+    final clock = Stopwatch()..start();
+    _syncQueueHost();
+    final queue = _queue;
+    final json = jsonEncode(state(
+        includeQueue:
+            force || !_queueSent || !identical(queue, _lastSentQueue)));
+    ListenTapTrace.mark('bridge.push.encode',
+        {'us': clock.elapsedMicroseconds, 'bytes': utf8.encode(json).length});
     if (!force && json == _lastJson) return;
     _lastJson = json;
     _lastPush = DateTime.now();
-    await run('YinweiListen.apply($json)');
+    clock.reset();
+    try {
+      await run('YinweiListen.apply($json)');
+      _lastSentQueue = queue;
+      _queueSent = true;
+    } catch (_) {
+      _lastJson = null;
+      _lastSentQueue = null;
+      rethrow;
+    }
+    ListenTapTrace.mark('bridge.push.run', {'us': clock.elapsedMicroseconds});
   }
 
   Future<void> toast(String text) async {
@@ -547,6 +634,15 @@ class ListenRoomBridge {
       m = data;
     } catch (_) {
       return;
+    }
+    if (const ['queuePlay', 'musicPlay', 'musicOnlinePlay', 'media']
+        .contains(m['t'])) {
+      ListenTapTrace.begin('bridge.intent', {
+        'action': m['t'],
+        'pageTapMs': _num(m['tapMs']),
+        'pageEpochMs': _num(m['tapEpochMs'])
+      });
+      session.recordPageTap(m['tapMs']);
     }
     final snap = session.snapshot ?? const <String, dynamic>{};
     final caps = _map(snap['capabilities']);
@@ -633,11 +729,6 @@ class ListenRoomBridge {
               ...value
             })})');
       case 'musicOnlinePlay':
-        if (caps['sodaOnlinePlay'] != true ||
-            _musicPlaying ||
-            session.pending) {
-          return;
-        }
         final payload = <String, dynamic>{};
         for (final key in ['track', 'revision']) {
           final value = m[key];
@@ -703,9 +794,6 @@ class ListenRoomBridge {
               ...value
             })})');
       case 'musicPlay':
-        if (caps['sodaLibrary'] != true || _musicPlaying || session.pending) {
-          return;
-        }
         final payload = <String, dynamic>{};
         for (final key in ['list', 'snapshot', 'track', 'revision']) {
           final value = m[key];
@@ -719,12 +807,16 @@ class ListenRoomBridge {
         if (queue == null ||
             index is! int ||
             index < 0 ||
-            index >= queue.songs.length ||
-            !_queueCurrent(queue)) {
+            index >= queue.songs.length) {
+          await _musicNotice(
+              'This song list is no longer available. Open Music again');
           return;
         }
         final song = queue.songs[index];
-        if (!song.playable) return;
+        if (!song.playable) {
+          await _musicNotice('This song is unavailable in the selected list');
+          return;
+        }
         await _playMusic(queue.command, song.ids, queue: queue);
       case 'rects':
         final r = m['airplay'];
@@ -916,7 +1008,10 @@ class ListenRoomBridge {
   Future<bool> _command(String type,
       [Map<String, dynamic> payload = const {},
       bool Function()? stillValid]) async {
-    if (stillValid != null && !stillValid()) return false;
+    if (stillValid != null && !stillValid()) {
+      await _musicNotice('The connection changed. Open the music list again');
+      return false;
+    }
     if (!session.hasControl) {
       if (_takenAway || !await session.takeControl()) {
         await toast(_toastText(session.notice ??
@@ -928,7 +1023,15 @@ class ListenRoomBridge {
     for (var i = 0; session.pending && i < 30; ++i) {
       await Future<void>.delayed(const Duration(milliseconds: 100));
     }
-    if (stillValid != null && !stillValid()) return false;
+    if (stillValid != null && !stillValid()) {
+      await _musicNotice('The connection changed. Open the music list again');
+      return false;
+    }
+    if (session.pending) {
+      await _musicNotice('Still pending. Try again in a moment');
+      return false;
+    }
+    ListenTapTrace.mark('bridge.command', {'action': type});
     final ok = await session.command(type, payload);
     final notice = session.notice;
     if (notice != null) await toast(_toastText(notice));

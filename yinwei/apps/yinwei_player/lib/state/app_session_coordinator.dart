@@ -1,3 +1,5 @@
+import 'package:yinwei_player/remote/listen_tap_trace.dart';
+
 import 'dart:async';
 import 'dart:convert';
 
@@ -426,6 +428,11 @@ class AppSessionCoordinator {
 
   Future<Map<String, dynamic>> command(
       String device, Map<String, dynamic> input) {
+    if (const ['library.play', 'soda.play', 'media.pause', 'media.play']
+        .contains(input['type'])) {
+      ListenTapTrace.begin('host.command.received',
+          {'commandId': input['commandId'], 'action': input['type']});
+    }
     final id = input['commandId'];
     if (id is! String || !RegExp(r'^[a-zA-Z0-9_-]{8,80}$').hasMatch(id)) {
       throw const RemoteFailure('invalid_command_id', httpStatus: 400);

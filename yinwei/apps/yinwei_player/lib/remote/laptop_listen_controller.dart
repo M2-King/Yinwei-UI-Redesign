@@ -1,3 +1,5 @@
+import 'listen_tap_trace.dart';
+
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
@@ -276,6 +278,7 @@ class LaptopListenController extends ChangeNotifier {
                 'transportGeneration': _transportGeneration
               },
         ..._diagnostics.snapshot(),
+        'tapTrace': ListenTapTrace.snapshot(),
         'commands':
             _commandTimings.map((row) => Map<String, Object?>.of(row)).toList(),
       };
@@ -558,6 +561,10 @@ class LaptopListenController extends ChangeNotifier {
   }
 
   void _applySnapshot(Map<String, dynamic> value) {
+    ListenTapTrace.mark('client.snapshot', {
+      'stateVersion': value['stateVersion'],
+      'livePlaying': (value['live'] is Map ? value['live']['playing'] : null)
+    });
     snapshot = value;
     if (_client case final RoutedOwnerClient routed) {
       routed.observeSnapshot(value);
@@ -650,6 +657,7 @@ class LaptopListenController extends ChangeNotifier {
 
   Future<bool> command(String type,
       [Map<String, dynamic> payload = const {}]) async {
+    ListenTapTrace.begin('client.command', {'action': type});
     final tapped = _commandClock.elapsedMicroseconds;
     final row = <String, Object?>{
       'action': type,

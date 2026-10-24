@@ -16,7 +16,7 @@ const ListenBridge = (() => {
   const FIELDS = ["laptop", "connection", "source", "live", "playing", "listening", "control", "notice",
     "mode", "motion", "orbitHz", "az", "el", "dist", "track", "volume", "level", "stats", "opens",
     "pending", "progress", "pos", "dur", "seekable", "canClose", "updates", "appBuild", "quality", "stream", "opus",
-    "speakers", "selectedSpeakerIndex", "arrayRevision", "maxSpeakers", "speakerControl", "matrixLinked", "matrixSpread", "music", "musicSearch", "musicOnline", "queue"];
+    "speakers", "selectedSpeakerIndex", "arrayRevision", "maxSpeakers", "speakerControl", "matrixLinked", "matrixSpread", "music", "musicSearch", "musicOnline", "queue", "queueRevision", "queuePlaying"];
   const wrap = (a) => { a = ((a + 180) % 360 + 360) % 360 - 180; return a === -180 ? 180 : a; };
   // Values the app may send, so a bad message can't put the page in a state it can't draw.
   const ENUMS = {
@@ -29,6 +29,8 @@ const ListenBridge = (() => {
   const SONG = { pos: [0, 86400], dur: [0, 86400] };
   const RANGES = { ...SONG, orbitHz: [0.05, 2], az: [-180, 180], el: [-90, 90], dist: [0.5, 10], volume: [0, 1], level: [0, 1] };
   function clean(k, v) {
+    if (k === "queueRevision") return Number.isSafeInteger(v) && v >= 0 ? v : undefined;
+    if (k === "queuePlaying") return Number.isInteger(v) && v >= -1 && v < 500 ? v : undefined;
     if (k === "matrixSpread") return typeof v === "number" && Number.isFinite(v) && v >= 0.12 && v <= 2.6 ? v : undefined;
     if (["speakerControl", "matrixLinked", "music", "musicSearch", "musicOnline"].includes(k)) return typeof v === "boolean" ? v : undefined;
     if (["arrayRevision", "selectedSpeakerIndex", "maxSpeakers"].includes(k)) {
@@ -76,7 +78,9 @@ const ListenBridge = (() => {
     if (k === "stats") return v && typeof v === "object" ? { received: Number(v.received) || 0, bufferMs: Number(v.bufferMs) || 0, underruns: Number(v.underruns) || 0 } : undefined;
     return undefined;
   }
-  const same = (k, a, b) => (k === "az" ? Math.abs(wrap(a - b)) < 0.5 : k === "el" ? Math.abs(a - b) < 0.5
+  const queueSame = (a, b) => a === b || !!(a && b && a.title === b.title && a.playing === b.playing &&
+    a.songs.length === b.songs.length && a.songs.every((s, i) => s.title === b.songs[i].title && s.artist === b.songs[i].artist));
+  const same = (k, a, b) => (k === "queue" ? queueSame(a, b) : k === "az" ? Math.abs(wrap(a - b)) < 0.5 : k === "el" ? Math.abs(a - b) < 0.5
     : k === "dist" ? Math.abs(a - b) < 0.051 : k === "pos" ? Math.abs(a - b) < 2.5 : k === "orbitHz" || k === "volume" ? Math.abs(a - b) < 0.011 : a === b);
   // Keep a value the person just set. ok(appValue) says when the app has confirmed it.
   function hold(held, k, v, now, ok, ms = HOLD_MS) { held[k] = { v, until: now + ms, ok: ok || ((x) => same(k, x, v)) }; }
@@ -92,9 +96,17 @@ const ListenBridge = (() => {
       const v = clean(k, next[k]);
       if (v === undefined) continue;
       if (opts.placing && (k === "az" || k === "el" || k === "dist")) continue;
+      // Once the command has completed, transport comes from the laptop even
+      // when a previous optimistic play has not reached its hold deadline.
+      if (k === "playing" && next.pending === false) delete held.playing;
       const h = held[k];
       if (h) { if (h.ok(v) || now > h.until) delete held[k]; else continue; }
       if (k === "az" && opts.orbiting) { const d = wrap(v - S.az); if (Math.abs(d) < 20) { S.az = wrap(S.az + d * 0.3); changed.push(k); continue; } }
+      if (k === "queue" && queueSame(S.queue, v)) continue;
+      if (k === "queuePlaying" && S.queue && v !== S.queue.playing) {
+        S.queue = { ...S.queue, playing: v < S.queue.songs.length ? v : -1 };
+        changed.push("queue");
+      }
       const before = JSON.stringify(S[k]);
       S[k] = v;
       if (JSON.stringify(v) !== before) changed.push(k);
@@ -104,5 +116,12 @@ const ListenBridge = (() => {
   // A soft per-song tint for the generated cover (the laptop sends no artwork),
   // within the night blues of the approved prototype (205–240).
   function hueOf(title) { let h = 0; for (const ch of String(title || "")) h = (h * 31 + ch.codePointAt(0)) >>> 0; return 205 + (h % 36); }
-  return { VERSION, HOLD_MS, FIELDS, PROGRESS, merge, hold, same, clean, hueOf };
+  const traceRows = [];
+  function trace(phase, fields = {}) {
+    const row = { phase, epochMs: Date.now(), pageMs: globalThis.performance?.now?.() ?? Date.now(), ...fields };
+    if (traceRows.length === 256) traceRows.shift();
+    traceRows.push(row);
+  }
+  const tapReport = () => traceRows.map(r => ({ ...r }));
+  return { trace, tapReport, VERSION, HOLD_MS, FIELDS, PROGRESS, merge, hold, same, clean, hueOf };
 })();

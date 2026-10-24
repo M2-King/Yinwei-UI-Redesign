@@ -1,3 +1,5 @@
+import 'listen_tap_trace.dart';
+
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
@@ -210,8 +212,11 @@ class RemoteOwnerClient {
         'payload': payload,
       };
 
-  Future<Map<String, dynamic>> sendCommand(Map<String, dynamic> envelope) =>
-      _request('/remote/api/commands', body: envelope);
+  Future<Map<String, dynamic>> sendCommand(Map<String, dynamic> envelope) {
+    ListenTapTrace.mark('client.request.sent',
+        {'commandId': envelope['commandId'], 'action': envelope['type']});
+    return _request('/remote/api/commands', body: envelope);
+  }
 
   /// Read-only cached music browsing; owner authentication and CSRF still apply.
   Future<Map<String, dynamic>> libraryList(

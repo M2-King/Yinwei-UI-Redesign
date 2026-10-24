@@ -1,3 +1,5 @@
+import 'listen_tap_trace.dart';
+
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
@@ -1044,6 +1046,7 @@ class RemoteGateway {
   }
 
   void _sendSnapshot(WebSocket socket) {
+    ListenTapTrace.mark('host.snapshot.sent');
     final sequence = ++_eventSequence;
     _pendingAck[socket] = sequence;
     _sentAt[socket] = DateTime.now();

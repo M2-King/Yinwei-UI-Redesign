@@ -93,7 +93,7 @@ Map<String, dynamic> online(
     };
 
 class Harness {
-  Harness() {
+  Harness({Future<void> Function(String script)? onRun}) {
     s.snapshot = snapshot(liveRunning: false)..['hostSessionId'] = 'host_one';
     s.snapshot!['capabilities'].addAll({
       'sodaLibrary': true,
@@ -102,7 +102,11 @@ class Harness {
       'sodaSearch': true,
     });
     b = ListenRoomBridge(
-        session: s, run: (script) async => scripts.add(script));
+        session: s,
+        run: (script) async {
+          scripts.add(script);
+          await onRun?.call(script);
+        });
     b.attach();
     addTearDown(() {
       b.dispose();
@@ -305,7 +309,7 @@ void main() {
   });
 
   test(
-      'changed library revision invalidates queue selection without playing stale ids',
+      'changed library revision delegates active selection validation to the laptop',
       () async {
     final h = Harness();
     await h.browse();
@@ -313,11 +317,11 @@ void main() {
     await h.browse({'revision': 'new_revision', 'lists': []});
     h.s.calls.clear();
     await h.intent({'t': 'queuePlay', 'i': 1});
-    expect(h.s.calls, isEmpty);
+    expect(h.commands, hasLength(1));
   });
 
   test(
-      'replaced online search revision is stale while other queries leave the queue intact',
+      'replaced online search delegates retained selection validation to the laptop',
       () async {
     final h = Harness();
     await h.search();
@@ -332,7 +336,7 @@ void main() {
     await h.search(online(revision: 'new_revision'));
     h.s.calls.clear();
     await h.intent({'t': 'queuePlay', 'i': 1});
-    expect(h.s.calls, isEmpty);
+    expect(h.commands, hasLength(1));
   });
 
   test(

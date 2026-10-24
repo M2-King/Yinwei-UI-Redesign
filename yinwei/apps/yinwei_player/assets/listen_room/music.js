@@ -150,7 +150,7 @@ const ListenMusic = (() => {
         for (const row of onlineData.rows) {
           const b = trackButton(row, row.artist);
           b.onclick = () => {
-            if (b.disabled || busy || state().pending || state().control !== "mine") return;
+            if (b.disabled || !playPermit()) return;
             send({t:"musicOnlinePlay", revision:onlineData.revision, track:row.id});
           }; section.append(b);
         }
@@ -164,13 +164,21 @@ const ListenMusic = (() => {
           (!value.error && value.kind === "search" && value.query !== query)) return;
       onlineBusy = false; onlineData = value; paintOnline(); update();
     }
+    function playPermit() {
+      const s = state();
+      const reason = busy ? "The music list is still loading" : s.pending ? "Still pending. Try again in a moment" :
+        s.control !== "mine" ? "Take control to play a song" : s.connection !== "connected" ? "The laptop is reconnecting. Try again when connected" : "";
+      if (reason) toast(reason);
+      return !reason;
+    }
     function play(listId, snapshotId, trackId) {
-      if (busy || state().pending || state().control !== "mine") return;
+      if (!playPermit()) return;
       send({ t: "musicPlay", list: listId, snapshot: snapshotId, track: trackId, revision: data.revision });
     }
     function trackButton(row, sub) {
       const b = node("button", "", "music-track"); b.type = "button"; rowOf.set(b, row);
-      b.disabled = !row.playable || state().pending || state().control !== "mine" || state().connection !== "connected";
+      b.disabled = !row.playable;
+      b.setAttribute("aria-disabled", String(!row.playable || state().pending || state().control !== "mine" || state().connection !== "connected"));
       const meta = node("span", "", "music-track-meta"); meta.append(node("span", row.title, "music-name"), node("small", sub, "music-note"));
       const seconds = row.durationMs === null ? null : Math.floor(row.durationMs / 1000);
       const duration = seconds === null ? "" : `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
@@ -266,7 +274,8 @@ const ListenMusic = (() => {
       el("music-modes").disabled = s.connection !== "connected";
       if (open) for (const b of el("music-body").querySelectorAll(".music-track")) {
         const row = rowOf.get(b);
-        b.disabled = !row?.playable || s.pending || s.control !== "mine" || s.connection !== "connected";
+        b.disabled = !row?.playable;
+        b.setAttribute("aria-disabled", String(!row?.playable || s.pending || s.control !== "mine" || s.connection !== "connected"));
       }
     }
     el("music-btn").onclick = show; el("music-close").onclick = close;

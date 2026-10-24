@@ -1,3 +1,5 @@
+import 'listen_tap_trace.dart';
+
 import 'dart:convert';
 import 'dart:io';
 
@@ -63,6 +65,7 @@ class SodaTrackLauncher {
   Future<void> play(String trackId,
       {required void Function() beforeDispatch,
       Future<void> Function()? revalidateSelection}) async {
+    ListenTapTrace.mark('host.launcher.start');
     if (!_supported) throw const RemoteFailure('soda_unavailable');
     final idMatch = RegExp(r'[0-9]{1,32}').matchAsPrefix(trackId);
     if (idMatch == null || idMatch.end != trackId.length) {
@@ -96,12 +99,16 @@ class SodaTrackLauncher {
     );
     // Registry inspection may wait for its helper. Fence account, catalog and
     // selection again after that wait, before the final synchronous lease guard.
+    ListenTapTrace.mark('host.launcher.identity');
     await revalidateSelection?.call();
+    ListenTapTrace.mark('host.launcher.revalidated');
     // Last synchronous guard after all account/catalog/registry preparation.
     // A refusal here is definitely before dispatch and can safely be reported.
     beforeDispatch();
     try {
+      ListenTapTrace.mark('host.handoff.start');
       await _launch(executable, ['--', uri.toString()]);
+      ListenTapTrace.mark('host.handoff.submitted');
     } catch (_) {
       // Never label an ambiguous external dispatch as a pre-action lease/state
       // refusal: clients must not repeat a possibly submitted playback action.

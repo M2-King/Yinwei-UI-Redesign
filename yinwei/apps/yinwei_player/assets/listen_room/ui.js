@@ -73,13 +73,17 @@ const setLocal = (fields, ok) => { const now = performance.now(); for (const k i
 // Intents, page → app. In the app the "YinweiNative" channel carries them to
 // Dart; in a plain browser they become a "yinwei-intent" event (dev host, tests).
 function send(intent) {
-  if (intent.t === "media") intent.tapMs = performance.now();
+  if (["media", "queuePlay", "musicPlay", "musicOnlinePlay"].includes(intent.t)) {
+    intent.tapMs = performance.now(); intent.tapEpochMs = Date.now();
+    ListenBridge.trace("page.tap", { action: intent.t });
+  }
   const msg = JSON.stringify(intent);
   try { if (window.YinweiNative && typeof window.YinweiNative.postMessage === "function") { window.YinweiNative.postMessage(msg); return; } } catch (e) { /* fall through */ }
   window.dispatchEvent(new CustomEvent("yinwei-intent", { detail: JSON.parse(msg) }));
 }
 const musicSheet = ListenMusic.create({ send, state: () => S, toast: (text) => toast(text) });
 function apply(next) {
+  const applyAt = performance.now();
   if (typeof next === "string") { try { next = JSON.parse(next); } catch (e) { return; } }
   const now = performance.now(), heldBefore = Object.keys(held).join();
   const wasPending = S.pending;
@@ -99,6 +103,7 @@ function apply(next) {
         now - speakerDraft.committed > ListenBridge.HOLD_MS)))) speakerDraft = null;
   if (changed.includes("pos")) posAt = now; // the song clock restarts from each report
   if (changed.length || Object.keys(held).join() !== heldBefore) render();
+  ListenBridge.trace("page.apply", { us: (performance.now() - applyAt) * 1000, queueChanged: changed.includes("queue"), pending: S.pending, playing: S.playing });
 }
 
 const isCjk = (t) => /[㐀-鿿]/.test(t);
@@ -387,7 +392,15 @@ function pkFit() {
 let winOffset = 0, winAnchor = 3, winWheelAcc = 0;
 const pkRows = new Map();
 const pkSongs = () => (S.queue && S.queue.songs.length ? S.queue.songs : null);
-const pkSig = () => { const q = S.queue; return q && q.songs.length ? JSON.stringify([q.title, q.songs]) : ""; };
+let pkSigSongs = null, pkSigTitle = "", pkSigValue = "";
+const pkSig = () => {
+  const q = S.queue;
+  if (!q || !q.songs.length) return "";
+  if (!Number.isSafeInteger(S.queueRevision) || q.songs !== pkSigSongs || q.title !== pkSigTitle) {
+    pkSigSongs = q.songs; pkSigTitle = q.title; pkSigValue = JSON.stringify([q.title, q.songs]);
+  }
+  return pkSigValue;
+};
 // Where the album cover sits while the player shows: the picker grows from it and folds back into it.
 function measureArt() {
   const r = $("art").getBoundingClientRect();
@@ -501,7 +514,7 @@ function pkLayout(phase = "flow", stagger = false) {
     el.classList.toggle("far", Math.abs(d) > 2 || phase === "toCover");
     el.setAttribute("aria-selected", d === 0 ? "true" : "false");
     el.tabIndex = d === 0 ? 0 : -1;
-    el.disabled = !pkCanPlay();
+    el.disabled = false; el.setAttribute("aria-disabled", String(!pkCanPlay()));
     el.setAttribute("aria-current", String(i === playing));
     el.setAttribute("aria-hidden", String(Math.abs(d) > 2));
   }
@@ -519,9 +532,11 @@ function pkBrowse(step) {
 // Choosing a song plays it (browsing alone never does); the picker stays open.
 function pkSelect(i) {
   const songs = pkSongs();
-  if (!songs || i < 0 || i >= songs.length || browseMode !== "compact" || !pkCanPlay()) return;
+  if (!songs || i < 0 || i >= songs.length || browseMode !== "compact") return;
+  if (!pkPermit()) return;
   pkFocus = i;
-  if (i !== S.queue.playing) { pkWait = i; act(`queue play ${i}`); send({ t: "queuePlay", i }); }
+  if (i !== S.queue.playing || !S.playing) { pkWait = i; act(`queue play ${i}`); send({ t: "queuePlay", i }); }
+  else toast("This song is already playing");
   pkLayout("flow");
 }
 function winBrowse(step) { const songs = pkSongs(); if (songs) { stopFire(); winOffset = clamp(winOffset + step, 0, songs.length - 1); syncWindowList(); camMoving = true; } }
@@ -533,15 +548,29 @@ function winWheel(dy) {
 // A pane tapped in window mode plays its song; window mode stays open.
 function winTap(i) {
   const songs = pkSongs();
-  if (!songs || i < 0 || i >= songs.length || browseMode !== "window" || !pkCanPlay()) return;
-  if (i !== S.queue.playing) { pkWait = i; act(`window play ${i}`); send({ t: "queuePlay", i }); }
+  if (!songs || i < 0 || i >= songs.length || browseMode !== "window") return;
+  if (!pkPermit()) return;
+  if (i !== S.queue.playing || !S.playing) { pkWait = i; act(`window play ${i}`); send({ t: "queuePlay", i }); }
+  else toast("This song is already playing");
 }
 const pkCanPlay = () => !otherHasControl() && !lost() && !S.pending && S.connection === "connected";
+function pkPermit() {
+  if (pkCanPlay()) return true;
+  toast(S.pending ? "Still pending. Try again in a moment" :
+    otherHasControl() ? "Take control to play a song" : "The laptop is reconnecting. Try again when connected");
+  return false;
+}
+function selectionDone() {
+  pkWait = -1; pkSync = "";
+  if (browseMode === "compact") pkLayout("flow");
+}
+let winListSongs = null;
 // Window songs also have a keyboard/screen-reader representation; the room draws their faces.
 function syncWindowList() {
   const list = $("win-list"), songs = pkSongs() || [];
-  const key = JSON.stringify([songs, S.queue && S.queue.playing, winOffset, pkCanPlay()]);
-  if (list.dataset.key === key) return;
+  const key = JSON.stringify([Number.isSafeInteger(S.queueRevision) ? S.queueRevision : pkSig(), S.queue && S.queue.playing, winOffset, pkCanPlay()]);
+  if (list.dataset.key === key && winListSongs === songs) return;
+  winListSongs = songs;
   const focused = list.contains(document.activeElement);
   list.dataset.key = key; list.replaceChildren();
   songs.forEach((song, i) => {
@@ -549,7 +578,7 @@ function syncWindowList() {
     row.textContent = song.artist ? `${song.title}, ${song.artist}` : song.title;
     row.setAttribute("role", "option"); row.setAttribute("aria-selected", String(i === winOffset));
     row.setAttribute("aria-current", String(i === S.queue.playing));
-    row.tabIndex = i === winOffset ? 0 : -1; row.disabled = !pkCanPlay();
+    row.tabIndex = i === winOffset ? 0 : -1; row.disabled = false; row.setAttribute("aria-disabled", String(!pkCanPlay()));
     row.onclick = () => winTap(i); list.append(row);
   });
   if (focused && list.children[winOffset]) list.children[winOffset].focus({ preventScroll: true });
@@ -1018,8 +1047,10 @@ window.YinweiListen = Object.freeze({
   music: (value) => musicSheet.receive(value),
   soda: (value) => musicSheet.receiveOnline(value),
   version: ListenBridge.VERSION,
+  tapReport: ListenBridge.tapReport,
+  selectionDone,
   apply,                                        // (state) app → page, at most 10 times a second
-  toast: (text, holdMs) => toast(String(text), Number(holdMs) || 1500), // e.g. "Applied on the laptop" after a command succeeds
+  toast: (text, holdMs) => { selectionDone(); toast(String(text), Number(holdMs) || 1500); }, // e.g. "Applied on the laptop" after a command succeeds
   suspend: () => { suspended = true; },         // app in the background or off this screen: no rendering
   resume: () => { suspended = false; },
   setQuality: (q) => { if (["auto", "full", "light"].includes(q)) { quality.setting = q; quality.activeTimes.length = 0; if (q === "full") setRatio(quality.maxRatio); applyQuality(q === "light" ? "light" : "full"); } },

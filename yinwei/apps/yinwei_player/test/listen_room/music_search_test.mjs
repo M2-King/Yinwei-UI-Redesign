@@ -22,16 +22,16 @@ class Element {
   querySelector(selector) { return this.querySelectorAll(selector)[0] ?? null; }
 }
 function sheet() {
-  const elements = new Map(), timers = new Map(), sent = [];
+  const elements = new Map(), timers = new Map(), sent = [], notices = [];
+  const state = {music:true, musicSearch:true, musicOnline:true, connection:"connected", control:"mine", pending:false};
   let id = 0;
   const el = name => {if (!elements.has(name)) elements.set(name, new Element()); return elements.get(name);};
   const document = {getElementById:el, createElement:() => new Element()};
   const music = vm.runInNewContext(`${source}\nListenMusic`, {document,
     setTimeout:(fn, ms) => {timers.set(++id, {fn, ms}); return id;}, clearTimeout:id => timers.delete(id)});
-  const view = music.create({send:v => sent.push(v), state:() => ({music:true, musicSearch:true, musicOnline:true,
-    connection:'connected', control:'mine', pending:false}), toast:() => {}});
+  const view = music.create({send:v => sent.push(v), state:() => state, toast:t => notices.push(t)});
   el('music-btn').onclick();
-  return {el, sent, view, music, timers,
+  return {el, sent, view, music, timers, state, notices,
     type(value) {el('music-search').value = value; el('music-search').listeners.input({target:el('music-search')});},
     enter() {el('music-search').listeners.keydown({key:'Enter',target:el('music-search'),preventDefault(){}});},
     flush() {const tasks=[...timers.values()]; timers.clear(); for (const task of tasks) task.fn();},
@@ -102,4 +102,23 @@ test('provider errors use only fixed allowlisted messages, never raw content or 
   assert.equal(s.sent.length,count); assert.equal(s.timers.size,0);
   assert.equal(s.music.cleanOnline({request:1,error:'secret',errorCode:'__proto__'}).error,
     'Online 汽水 is unavailable. Your cached lists still work.');
+});
+
+for (const online of [false, true]) test(`ten ${online ? 'online' : 'cached'} sheet taps each send or explain`, () => {
+  const s=sheet();
+  s.type('rain'); s.flush();
+  const request=s.sent.findLast(v=>v.t===(online?'musicOnline':'musicBrowse')).request;
+  const row={id:'row',title:'Rain',artist:'Fixture',durationMs:1000,playable:true};
+  if (online) s.cached(s.sent.findLast(v=>v.t==='musicBrowse').request,'rain');
+  if (online) s.view.receiveOnline({request,kind:'search',query:'rain',revision:'online',rows:[row],modes:[],playbackReady:true});
+  else s.view.receive({request,available:true,revision:'cached',lists:[],search:{query:'rain',rows:[{...row,list:'liked',snapshot:'latest'}],more:false}});
+  const button=s.el('music-body').querySelector('.music-track'); assert.ok(button);
+  const before=s.sent.length;
+  for(let i=0;i<10;i++) {
+    s.state.pending=i%2===1; s.view.update();
+    assert.equal(button.disabled,false,'pending taps can reach the explanation');
+    button.onclick();
+  }
+  assert.equal(s.sent.length-before,5); assert.equal(s.notices.length,5);
+  assert.ok(s.notices.every(t=>t.includes('pending')));
 });

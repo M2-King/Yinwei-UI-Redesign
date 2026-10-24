@@ -29,7 +29,7 @@ class Element {
   fire(k,e={}){for(const f of this.listeners[k]||[])f({type:k,target:this,preventDefault(){},...e});}
 }
 function setup(reduced=false, count=12){
-  let now=10000, tid=0; const timers=new Map(), intents=[], modes=[];
+  let now=10000, tid=0; const timers=new Map(), intents=[], modes=[], notices=[];
   const doc={listeners:{},createElement(){return new Element(doc);},addEventListener(k,f){(this.listeners[k]??=[]).push(f);}};
   const els=new Map(); const $=id=>{if(!els.has(id))els.set(id,new Element(doc));return els.get(id);};
   $('pk').hidden=$('pk-bar').hidden=true; $('app').clientHeight=820;$('app').clientWidth=1180;
@@ -38,7 +38,7 @@ function setup(reduced=false, count=12){
   const ctx=vm.createContext({$,document:doc,performance:{now:()=>now},reduced,
     clamp:(v,a,b)=>Math.max(a,Math.min(b,v)),S:state,ListenBridge:{hueOf:()=>220},paintArt(){},artVariant:()=>0,isCjk:()=>false,
     closePop(){},closeMenus(){},act(){},otherHasControl:()=>state.control==='other',lost:()=>false,
-    send:i=>intents.push(i),browseCamera:m=>modes.push(m),stopFire(){cancelled++;fired=null;},
+    toast:t=>notices.push(t),send:i=>intents.push(i),browseCamera:m=>modes.push(m),stopFire(){cancelled++;fired=null;},
     fireToWindows(){fired=vm.runInContext('winOffset',ctx);},three:{panes:Array(8)},frontPane:()=>3,panesInView:()=>[1,6],
     getComputedStyle:()=>({getPropertyValue:()=>''}),
     setTimeout(f,ms){timers.set(++tid,{f,at:now+ms});return tid;},clearTimeout:id=>timers.delete(id),
@@ -47,7 +47,7 @@ function setup(reduced=false, count=12){
   vm.runInContext(ui.slice(ui.indexOf('const PK ='),ui.indexOf('function placePop()')),ctx);
   const run=c=>vm.runInContext(c,ctx);
   const advance=ms=>{now+=ms;for(const [i,t] of [...timers])if(t.at<=now){timers.delete(i);t.f();}};
-  return {run,$,doc,state,intents,modes,advance,cancelled:()=>cancelled,fired:()=>fired};
+  return {run,$,doc,state,intents,modes,notices,advance,cancelled:()=>cancelled,fired:()=>fired};
 }
 
 test('only valid adjacent modes are accepted; invalid album/window jumps go through compact',()=>{
@@ -84,7 +84,7 @@ test('browse and mode changes never play; explicit selection uses queuePlay with
 test('permissions protect explicit selection and metadata updates repaint same-length queues',()=>{
   const h=setup();h.run('setBrowseMode("compact")');const row=h.run('pkRows.get(3).el');
   h.state.queue.songs[3].title='Changed';h.run('syncBrowse()');assert.notEqual(h.run('pkRows.get(3).el'),row);
-  h.state.pending=true;h.run('syncBrowse();pkSelect(4)');assert.equal(h.run('pkRows.get(3).el.disabled'),true);assert.deepEqual(h.intents,[]);
+  h.state.pending=true;h.run('syncBrowse();pkSelect(4)');assert.equal(h.run('pkRows.get(3).el.attrs["aria-disabled"]'),'true');assert.deepEqual(h.intents,[]);assert.match(h.notices[0],/pending/);
 });
 test('empty queue stays compact; disappearing queue exits windows without stale hits',()=>{
   const empty=setup(false,0);empty.run('setBrowseMode("compact");setBrowseMode("window")');assert.equal(empty.run('browseMode'),'compact');assert.equal(empty.$('pk-expand').disabled,true);
@@ -129,4 +129,23 @@ test('reduced-motion volley clears shots and uses the ordinary window fade',()=>
   vm.runInContext(room.slice(room.indexOf('const WIN ='),room.indexOf('// ---------------------------------------------------------------- input')),ctx);
   vm.runInContext('fire={};fireToWindows(10,10,76)',ctx);
   assert.equal(vm.runInContext('fire',ctx),null);
+});
+
+for (const mode of ['compact','window']) test(`ten ${mode} taps each dispatch or explain`,()=>{
+  const h=setup();h.run('setBrowseMode("compact")');if(mode==='window')h.run('setBrowseMode("window")');
+  for(let i=0;i<10;i++){
+    h.state.pending=i%2===1;h.run('syncBrowse()');
+    h.run(mode==='compact'?'pkSelect(4)':'winTap(4)');
+  }
+  assert.equal(h.intents.length,5);assert.equal(h.notices.length,5);
+  assert.ok(h.notices.every(t=>t.includes('pending')));
+});
+test('telemetry and playing-index changes keep queue cards and metadata signature stable',()=>{
+  const h=setup(false,500);h.state.queueRevision=1;h.run('setBrowseMode("compact")');
+  const songs=h.state.queue.songs, row=h.run('pkRows.get(3).el'), sig=h.run('pkSig()');
+  for(let i=0;i<100;i++){
+    h.state.queue={...h.state.queue,playing:i%500};h.state.level=i/100;h.run('syncBrowse()');
+    assert.equal(h.run('pkSig()'),sig);assert.equal(h.run('pkRows.get(3).el'),row);
+  }
+  assert.equal(h.state.queue.songs,songs);
 });

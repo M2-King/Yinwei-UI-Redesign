@@ -1,3 +1,5 @@
+import 'package:yinwei_player/remote/listen_tap_trace.dart';
+
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
@@ -170,7 +172,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
       final trackId = await _sodaLibrary!.resolveTrack(payload);
       await _sodaLauncher!.play(trackId, beforeDispatch: beforeDispatch,
           revalidateSelection: () async {
-        if (await _sodaLibrary!.resolveTrack(payload) != trackId) {
+        if (await _sodaLibrary!.resolveTrack(payload, revalidate: true) != trackId) {
           throw const SodaLibraryFailure('soda_stale_selection');
         }
       });
@@ -642,6 +644,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WindowListener {
   }
 
   void _onSmtcChange() {
+    ListenTapTrace.mark('host.media.changed', {'playing': _smtc.state.playing});
     final musicApp = _musicApp;
     if (musicApp != null) unawaited(musicApp.observe(_smtc.state));
     _onChange();
