@@ -11,7 +11,10 @@ import 'package:yinwei_player/remote/laptop_listen_controller.dart';
 /// session and survives route changes and interruptions), plus the lock
 /// screen and Control Center through `dev.yinwei/now_playing`.
 class IosLaptopListenOutput
-    implements LaptopListenOutput, LowLatencyListenOutput {
+    implements
+        LaptopListenOutput,
+        LowLatencyListenOutput,
+        ConcealingListenOutput {
   IosLaptopListenOutput(
       {MethodChannel? player, MethodChannel? audio, MethodChannel? nowPlaying})
       : _player =
@@ -165,6 +168,21 @@ class IosLaptopListenOutput
       return accepted;
     } on PlatformException {
       // Interrupted output: the status poll decides whether to stop.
+      return false;
+    }
+  }
+
+  /// Fills [frames] of lost audio: the native player repeats the last
+  /// 20 ms with a fade-out and fades the next packet in.
+  @override
+  Future<bool> writeGap(int frames) async {
+    try {
+      final result = await _audio.invokeMapMethod<String, dynamic>(
+          'writeRemoteGap', {'frames': frames});
+      return result?['accepted'] == true;
+    } on PlatformException {
+      return false;
+    } on MissingPluginException {
       return false;
     }
   }

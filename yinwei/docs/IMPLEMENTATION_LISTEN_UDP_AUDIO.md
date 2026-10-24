@@ -62,8 +62,10 @@ a missing packet is simply skipped, so the next one plays early (a click or a ju
    `100.80.104.77:8444`: `YNUH`, the session, a nonce, and `HMAC-SHA256(key, session|nonce)`.
 4. The laptop accepts the hello only if:
    - the HMAC matches;
-   - the source address is the iPad's Tailscale address, checked with the same
-     `tailscale whois` rule as the private route (owner login + node ID);
+   - the source address is the iPad's Tailscale address that the private
+     route already verified with `tailscale whois` (owner login + node ID) for
+     this audio socket. WireGuard makes that address impossible to forge, so
+     no second `whois` is run;
    - the session is current.
    It replies `YNUA` (also signed) and from then on sends audio datagrams to that
    exact address and port.
@@ -200,6 +202,29 @@ until the owner accepts phase 2). Turning it off restores today's behaviour.
   `YINWEI_LISTEN_UDP` off.
 - Device acceptance (owner): A/B of P0 and P1/P2 diagnostics on home Wi-Fi,
   mobile data, and walking between rooms. Synthetic tests are not device acceptance.
+
+## 6a. Implementation notes (P1/P2, 2026-10-24)
+
+- **Windows UDP sends can silently do nothing.** `RawDatagramSocket.send`
+  often returns 0 ("not ready") instead of failing: 685 of 800 sends in a
+  burst did. `ListenUdpOutbox` queues unsent datagrams and retries on the
+  socket's write event; without it the loopback test lost packets with no
+  simulated loss at all.
+- Loopback results (real UDP, seeded random loss, 400 packets):
+
+  | Loss | Played | Filled by repeat copies | Gaps |
+  |---|---|---|---|
+  | 0 % | 400 | 0 | 0 |
+  | 1 % | 400 | 4 | 0 |
+  | 5 % | 400 | 14 | 0 |
+  | 10 % | 397 | 26 | 3 |
+
+- The laptop switches to UDP when the iPad says `{"transport": "udp"}` (after
+  the signed hello is acknowledged). The iPad acknowledges only packets that
+  came over the WebSocket, so the laptop's ack check never sees a sequence it
+  did not send there.
+- With `YINWEI_LISTEN_UDP` unset, `audioReady` carries neither `conceal` nor
+  `udp`, and the iPad runs exactly today's receive path (gateway tests check this).
 
 ## 7. Risks
 

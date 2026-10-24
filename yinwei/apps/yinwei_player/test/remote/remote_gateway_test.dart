@@ -685,6 +685,64 @@ void main() {
     expect(controller.playing, isTrue);
   });
 
+  Future<Map> audioReadyWith(Map<String, Object> hello) async {
+    await controller.openPath('synthetic.wav');
+    await controller.play();
+    final ticket = (jsonDecode((await request('/remote/api/ws-ticket',
+            body: {'purpose': 'audio'}, csrfToken: csrf))
+        .text) as Map)['ticket'];
+    final socket = await WebSocket.connect(
+        gateway.origin
+            .replace(scheme: 'ws', path: '/remote/ws/audio')
+            .toString(),
+        headers: {
+          'Origin': gateway.origin.toString(),
+          'Cookie': 'yinwei_local=${cookies['yinwei_local']}'
+        });
+    final events = StreamIterator<dynamic>(socket);
+    socket.add(jsonEncode({'ticket': ticket, ...hello}));
+    expect(await events.moveNext().timeout(const Duration(seconds: 3)), isTrue);
+    final ready = jsonDecode(events.current as String) as Map;
+    await socket.close();
+    await events.cancel();
+    return ready;
+  }
+
+  test('Listen over UDP off (default): audioReady is unchanged', () async {
+    await signin();
+    final ready = await audioReadyWith(
+        {'quality': 'high', 'transports': ['udp', 'wss']});
+    expect(ready['type'], 'audioReady');
+    expect(ready.containsKey('conceal'), isFalse);
+    expect(ready.containsKey('udp'), isFalse);
+  });
+
+  test('Listen over UDP on: never offered on the public route', () async {
+    await gateway.close();
+    auth = RemoteAuth(auth.account);
+    audioTap = FakeOutputSource();
+    gateway = RemoteGateway(
+        auth: auth,
+        audioTap: audioTap,
+        createOpusEncoder: _FakeOpus.new,
+        listenUdp: true,
+        coordinator: AppSessionCoordinator(
+            controller: controller,
+            spatial: SpatialRuntimeAdapter()..bootstrap(controller.params),
+            nativeBackend: true,
+            liveRunning: () => false,
+            liveAudioReady: () => false),
+        loadAsset: (_) async => Uint8List.fromList(
+            utf8.encode('<meta content="LOGIN_CSRF_TOKEN">')));
+    await gateway.start();
+    await signin();
+    final ready = await audioReadyWith(
+        {'quality': 'high', 'transports': ['udp', 'wss']});
+    expect(ready['conceal'], isTrue, reason: 'smooth gaps on the WebSocket too');
+    expect(ready.containsKey('udp'), isFalse,
+        reason: 'UDP only inside the private Tailscale route');
+  });
+
   test('stalled audio subscriber loses bounded credit without pausing laptop',
       () async {
     await controller.openPath('synthetic.wav');

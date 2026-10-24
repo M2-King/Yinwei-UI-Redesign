@@ -58,6 +58,11 @@ class RoutedOwnerClient extends RemoteOwnerClient {
       ? 'tailscale-websocket'
       : 'cloudflare-websocket';
   bool get hasPair => _pair != null;
+
+  /// The laptop's private (Tailscale) origin while that route is in use;
+  /// Listen audio over UDP goes only there. Null on the Cloudflare route.
+  Uri? get privateOrigin =>
+      identical(_active, _private) ? _private?.origin : null;
   int generationOf(WebSocket socket) =>
       _socketGenerations[socket] ?? generation;
   Map<String, Object?> get routeDiagnostics => {

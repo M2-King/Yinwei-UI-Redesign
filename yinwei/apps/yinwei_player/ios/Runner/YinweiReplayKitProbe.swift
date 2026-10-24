@@ -141,6 +141,14 @@ final class YinweiReplayKitProbeController {
   func handleAudio(call: FlutterMethodCall, result: @escaping FlutterResult) {
     if call.method == "writeRemoteReturn" {
       write(call: call, result: result)
+    } else if call.method == "writeRemoteGap" {
+      let frames = (call.arguments as? [String: Any])?["frames"] as? Int ?? 0
+      guard let accepted = remoteReturn.writeGap(frames) else {
+        result(FlutterError(code: "return_output_interrupted",
+          message: "iPad audio output interrupted. Start again explicitly.", details: nil))
+        return
+      }
+      result(["accepted": accepted])
     } else {
       result(FlutterMethodNotImplemented)
     }
@@ -328,6 +336,11 @@ private final class YinweiRemoteReturnPlayer {
   private var listenBuffer = YinweiListenBuffer()
   private var renderTimer: DispatchSourceTimer?
   private var capacityDrops = 0
+  // Listen gap concealment (YinweiListenGap): the last played samples per
+  // channel, and whether the next packet fades in after a concealed gap.
+  private var lastPlayed: [[Float]] = []
+  private var fadeInNext = false
+  private var concealedFrames: Int64 = 0
   private var completionBacklogDrops = 0
   private var configurationChanges = 0
   private var lastRenderCheck: TimeInterval?
@@ -371,6 +384,51 @@ private final class YinweiRemoteReturnPlayer {
   }
   func newStream(sampleRate: Double) { audio.sync { _newStream(sampleRate: sampleRate) } }
   func reset() { audio.sync { _reset() } }
+
+  /// Fills [frames] of lost Listen audio on the timeline; nil when the output
+  /// is not running (as for write).
+  func writeGap(_ frames: Int) -> Bool? {
+    audio.sync {
+      guard ready else { return nil }
+      return _gap(frames)
+    }
+  }
+
+  private func _gap(_ frames: Int) -> Bool {
+    guard listenMode, let format, frames > 0, frames <= YinweiListenGap.maxFrames else { return false }
+    if listenBuffer.queuedFrames + Int64(frames) > listenBuffer.frames(milliseconds: YinweiListenBuffer.capacityMs) {
+      capacityDrops += 1; return false
+    }
+    guard let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: AVAudioFrameCount(frames)),
+          let out = buffer.floatChannelData else { return false }
+    let channels = Int(format.channelCount)
+    for channel in 0..<channels {
+      let samples = YinweiListenGap.conceal(
+        last: channel < lastPlayed.count ? lastPlayed[channel] : [], frames: frames)
+      for i in 0..<frames { out[channel][i] = samples[i] }
+    }
+    buffer.frameLength = AVAudioFrameCount(frames)
+    fadeInNext = true
+    concealedFrames += Int64(frames)
+    return _schedule(buffer, frames: frames)
+  }
+
+  /// Keeps the last played samples for concealment; fades in after a gap.
+  private func _rememberForGap(_ buffer: AVAudioPCMBuffer) {
+    guard let data = buffer.floatChannelData else { return }
+    let frames = Int(buffer.frameLength), channels = Int(buffer.format.channelCount)
+    var copies: [[Float]] = []
+    for channel in 0..<channels {
+      var samples = Array(UnsafeBufferPointer(start: data[channel], count: frames))
+      if fadeInNext {
+        YinweiListenGap.fadeIn(&samples)
+        for i in 0..<min(YinweiListenGap.fadeInFrames, frames) { data[channel][i] = samples[i] }
+      }
+      copies.append(samples)
+    }
+    fadeInNext = false
+    lastPlayed = copies
+  }
   func stop() { audio.sync { _stop() } }
   /// A packet from the laptop: nil while the output isn't running. `peak` is
   /// set for a decoded Opus packet.
@@ -401,6 +459,7 @@ private final class YinweiRemoteReturnPlayer {
         "presentationLatencyMs": player.outputPresentationLatency * 1000,
         "outputRoute": session.currentRoute.outputs.map { $0.portType.rawValue },
         "capacityDrops": capacityDrops, "completionBacklogDrops": completionBacklogDrops,
+        "concealedFrames": concealedFrames,
         "configurationChanges": configurationChanges,
         "maxRenderCheckGapMs": maxRenderCheckGapMs,
         "opusPackets": opusPackets, "opusFailures": opusFailures,
@@ -648,6 +707,14 @@ private final class YinweiRemoteReturnPlayer {
         buffer.frameLength = AVAudioFrameCount(frames)
       }
     }
+    if listenMode { _rememberForGap(buffer) }
+    return _schedule(buffer, frames: frames)
+  }
+
+  /// Schedules one buffer on the Listen timeline (or as soon as possible
+  /// outside Listen), with the same counters for packets and concealed gaps.
+  private func _schedule(_ buffer: AVAudioPCMBuffer, frames: Int) -> Bool {
+    guard let format else { return false }
     var when: AVAudioTime?
     if listenMode {
       guard let start = listenBuffer.enqueue(frames: frames) else { return false }
@@ -689,6 +756,7 @@ private final class YinweiRemoteReturnPlayer {
     listenBuffer.reset(sampleRate: format?.sampleRate ?? 48_000)
     listenTimePitch?.rate = 1
     opusDecoder?.reset()
+    lastPlayed = []; fadeInNext = false
     lastRenderCheck = nil
     guard prepared else { return }
     player.stop(); player.reset()

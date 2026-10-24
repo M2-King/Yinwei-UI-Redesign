@@ -9,6 +9,7 @@ import 'package:yinwei_player/remote/remote_auth.dart';
 import 'package:yinwei_player/remote/remote_guest.dart';
 import 'package:yinwei_player/remote/listen_stream_source.dart';
 import 'package:yinwei_player/remote/listen_sender_pacer.dart';
+import 'package:yinwei_player/remote/listen_udp_sender.dart';
 import 'package:yinwei_player/remote/native_output_tap.dart';
 import 'package:yinwei_player/remote/remote_protocol.dart';
 import 'package:yinwei_player/remote/private_route.dart';
@@ -34,9 +35,47 @@ class RemoteGateway {
       this.transformAdapter,
       this.createOpusEncoder,
       this.privateRoute,
-      this.guests})
+      this.guests,
+      bool? listenUdp,
+      int? listenUdpPort})
       : allowArrayFileAudio = allowArrayFileAudio ??
-            Platform.environment['YINWEI_ARRAY_FILE_AUDIO_VERIFIED'] == '1';
+            Platform.environment['YINWEI_ARRAY_FILE_AUDIO_VERIFIED'] == '1',
+        listenUdp =
+            listenUdp ?? Platform.environment['YINWEI_LISTEN_UDP'] == '1',
+        listenUdpPort = listenUdpPort ??
+            int.tryParse(Platform.environment['YINWEI_LISTEN_UDP_PORT'] ?? '') ??
+            8444;
+
+  /// Listen audio over UDP on the private route (off by default;
+  /// docs/IMPLEMENTATION_LISTEN_UDP_AUDIO.md). The WebSocket stays the backup.
+  final bool listenUdp;
+  final int listenUdpPort;
+  ListenUdpSender? _udp;
+  Future<void>? _udpBinding;
+  bool _audioViaUdp = false;
+  int _audioLastSent = 0;
+
+  /// Binds the UDP sender to the private route's Tailscale address once.
+  void _bindUdp() {
+    final route = privateRoute;
+    if (!listenUdp || route == null || _udp != null || _udpBinding != null) {
+      return;
+    }
+    _udpBinding = ListenUdpSender.bind(route.config.address, listenUdpPort)
+        .then((sender) => _udp = sender)
+        .whenComplete(() => _udpBinding = null);
+  }
+
+  /// Audio goes back to the WebSocket (UDP failed or the session ended).
+  void _audioToWebSocket(WebSocket socket, {bool tell = false}) {
+    if (!_audioViaUdp) return;
+    _audioViaUdp = false;
+    if (tell) {
+      try {
+        socket.add(jsonEncode({'type': 'transport', 'transport': 'wss'}));
+      } catch (_) {}
+    }
+  }
 
   /// Isolated opt-in: the pinned DLL's file tap must first be checked using
   /// tool/remote/check_array_file_tap.py. Default keeps the existing safety gate.
@@ -134,6 +173,7 @@ class RemoteGateway {
     if (privateRoute != null) {
       try {
         await privateRoute!.start((request) => _handle(request, private: true));
+        _bindUdp();
         _privateChecks = Timer.periodic(const Duration(seconds: 2), (_) {
           for (final entry in _privateSockets.entries.toList()) {
             if (!_checkingPrivate.add(entry.key)) continue;
@@ -956,6 +996,19 @@ class RemoteGateway {
               }
               return;
             }
+            if (data is Map && data['transport'] is String) {
+              final udp = _udp;
+              if (data['transport'] == 'udp' && udp != null && udp.active) {
+                // Packets sent so far may still be acknowledged; UDP ones
+                // never are, so the ack check must not wait for them.
+                _audioViaUdp = true;
+                _audioOutstanding.clear();
+                if (_audioLastSent > _audioLastAck) _audioLastAck = _audioLastSent;
+              } else {
+                _audioToWebSocket(socket);
+              }
+              return;
+            }
             final ack = data is Map ? data['ack'] : null;
             if (ack is int &&
                 ack > 0 &&
@@ -1019,6 +1072,19 @@ class RemoteGateway {
                   encoder: createOpusEncoder?.call(), quality: quality);
           selectedTap.setEnabled(true);
           final stream = _audioStream;
+          _audioViaUdp = false;
+          // UDP only inside the private route, to the address it verified.
+          final private = _privateSockets[socket];
+          final transports = data['transports'];
+          Map<String, Object>? udpOffer;
+          if (listenUdp && private != null && stream != null) {
+            final udp = _udp;
+            if (udp == null) {
+              _bindUdp(); // next audio session, once bound
+            } else if (transports is List && transports.contains('udp')) {
+              udpOffer = udp.offer(InternetAddress(private.address));
+            }
+          }
           socket.add(jsonEncode({
             'type': 'audioReady',
             'format': 'YNW1',
@@ -1028,6 +1094,8 @@ class RemoteGateway {
               'codecs': ['pcm', if (stream.opusAvailable) 'opus'],
               'quality': stream.quality.name,
             },
+            if (listenUdp) 'conceal': true,
+            if (udpOffer != null) 'udp': udpOffer,
           }));
         } else {
           _sockets[socket] = session;
@@ -1078,6 +1146,9 @@ class RemoteGateway {
       _audioStream = null;
       _audioOutstanding.clear();
       _audioLastAck = 0;
+      _audioLastSent = 0;
+      _audioViaUdp = false;
+      _udp?.end();
       _pacedPacket = null;
       _audioPacer.reset();
     }
@@ -1089,6 +1160,8 @@ class RemoteGateway {
 
   Future<void> close() async {
     _privateChecks?.cancel();
+    _udp?.close();
+    _udp = null;
     await privateRoute?.close();
     _events?.cancel();
     _audioTimer?.cancel();
@@ -1154,8 +1227,14 @@ class RemoteGateway {
       _forgetSocket(socket);
       return;
     }
+    final udp = _audioViaUdp ? _udp : null;
+    if (udp != null && !udp.healthy()) {
+      // The iPad's receiver reports stopped: back to WebSocket audio.
+      _audioToWebSocket(socket, tell: true);
+    }
     if (!auth.valid(session) ||
-        (_audioOutstanding.isNotEmpty &&
+        (!_audioViaUdp &&
+            _audioOutstanding.isNotEmpty &&
             DateTime.now().difference(_audioOutstanding.values.first) >
                 const Duration(seconds: 5))) {
       unawaited(socket.close(1008, 'audio_session_ended'));
@@ -1163,10 +1242,14 @@ class RemoteGateway {
       return;
     }
     try {
+      if (_audioViaUdp) _udp?.tick();
       // Credit bounds transport memory (64 x 20 ms for Opus). Separate
       // media-time pacing prevents timer stalls turning into 80 ms bursts.
+      // Over UDP there are no acks: the pacer alone keeps media pace.
       _audioPacer.tick(_audioPaceClock.elapsedMicroseconds);
-      for (var i = 0; i < 4 && _audioOutstanding.length < audioCredit; ++i) {
+      for (var i = 0;
+          i < 4 && (_audioViaUdp || _audioOutstanding.length < audioCredit);
+          ++i) {
         final packet =
             _pacedPacket ?? (_audioStream ?? _activeAudioTap!).read();
         if (packet == null) break;
@@ -1179,6 +1262,9 @@ class RemoteGateway {
         _pacedPacket = null;
         final sequence =
             ByteData.sublistView(packet).getUint64(16, Endian.little);
+        if (sequence > _audioLastSent) _audioLastSent = sequence;
+        // Lossless PCM (too big for two datagrams) still uses the WebSocket.
+        if (_audioViaUdp && (_udp?.send(packet) ?? false)) continue;
         _audioOutstanding[sequence] = DateTime.now();
         socket.add(packet);
       }

@@ -117,3 +117,41 @@ struct YinweiListenBuffer {
     stableSince = now
   }
 }
+
+
+/// Fills a lost stretch of Listen audio (docs/IMPLEMENTATION_LISTEN_UDP_AUDIO.md,
+/// phase 2). Apple's Opus decoder has no packet-loss concealment, so: repeat
+/// the last played samples, start from a mirrored copy of them (continuous
+/// with the last sample, so no click), fade out across the gap, and fade the
+/// next real packet in. One channel at a time; no audio session or DSP here.
+enum YinweiListenGap {
+  static let blendFrames = 96
+  static let fadeInFrames = 120
+  /// Never conceal more than 200 ms at 48 kHz: longer means the stream jumped.
+  static let maxFrames = 9_600
+
+  static func conceal(last: [Float], frames: Int) -> [Float] {
+    guard frames > 0 else { return [] }
+    var out = [Float](repeating: 0, count: frames)
+    let n = last.count
+    guard n > 0 else { return out }
+    for i in 0..<frames {
+      let cyclic = last[i % n]
+      var value = cyclic
+      if i < blendFrames {
+        let mirror = last[max(0, n - 1 - (i % n))]
+        let w = Float(i) / Float(blendFrames)
+        value = mirror * (1 - w) + cyclic * w
+      }
+      out[i] = value * (1 - Float(i + 1) / Float(frames))
+    }
+    return out
+  }
+
+  /// Linear fade-in over the first [fadeInFrames] samples, in place.
+  static func fadeIn(_ samples: inout [Float]) {
+    let n = min(fadeInFrames, samples.count)
+    guard n > 0 else { return }
+    for i in 0..<n { samples[i] *= Float(i) / Float(n) }
+  }
+}

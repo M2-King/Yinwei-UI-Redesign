@@ -12,11 +12,19 @@ import 'remote_entry.dart';
 import 'remote_owner_client.dart';
 import 'saved_sign_in.dart';
 import 'listen_audio_diagnostics.dart';
+import 'listen_udp_protocol.dart';
+import 'listen_udp_receiver.dart';
 import 'private_pair_store.dart';
 import 'routed_owner_client.dart';
 
 /// Plays the laptop's processed stereo on this device: the iPad's native
 /// player in the app, a fake in tests.
+/// An output that can fill a lost stretch of audio smoothly, keeping the
+/// timeline aligned (iPad: repeat the last 20 ms with a fade).
+abstract class ConcealingListenOutput {
+  Future<bool> writeGap(int frames);
+}
+
 abstract class LaptopListenOutput {
   /// Opens the output for listening. It holds the audio session (needed for
   /// lock-screen controls) and keeps playing in the background and while
@@ -975,7 +983,14 @@ class LaptopListenController extends ChangeNotifier {
         // Ask for a quality only when this device can play Opus; older
         // laptops ignore it and keep sending uncompressed audio.
         final socket = await _client!.openSocket('audio',
-            hello: _nativeOpus == true ? {'quality': soundQuality.name} : null);
+            hello: _nativeOpus == true
+                ? {
+                    'quality': soundQuality.name,
+                    // Laptops with Listen over UDP enabled offer it on the
+                    // private route only; others ignore this.
+                    'transports': ['udp', 'wss'],
+                  }
+                : null);
         final route = _socketGeneration(socket);
         iterationRoute = route;
         if (!_listening(generation, session)) {
@@ -994,37 +1009,8 @@ class LaptopListenController extends ChangeNotifier {
         }
         _diagnostics.connectionOpened();
         int? epoch, rate;
-        await for (final message in socket) {
-          if (!_listening(generation, session) ||
-              route != _transportGeneration) {
-            break;
-          }
-          if (message is String) {
-            final data = jsonDecode(message);
-            if (data is Map && data['type'] == 'audioReady') {
-              audioConnected = true;
-              attempt = 0;
-              audioSource = data['source'] is String ? data['source'] : '';
-              final codecs = data['codecs'];
-              _laptopQuality = codecs is List;
-              _laptopOpus = codecs is List && codecs.contains('opus');
-              streamQuality = ListenQuality.parse(data['quality']) ??
-                  ListenQuality.lossless;
-              _changed(audioSource == 'live'
-                  ? 'Listening · Live from the laptop'
-                  : 'Listening · the laptop’s player');
-            }
-            continue;
-          }
-          if (message is! List<int>) continue;
-          final packet =
-              message is Uint8List ? message : Uint8List.fromList(message);
-          final header = YnwPacketHeader.parse(packet);
-          if (header == null) {
-            ++_diagnostics.invalidPackets;
-            ++dropped;
-            continue;
-          }
+        // Plays one packet in order: exactly today's path. False: stop.
+        Future<bool> play(Uint8List packet, YnwPacketHeader header) async {
           _diagnostics.record(
               epoch: header.epoch,
               sequence: header.sequence,
@@ -1033,11 +1019,10 @@ class LaptopListenController extends ChangeNotifier {
               sampleRate: header.sampleRate,
               droppedChunks: header.droppedChunks,
               nowUs: _audioClock.elapsedMicroseconds);
-          socket.add(jsonEncode({'ack': header.sequence}));
           // A late packet from before a flush on the laptop.
-          if (epoch != null && header.epoch < epoch) {
+          if (epoch != null && header.epoch < epoch!) {
             ++dropped;
-            continue;
+            return true;
           }
           if (header.epoch != epoch || header.sampleRate != rate) {
             epoch = header.epoch;
@@ -1050,12 +1035,12 @@ class LaptopListenController extends ChangeNotifier {
             }
             if (!_listening(generation, session) ||
                 route != _transportGeneration) {
-              break;
+              return false;
             }
             await output.newStream(header.sampleRate);
             if (!_listening(generation, session) ||
                 route != _transportGeneration) {
-              break;
+              return false;
             }
           }
           ++received;
@@ -1065,6 +1050,182 @@ class LaptopListenController extends ChangeNotifier {
             _routeChangeUs = null;
           }
           _write(packet, generation, route);
+          return true;
+        }
+
+        // Listen over UDP and gap concealment, only when the laptop says so
+        // (`conceal` / `udp` in audioReady). Otherwise nothing below runs.
+        var conceal = false,
+            viaUdp = false,
+            broken = false,
+            udpStarting = false;
+        final orderer = ListenPacketOrderer();
+        ListenUdpReceiver? udp;
+        Map? udpOffer;
+        Timer? udpTimer;
+        var udpRetryUs = 0, udpSwitchUs = 0, lastReportUs = 0;
+        var chain = Future<void>.value();
+        void emit(List<ListenOrdered> items) {
+          if (items.isEmpty) return;
+          chain = chain.then((_) async {
+            for (final item in items) {
+              if (broken) return;
+              if (item is ListenOrderedGap) {
+                _writeGap(item.frames, generation, route);
+              } else if (item is ListenOrderedPacket) {
+                final header = YnwPacketHeader.parse(item.packet);
+                if (header != null && !await play(item.packet, header)) {
+                  broken = true;
+                }
+              }
+            }
+          });
+        }
+
+        void stopUdp({bool fallback = false}) {
+          if (viaUdp && fallback) {
+            ++_diagnostics.udpFallbacks;
+            try {
+              socket.add(jsonEncode({'transport': 'wss'}));
+            } catch (_) {}
+          }
+          viaUdp = false;
+          _diagnostics.transport = 'wss';
+          udp?.close();
+          udp = null;
+          udpRetryUs = _audioClock.elapsedMicroseconds + 30000000;
+        }
+
+        Future<void> startUdp() async {
+          final offer = udpOffer, client = _client;
+          if (offer == null || udpStarting || udp != null) return;
+          final origin =
+              client is RoutedOwnerClient ? client.privateOrigin : null;
+          final laptop =
+              origin == null ? null : InternetAddress.tryParse(origin.host);
+          if (laptop == null) return;
+          udpStarting = true;
+          try {
+            final receiver = await ListenUdpReceiver.connect(
+                laptop: laptop,
+                port: offer['port'] is int ? offer['port'] as int : -1,
+                session: base64Decode('${offer['session']}'),
+                key: base64Decode('${offer['key']}'),
+                onPacket: (packet, repeat) {
+                  ++_diagnostics.udpPackets;
+                  emit(orderer.add(packet, _audioClock.elapsedMicroseconds));
+                });
+            if (receiver == null ||
+                !_listening(generation, session) ||
+                route != _transportGeneration ||
+                !identical(_audio, socket)) {
+              receiver?.close();
+              udpRetryUs = _audioClock.elapsedMicroseconds + 30000000;
+              return;
+            }
+            udp = receiver;
+            viaUdp = true;
+            udpSwitchUs = _audioClock.elapsedMicroseconds;
+            ++_diagnostics.udpConnects;
+            _diagnostics.transport = 'udp';
+            socket.add(jsonEncode({'transport': 'udp'}));
+          } catch (_) {
+            udpRetryUs = _audioClock.elapsedMicroseconds + 30000000;
+          } finally {
+            udpStarting = false;
+          }
+        }
+
+        void onTick() {
+          final now = _audioClock.elapsedMicroseconds;
+          emit(orderer.tick(now));
+          _diagnostics
+            ..orderLost = orderer.lost
+            ..orderDuplicates = orderer.duplicates
+            ..udpRepeatsUsed = udp?.repeatsUsed ?? _diagnostics.udpRepeatsUsed;
+          final receiver = udp;
+          if (viaUdp && receiver != null) {
+            final silent = receiver.silentForUs();
+            // No UDP audio: within 1.5 s of switching, or for 500 ms later.
+            if ((silent < 0 && now - udpSwitchUs > 1500000) ||
+                silent > 500000) {
+              stopUdp(fallback: true);
+            } else if (now - lastReportUs >= 200000) {
+              lastReportUs = now;
+              receiver.report(
+                  highestSequence: orderer.highestSequence,
+                  lostPackets: orderer.lost,
+                  bufferMs: bufferMs,
+                  concealedGaps: orderer.concealedGaps);
+            }
+          } else if (udpOffer != null && now >= udpRetryUs) {
+            unawaited(startUdp());
+          }
+        }
+
+        try {
+          await for (final message in socket) {
+            if (!_listening(generation, session) ||
+                route != _transportGeneration) {
+              break;
+            }
+            if (message is String) {
+              final data = jsonDecode(message);
+              if (data is Map && data['type'] == 'audioReady') {
+                audioConnected = true;
+                attempt = 0;
+                audioSource = data['source'] is String ? data['source'] : '';
+                final codecs = data['codecs'];
+                _laptopQuality = codecs is List;
+                _laptopOpus = codecs is List && codecs.contains('opus');
+                streamQuality = ListenQuality.parse(data['quality']) ??
+                    ListenQuality.lossless;
+                _changed(audioSource == 'live'
+                    ? 'Listening · Live from the laptop'
+                    : 'Listening · the laptop’s player');
+                conceal = data['conceal'] == true;
+                _diagnostics.conceal = conceal;
+                final offer = data['udp'];
+                udpOffer = offer is Map ? offer : null;
+                if (conceal) {
+                  udpTimer ??= Timer.periodic(
+                      const Duration(milliseconds: 20), (_) => onTick());
+                }
+                if (udpOffer != null) unawaited(startUdp());
+              } else if (data is Map &&
+                  data['type'] == 'transport' &&
+                  data['transport'] == 'wss') {
+                // The laptop stopped hearing this iPad's reports.
+                stopUdp();
+              }
+              continue;
+            }
+            if (message is! List<int>) continue;
+            final packet =
+                message is Uint8List ? message : Uint8List.fromList(message);
+            final header = YnwPacketHeader.parse(packet);
+            if (header == null) {
+              ++_diagnostics.invalidPackets;
+              ++dropped;
+              continue;
+            }
+            if (!conceal) {
+              // Today's path, unchanged: record, acknowledge, play.
+              socket.add(jsonEncode({'ack': header.sequence}));
+              if (!await play(packet, header)) break;
+              continue;
+            }
+            // Only packets that came over the WebSocket are acknowledged.
+            socket.add(jsonEncode({'ack': header.sequence}));
+            emit(orderer.add(packet, _audioClock.elapsedMicroseconds));
+            await chain;
+            if (broken) break;
+          }
+        } finally {
+          udpTimer?.cancel();
+          udp?.close();
+          udp = null;
+          _diagnostics.transport = 'wss';
         }
         reason = socket.closeReason;
         streamQuality = null;
@@ -1109,6 +1270,24 @@ class LaptopListenController extends ChangeNotifier {
       } catch (_) {}
     }
     _changed();
+  }
+
+  /// A lost stretch of [frames], filled smoothly by the output (iPad) so
+  /// the next packet does not play early. Same channel as [output.write],
+  /// so it stays in order with the packets.
+  void _writeGap(int frames, int generation, int route) {
+    final out = output;
+    if (route != _transportGeneration ||
+        interrupted ||
+        frames <= 0 ||
+        out is! ConcealingListenOutput) {
+      return;
+    }
+    ++_diagnostics.concealedGaps;
+    _diagnostics.concealedFrames += frames;
+    unawaited((out as ConcealingListenOutput)
+        .writeGap(frames)
+        .then((_) {}, onError: (Object _) {}));
   }
 
   void _write(Uint8List packet, int generation, int route) {

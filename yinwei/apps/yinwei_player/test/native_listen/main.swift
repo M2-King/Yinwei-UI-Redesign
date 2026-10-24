@@ -111,4 +111,24 @@ for tick in 1...1600 {
 check(catchingUp.underruns == 0, "Catch-up simulation never starves")
 check(catchingUp.queuedMs >= 80 && catchingUp.queuedMs <= 105, "Persistent backlog converges near target")
 check(catchingUp.playbackRate == 1, "Catch-up exits without hunting")
+// Gap concealment (docs/IMPLEMENTATION_LISTEN_UDP_AUDIO.md, phase 2).
+do {
+  let last = (0..<960).map { Float(sin(Double($0) * 0.05)) * 0.5 }
+  let gap = YinweiListenGap.conceal(last: last, frames: 960)
+  check(gap.count == 960, "Gap fills exactly the lost frames")
+  check(abs(gap[0] - last[959]) < 0.01, "Gap starts where the audio stopped (no click)")
+  for i in 1..<YinweiListenGap.blendFrames {
+    check(abs(gap[i] - gap[i - 1]) < 0.05, "Blend into the repeat is smooth")
+  }
+  check(abs(gap[959]) < 0.001, "Gap fades to silence")
+  check(gap.allSatisfy { $0.isFinite && abs($0) <= 0.5 }, "Never louder than the source")
+  check(YinweiListenGap.conceal(last: [], frames: 480) == [Float](repeating: 0, count: 480),
+        "Nothing played yet: silence")
+  check(YinweiListenGap.conceal(last: last, frames: 0).isEmpty, "Zero frames: nothing")
+  var next = [Float](repeating: 0.4, count: 960)
+  YinweiListenGap.fadeIn(&next)
+  check(next[0] == 0 && abs(next[YinweiListenGap.fadeInFrames] - 0.4) < 1e-6,
+        "Next packet fades in from silence, then plays unchanged")
+  check(YinweiListenGap.maxFrames == 9_600, "At most 200 ms is concealed")
+}
 print("PASS: \(checks) Listen scheduling and convergence policy checks")

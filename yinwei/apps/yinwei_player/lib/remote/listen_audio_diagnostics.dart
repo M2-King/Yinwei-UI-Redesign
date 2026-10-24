@@ -16,6 +16,12 @@ class ListenAudioDiagnostics {
   int writeLimitDrops = 0, interruptedDrops = 0, nativeRejected = 0;
   double maxArrivalMs = 0, maxJitterMs = 0, maxWriteMs = 0;
 
+  /// Listen over UDP (docs/IMPLEMENTATION_LISTEN_UDP_AUDIO.md).
+  String transport = 'wss';
+  bool conceal = false;
+  int udpConnects = 0, udpFallbacks = 0, udpPackets = 0, udpRepeatsUsed = 0;
+  int concealedGaps = 0, concealedFrames = 0, orderLost = 0, orderDuplicates = 0;
+
   /// A reconnect/source switch can introduce a different tap with lower epoch
   /// and sequence numbers. Never compare that tap against the old connection.
   void connectionOpened() {
@@ -119,6 +125,18 @@ class ListenAudioDiagnostics {
         'writeLimitDrops': writeLimitDrops,
         'interruptedDrops': interruptedDrops,
         'nativeRejected': nativeRejected,
+        'transport': transport,
+        'conceal': conceal,
+        'udp': {
+          'connects': udpConnects,
+          'fallbacks': udpFallbacks,
+          'packets': udpPackets,
+          'repeatsUsed': udpRepeatsUsed,
+          'orderLost': orderLost,
+          'orderDuplicates': orderDuplicates,
+        },
+        'concealedGaps': concealedGaps,
+        'concealedFrames': concealedFrames,
         'bufferHistory':
             _history.map((point) => Map<String, Object?>.of(point)).toList(),
       };
