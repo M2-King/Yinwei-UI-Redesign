@@ -26,11 +26,13 @@ try {
   process.argv = argv;
   delete globalThis.__yinweiGestureFixtures;
 }
-const sha = url => createHash('sha256').update(readFileSync(new URL(url,import.meta.url))).digest('hex');
+// Git stores LF, while a Windows checkout may have CRLF. Hash canonical source
+// text so this freshness guard compares the same content on Windows and macOS.
+const sha = url => createHash('sha256').update(readFileSync(new URL(url,import.meta.url),'utf8').replace(/\r\n/g,'\n')).digest('hex');
 const data = JSON.stringify({schema: 1, sourceSha256: sha('../listen_room/gesture_core_test.mjs'),
   oracleCoreSha256: sha('../../assets/listen_room/gesture-core.js'), fixtures}, null, 2) + '\n';
 const target = new URL('oracle.json', folder);
 if (check) {
-  if (readFileSync(target, 'utf8') !== data) throw new Error('Fixtures stale: rerun exporter');
+  if (readFileSync(target, 'utf8').replace(/\r\n/g,'\n') !== data) throw new Error('Fixtures stale: rerun exporter');
 } else { mkdirSync(folder, {recursive:true}); writeFileSync(target, data); }
-console.log(`Exported ${fixtures.length} frame sequences to ${fileURLToPath(target)}`);
+console.log(`${check ? 'Verified' : 'Exported'} ${fixtures.length} frame sequences to ${fileURLToPath(target)}`);
