@@ -14,6 +14,7 @@ import 'package:yinwei_player/remote/laptop_listen_controller.dart';
 import 'package:yinwei_player/remote/listen_cover_cache.dart';
 import 'package:yinwei_player/remote/listen_room_bridge.dart';
 import 'package:yinwei_player/remote/listen_room_html.dart';
+import 'package:yinwei_player/remote/listen_gestures.dart';
 import 'package:yinwei_player/state/engine_controller.dart';
 
 /// Developer diagnostics: shows the room's FPS meter (the switch is on the
@@ -130,6 +131,13 @@ class _IosListenRoomScreenState extends State<IosListenRoomScreen>
     _booting = true;
     final driver = (widget.driverFactory ?? WKWebViewDriver.new)();
     final bridge = ListenRoomBridge(
+      gestures: defaultTargetPlatform == TargetPlatform.iOS
+          ? ListenGestures(
+              store: FileGestureSettingsStore(
+                directoryProvider: getApplicationSupportDirectory,
+              ),
+            )
+          : null,
       // Song covers stay in the app's caches folder (iOS may clear it); the
       // folder is looked up on the first cover, never while the room opens.
       coverCache: ListenCoverCache(

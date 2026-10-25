@@ -16,6 +16,7 @@ import Network
     let messenger = engineBridge.applicationRegistrar.messenger()
     YinweiLiveActivityChannel.register(messenger: messenger)
     YinweiAudioSessionChannel.register(messenger: messenger)
+    YinweiHandGestures.register(messenger: messenger)
     YinweiScreenAudioProbeChannel.register(messenger: messenger)
     YinweiReplayKitProbeChannel.register(messenger: messenger)
     engineBridge.applicationRegistrar.register(

@@ -13,6 +13,7 @@ import 'package:yinwei_player/platform/ios_laptop_listen_output.dart';
 import 'laptop_listen_controller.dart';
 import 'listen_cover_cache.dart';
 import 'listen_quality.dart';
+import 'listen_gestures.dart';
 import 'remote_owner_client.dart';
 
 /// Connects the Listen Room page (`assets/listen_room/`) to the listening
@@ -39,6 +40,7 @@ class ListenRoomBridge {
     this.minInterval = const Duration(milliseconds: 100),
     this.laptopLabel = 'your laptop',
     this.canClose = true,
+    this.gestures,
     ListenCoverCache? coverCache,
   }) : covers = coverCache ?? ListenCoverCache();
 
@@ -114,6 +116,55 @@ class ListenRoomBridge {
   /// False when the room is the whole app: the page hides "Back to the
   /// player" and a close request is ignored.
   final bool canClose;
+
+  /// Local camera feature; never enters the listening or laptop protocol.
+  final ListenGestures? gestures;
+  bool _gestureFrameInFlight = false;
+
+  Future<void> _gestureRun(String script) async {
+    try {
+      await run(script);
+    } catch (_) {
+      // A lost web process cannot keep the camera running.
+      if (!_disposed) pageReloaded();
+    }
+  }
+
+  Future<void> _sendGestureFrame(Map<String, Object?> frame) async {
+    if (_gestureFrameInFlight ||
+        !_ready ||
+        _disposed ||
+        _background ||
+        !session.signedIn ||
+        session.interrupted) {
+      return;
+    }
+    _gestureFrameInFlight = true;
+    try {
+      await _gestureRun('YinweiListen.handFrame(${jsonEncode(frame)})');
+    } finally {
+      _gestureFrameInFlight = false;
+    }
+  }
+
+  void _gestureContext() => gestures?.setContext(
+        ready: _ready && !_disposed,
+        foreground: !_background,
+        available: session.signedIn && !session.interrupted,
+      );
+
+  void _gestureChanged() {
+    if (_ready && !_disposed && !_background && gestures != null) {
+      unawaited(_gestureRun(
+          'YinweiListen.gestureState(${jsonEncode(gestures!.state)})'));
+    }
+  }
+
+  void _gestureReset() {
+    if (_ready && !_disposed && !_background) {
+      unawaited(_gestureRun('YinweiListen.gestureReset()'));
+    }
+  }
 
   /// The page's "Check for updates" (shown only when set).
   VoidCallback? onCheckUpdates;
@@ -416,6 +467,8 @@ class ListenRoomBridge {
   bool _background = false;
   set background(bool value) {
     _background = value;
+    _gestureContext();
+    _gestureChanged();
     if (value) {
       _timer?.cancel();
       _timer = null;
@@ -429,12 +482,21 @@ class ListenRoomBridge {
   bool get ready => _ready;
 
   void attach() {
+    gestures?.addListener(_gestureChanged);
+    gestures?.onReset = _gestureReset;
+    gestures?.onFrame = (frame) {
+      unawaited(_sendGestureFrame(frame));
+    };
+    _gestureContext();
+    unawaited(gestures?.initialize());
     session.addListener(_changed);
     _iosOutput?.level.addListener(schedule);
   }
 
   void dispose() {
     _disposed = true;
+    gestures?.removeListener(_gestureChanged);
+    gestures?.dispose();
     _clearQueue();
     _timer?.cancel();
     session.removeListener(_changed);
@@ -445,6 +507,7 @@ class ListenRoomBridge {
   /// next `ready`, then send the whole state again.
   void pageReloaded() {
     _ready = false;
+    _gestureContext();
     _lastJson = null;
     _lastSentQueue = null;
     _queueSent = false;
@@ -642,6 +705,7 @@ class ListenRoomBridge {
 
   void _changed() {
     _syncQueueHost();
+    _gestureContext();
     schedule();
   }
 
@@ -740,13 +804,23 @@ class ListenRoomBridge {
     switch (m['t']) {
       case 'ready':
         _ready = true;
+        _gestureContext();
+        _gestureChanged();
         _lastJson = null;
         await push(force: true);
         onReady?.call();
       case 'error':
         onPageError?.call(_text(m['msg']));
       case 'close':
-        if (canClose) onClose?.call();
+        if (canClose) {
+          gestures?.suspend();
+          onClose?.call();
+        }
+      case 'gestureConsent':
+        if (_ready && !_background) await gestures?.acceptConsent();
+      case 'gestures':
+        _gestureContext();
+        if (m['on'] is bool) await gestures?.setEnabled(m['on'] as bool);
       case 'quality':
         final quality = ListenQuality.parse(m['quality']);
         if (quality != null) session.setSoundQuality(quality);
@@ -1085,6 +1159,7 @@ class ListenRoomBridge {
         // Keep the page's original revision through lease renewal/retry.
         await _command(type, payload);
       case 'signOut':
+        gestures?.suspend();
         _clearQueue();
         await session.signOut();
         schedule();

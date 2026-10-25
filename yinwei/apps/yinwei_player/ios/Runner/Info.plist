@@ -76,6 +76,8 @@
 	<true/>
 	<key>NSScreenCaptureUsageDescription</key>
 	<string>Yinwei uses screen audio capture only when you start Live Transfer, so it can process audio you choose to share.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>Yinwei uses the front camera only while hand gestures are on, to see your hand. Video stays on this iPad and is never saved or sent.</string>
 	<key>NSSupportsLiveActivities</key>
 	<true/>
 	<key>UIBackgroundModes</key>

@@ -7,6 +7,8 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+        D8A0000B0000000000000202 /* YinweiHandGestures.swift in Sources */ = {isa = PBXBuildFile; fileRef = D8A0000B0000000000000011 /* YinweiHandGestures.swift */; };
+        D8A0000B0000000000000201 /* YinweiHandPose.swift in Sources */ = {isa = PBXBuildFile; fileRef = D8A0000B0000000000000010 /* YinweiHandPose.swift */; };
         D8A000030000000000000201 /* YinweiListenBuffer.swift in Sources */ = {isa = PBXBuildFile; fileRef = D8A000030000000000000010 /* YinweiListenBuffer.swift */; };
         D8A000040000000000000201 /* YinweiOpusDecoder.swift in Sources */ = {isa = PBXBuildFile; fileRef = D8A000040000000000000010 /* YinweiOpusDecoder.swift */; };
         D8A000050000000000000201 /* YinweiSignInKeychainChannel.swift in Sources */ = {isa = PBXBuildFile; fileRef = D8A000050000000000000010 /* YinweiSignInKeychainChannel.swift */; };
@@ -134,6 +136,8 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+        D8A0000B0000000000000011 /* YinweiHandGestures.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YinweiHandGestures.swift; sourceTree = "<group>"; };
+        D8A0000B0000000000000010 /* YinweiHandPose.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YinweiHandPose.swift; sourceTree = "<group>"; };
         D8A000030000000000000010 /* YinweiListenBuffer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YinweiListenBuffer.swift; sourceTree = "<group>"; };
         D8A000040000000000000010 /* YinweiOpusDecoder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YinweiOpusDecoder.swift; sourceTree = "<group>"; };
         D8A000050000000000000010 /* YinweiSignInKeychainChannel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YinweiSignInKeychainChannel.swift; sourceTree = "<group>"; };
@@ -273,6 +277,8 @@
 				C7C200010000000000000013 /* YinweiDeveloperDiagnostics.swift */,
 				D8A000010000000000000010 /* YinweiReplayKitProbe.swift */,
                 D8A000030000000000000010 /* YinweiListenBuffer.swift */,
+                D8A0000B0000000000000011 /* YinweiHandGestures.swift */,
+                D8A0000B0000000000000010 /* YinweiHandPose.swift */,
                 D8A000040000000000000010 /* YinweiOpusDecoder.swift */,
                 D8A000050000000000000010 /* YinweiSignInKeychainChannel.swift */,
                 D8A000020000000000000010 /* YinweiCaptureSupport.swift */,
@@ -576,6 +582,8 @@
 				C7C200010000000000000207 /* YinweiDeveloperDiagnostics.swift in Sources */,
 				D8A000010000000000000201 /* YinweiReplayKitProbe.swift in Sources */,
                 D8A000030000000000000201 /* YinweiListenBuffer.swift in Sources */,
+                D8A0000B0000000000000202 /* YinweiHandGestures.swift in Sources */,
+                D8A0000B0000000000000201 /* YinweiHandPose.swift in Sources */,
                 D8A000040000000000000201 /* YinweiOpusDecoder.swift in Sources */,
                 D8A000050000000000000201 /* YinweiSignInKeychainChannel.swift in Sources */,
                 D8A000020000000000000201 /* YinweiCaptureSupport.swift in Sources */,

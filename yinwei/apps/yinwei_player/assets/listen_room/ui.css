@@ -517,3 +517,20 @@ input[type="range"]:disabled { opacity: 0.4; }
 .cover-in { animation: cover-in 0.3s ease-out; }
 @keyframes cover-in { from { opacity: 0.35; } to { opacity: 1; } }
 @media (prefers-reduced-motion: reduce) { .cover-in { animation: none; } }
+/* Native hand gestures: restrained status, no video preview. */
+.gesture-card { position: absolute; z-index: 30; top: calc(env(safe-area-inset-top, 0px) + 82px); right: max(16px, env(safe-area-inset-right, 0px)); width: min(360px, calc(100vw - 32px)); max-height: calc(100dvh - 112px); overflow: auto; padding: 20px; border-radius: 22px; background: rgba(20, 22, 27, 0.96); border: 1px solid rgba(255,255,255,0.12); box-shadow: 0 20px 60px rgba(0,0,0,0.36); color: var(--text); }
+.gesture-card h2 { font-size: 18px; margin: 0; }
+.gesture-card h3 { font-size: 21px; margin: 20px 0 10px; }
+.gesture-card p { font-size: 13px; line-height: 1.6; color: var(--text-2); margin: 12px 0; }
+.gesture-card button, .gesture-chip button { font: inherit; color: inherit; border: 1px solid rgba(255,255,255,0.14); background: rgba(255,255,255,0.07); border-radius: 12px; padding: 10px 12px; cursor: pointer; }
+.gesture-buttons, .gesture-panel-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.gesture-panel-head button { padding: 3px 10px; font-size: 22px; }
+.gesture-chip { position: absolute; z-index: 12; top: calc(env(safe-area-inset-top, 0px) + 82px); left: max(18px, env(safe-area-inset-left, 0px)); display: flex; align-items: center; gap: 9px; max-width: min(520px, calc(100vw - 36px)); padding: 8px 10px; border-radius: 16px; font-size: 12px; background: rgba(20,22,27,0.88); }
+.gesture-chip button { flex-shrink: 0; padding: 6px 9px; }
+.gesture-ring { --hold: 0; flex: 0 0 18px; height: 18px; border-radius: 50%; background: conic-gradient(rgba(237,240,245,0.9) calc(var(--hold) * 1turn), rgba(255,255,255,0.12) 0); mask: radial-gradient(transparent 48%, #000 53%); }
+#gesture-btn[aria-pressed="true"] { background: rgba(255,255,255,0.18); border-color: rgba(255,255,255,0.35); }
+#gesture-cal-progress { width: 100%; height: 6px; margin: 4px 0 16px; accent-color: #c5cbd4; }
+#gesture-cal-result { font: 12px/1.7 ui-monospace, monospace; white-space: pre-wrap; }
+#gesture-report label { display: block; font-size: 12px; line-height: 1.6; margin: 14px 0; }
+.gesture-card[hidden], .gesture-chip[hidden], #gesture-calibration[hidden], #gesture-report[hidden] { display: none; }
+@media (max-width: 600px) { .gesture-chip { top: calc(env(safe-area-inset-top, 0px) + 76px); } .gesture-panel { top: calc(env(safe-area-inset-top, 0px) + 126px); max-height: calc(100dvh - 150px); } }

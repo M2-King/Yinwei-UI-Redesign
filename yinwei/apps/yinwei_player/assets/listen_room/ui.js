@@ -1113,8 +1113,18 @@ function drawLevel() {
 }
 
 // ---------------------------------------------------------------- the app's handle on the page
+const handGestures = typeof ListenGestureUI === "undefined" ? null : ListenGestureUI.create({
+  core: ListenGestureCore, document, storage: (() => { try { return localStorage; } catch (_) { return null; } })(), send,
+  say: text => toast(text),
+  actions: { mode: () => browseMode, setMode: setBrowseMode, focus: () => pkFocus,
+    offset: () => winOffset, select: pkSelect, windowTap: winTap, browse: pkBrowse,
+    canSelect: pkCanPlay, state: () => S, click: id => $(id).click() },
+});
 // Dart calls these with runJavaScript(...). Everything else stays private.
 window.YinweiListen = Object.freeze({
+  handFrame: frame => handGestures?.frame(frame),
+  gestureState: state => handGestures?.update(state),
+  gestureReset: () => handGestures?.reset(),
   music: (value) => musicSheet.receive(value),
   cover: (key, dataUrl) => Covers.receive(key, dataUrl), // a real song cover (data: URL), or null when there is none
   soda: (value) => musicSheet.receiveOnline(value),
@@ -1124,7 +1134,7 @@ window.YinweiListen = Object.freeze({
   commandRefused,
   apply,                                        // (state) app → page, at most 10 times a second
   toast: (text, holdMs) => { selectionDone(); toast(String(text), Number(holdMs) || 1500); }, // e.g. "Applied on the laptop" after a command succeeds
-  suspend: () => { suspended = true; },         // app in the background or off this screen: no rendering
+  suspend: () => { suspended = true; handGestures?.reset(); }, // app in the background: no rendering or gesture history
   resume: () => { suspended = false; },
   setQuality: (q) => { if (["auto", "full", "light"].includes(q)) { quality.setting = q; quality.activeTimes.length = 0; if (q === "full") setRatio(quality.maxRatio); applyQuality(q === "light" ? "light" : "full"); } },
   devOverlay: (on) => { $("fps").hidden = !on; renderMeter(); }, // developer diagnostics only
