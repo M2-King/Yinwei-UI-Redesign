@@ -16,7 +16,7 @@ node "$PLAYER/test/native_gestures/export_fixtures.mjs" --check
 xcrun --sdk macosx swiftc -sdk "$(xcrun --sdk macosx --show-sdk-path)" \
   "$PLAYER/ios/Runner/YinweiHandPose.swift" \
   "$PLAYER/ios/Runner/YinweiGestureEngine.swift" \
-  "$PLAYER/test/native_gestures/main.swift" -o "$CAPTURE_TEST_DIR/gesture-tests" "$PLAYER/test/native_gestures/fixtures/oracle.json"
+  "$PLAYER/test/native_gestures/main.swift" -o "$CAPTURE_TEST_DIR/gesture-tests"
 "$CAPTURE_TEST_DIR/gesture-tests" "$PLAYER/test/native_gestures/fixtures/oracle.json"
 xcrun --sdk macosx swiftc -sdk "$(xcrun --sdk macosx --show-sdk-path)" \
   "$PLAYER/ios/Runner/YinweiOpusDecoder.swift" \
