@@ -146,10 +146,10 @@ gestures easier, never stricter.** Stored calibration from the old format must b
 ## Tests (all must pass before you report)
 
 1. **The owner's recorded cases as the oracle.**
-   - Export every frame sequence from the existing JS tests (`test/listen_room/gesture_core_test.mjs`,
-     including the two owner data-set replays) to JSON fixtures under `test/native_gestures/fixtures/`.
+   - Export every frame sequence from the existing JS tests (`yinwei/apps/yinwei_player/test/listen_room/gesture_core_test.mjs`,
+     including the two owner data-set replays) to JSON fixtures under `yinwei/apps/yinwei_player/test/native_gestures/fixtures/`.
      Write a small exporter script for this and commit it.
-   - Run the new Swift engine on them (macOS harness via `tools/test_ios_capture.sh`). For every
+   - Run the new Swift engine on them (macOS harness via `yinwei/tools/test_ios_capture.sh`). For every
      fixture:
      - (a) the same set of events fires, with no misses;
      - (b) no extra event fires on the tremor, fidget, glitch and return cases;
