@@ -123,6 +123,13 @@ Replace the per-stroke "wait for it to end" logic with an **armed / committed** 
   and resets when the hand moves faster than the `still` threshold (so swipes never trigger poses).
 - **Fire when the evidence crosses the threshold.** A clear, steady pose fires in about 150–250 ms;
   a doubtful one takes longer or never fires.
+- **Minimum evidence (decided 2026-10-25, answering Codex):** a steady, clear pose held for
+  300 ms now fires. This is intentional. The old tests "a short palm (0.3 s) does nothing" and
+  "the hand leaving the frame resets a hold" (two 300 ms Victory shows) change to use **≤ 120 ms**
+  shows, which must still give no event. At least ~150 ms of steady evidence is always needed, so a
+  passing or flashed pose never fires. Moving hands, low confidence and a hand leaving the frame
+  still reset the evidence. Tremor, fidget, glitch, drift and return-stroke protections stay
+  unchanged.
 - **Release:** after firing, the same pose cannot fire again until its evidence falls below a
   re-arm level (hand opened, closed or lowered). Keep today's "a fired pose stays fired until
   released".
