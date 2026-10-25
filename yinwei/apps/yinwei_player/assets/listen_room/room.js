@@ -28,7 +28,13 @@ function snapDirection() {
   if (to === null) return;
   if (reduced) { S.az = wrap(to); renderPlace(); } else snapAnim = { t0: 0, from: S.az, to };
 }
-function resetView() { if (browseMode === "compact") { browseCamera("compact"); return; } if (camLocked()) return; fling = null; cam.tYaw = YAW_3D; cam.tLift = LIFT_3D; cam.tZoom = 1; }
+function resetView() { if (browseMode === "compact") { browseCamera("compact"); return; } if (camLocked()) return; fling = null; cam.tYaw = YAW_3D; cam.tLift = LIFT_3D; cam.tZoom = 1; nearYaw(); }
+// With 360 degrees, a fixed view (reset, quick menu, windows) is reached the short way round:
+// shift the current heading by whole turns so it is within half a turn of the target.
+function nearYaw() {
+  const turn = Math.PI * 2, d = cam.yaw - cam.tYaw;
+  if (Math.abs(d) > Math.PI) cam.yaw -= Math.round(d / turn) * turn;
+}
 // Browse camera: while the song picker (compact) or the window displays show, the camera holds one
 // framing chosen for them. Compact permits bounded look-around; pinch, zoom, fling and
 // top view stay locked, so the picker always sits on a calm part of the room. Leaving browsing brings back the
@@ -44,7 +50,8 @@ let camSaved = null, lookBackAt = 0;
 const BROWSE_LOOK = { on: true, yaw: 0.5, lift: 9 * DEG, back: 0 }; // drag to look around the close-up; back: s before it settles (0: it stays)
 // The range a look drag may move the camera in (and springs back into).
 function lookLimits() {
-  if (browseMode !== "compact") return { y: YAW_LIM, l: LIFT_LIM, gy: 0.12, gl: 0.07 };
+  // The room view turns all the way round (owner, 2026-10-25); only the tilt is limited.
+  if (browseMode !== "compact") return { y: [-Infinity, Infinity], l: LIFT_LIM, gy: 0.12, gl: 0.07 };
   const pose = browsePose("compact");
   return { y: [Math.max(YAW_LIM[0], pose.yaw - BROWSE_LOOK.yaw), Math.min(YAW_LIM[1], pose.yaw + BROWSE_LOOK.yaw)],
     l: [Math.max(LIFT_LIM[0], pose.lift - BROWSE_LOOK.lift), Math.min(LIFT_LIM[1], pose.lift + BROWSE_LOOK.lift)], gy: 0.05, gl: 0.025 };
@@ -60,8 +67,10 @@ function browseCamera(mode) {
   if (pose) {
     if (!camSaved) camSaved = { yaw: cam.tYaw, lift: cam.tLift, zoom: cam.tZoom, k: cam.tK };
     fling = null; lookBackAt = 0; Object.assign(cam, { tYaw: pose.yaw, tLift: pose.lift, tZoom: pose.zoom, tK: 0 });
+    nearYaw();
   } else if (camSaved) {
     fling = null; Object.assign(cam, { tYaw: camSaved.yaw, tLift: camSaved.lift, tZoom: camSaved.zoom, tK: camSaved.k }); camSaved = null;
+    nearYaw();
   }
   if (reduced) Object.assign(cam, { yaw: cam.tYaw, lift: cam.tLift, zoom: cam.tZoom, k: cam.tK });
   camMoving = true;
@@ -1401,10 +1410,16 @@ function frame(now) {
     if (dragging) perf.touchTime += dt;
     if (fling && !dragging) {
       const k = Math.exp(-dt / 0.22);
-      cam.tYaw = clamp(cam.tYaw + fling.yaw * dt * 1000, YAW_LIM[0], YAW_LIM[1]);
-      cam.tLift = clamp(cam.tLift + fling.lift * dt * 1000, LIFT_LIM[0], LIFT_LIM[1]);
+      const lim = lookLimits();
+      cam.tYaw = clamp(cam.tYaw + fling.yaw * dt * 1000, lim.y[0], lim.y[1]);
+      cam.tLift = clamp(cam.tLift + fling.lift * dt * 1000, lim.l[0], lim.l[1]);
       fling.yaw *= k; fling.lift *= k;
       if (Math.abs(fling.yaw) + Math.abs(fling.lift) < 2e-5) fling = null;
+    }
+    // Many turns later: keep the numbers small (same view), never while a drag or glide uses them.
+    if (!dragging && !fling && Math.abs(cam.tYaw) > Math.PI * 2) {
+      const turns = Math.round(cam.tYaw / (Math.PI * 2)) * Math.PI * 2;
+      cam.tYaw -= turns; cam.yaw -= turns;
     }
     if (snapAnim) {
       if (!snapAnim.t0) snapAnim.t0 = now;

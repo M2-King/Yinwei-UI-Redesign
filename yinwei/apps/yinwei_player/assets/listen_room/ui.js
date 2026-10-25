@@ -70,6 +70,16 @@ function speakerPose(index) {
 const held = {}; // values you just set, kept until the app confirms them
 const setLocal = (fields, ok) => { const now = performance.now(); for (const k in fields) { S[k] = fields[k]; ListenBridge.hold(held, k, fields[k], now, ok && ok[k]); } };
 
+// Focus rings (and the window list's song pill) are for keyboard users only. Touch, drag and
+// programmatic focus after a tap never show them: on the iPad they appeared as a blue
+// "selected" ring while dragging (owner, 2026-10-25).
+addEventListener("keydown", (e) => {
+  if (["Tab", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Enter", " ", "Escape"].includes(e.key)) {
+    document.documentElement.classList.add("kbd");
+  }
+}, true);
+addEventListener("pointerdown", () => document.documentElement.classList.remove("kbd"), true);
+
 // Intents, page → app. In the app the "YinweiNative" channel carries them to
 // Dart; in a plain browser they become a "yinwei-intent" event (dev host, tests).
 function send(intent) {
