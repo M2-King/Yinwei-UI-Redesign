@@ -64,6 +64,8 @@ void main() {
         liveAudioTap: liveTap,
         allowArrayFileAudio: false,
         createOpusEncoder: _FakeOpus.new,
+        // Never from this machine's settings (the owner's laptop has UDP on).
+        listenUdp: false,
         coordinator: AppSessionCoordinator(
             libraryList: (request) async {
               sodaReads++;
