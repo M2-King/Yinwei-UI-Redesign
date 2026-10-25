@@ -1,151 +1,167 @@
 # iPad Listen Room hand gestures
 
-Implemented locally on `codex/ios-capture-ci`, following the approved architecture audit.
-The camera feature is off by default. No build has been published or accepted on a device.
+The faster native recognition revision is local to `codex/ios-capture-ci` and follows
+`CODEX_PROMPT_GESTURES_FAST.md`, including the owner's approved 120 ms flash cases.
+Build 71 predates this revision. This revision has not been pushed, built as an IPA,
+published, or accepted on an iPad. The owner/Claude handles that review and release.
 
-## Boundaries and behaviour
+## Architecture and protected boundaries
 
-`YinweiHandGestures` owns an independent video-only AVCaptureSession. Apple Vision detects
-one hand on its serial utility queue. VGA capture requests 30 fps; analysis and emission
-are limited to at most 20 fps, and late frames are discarded. A main-thread delivery slot
-and a single in-flight Dart-to-WebView call prevent frame backlogs.
+`AVCaptureVideoDataOutput -> Vision -> YinweiHandClassifier -> YinweiGestureEngine`
+runs on the existing serial utility queue. The pure engine imports Foundation only.
+The main thread and Flutter/WKWebView receive results after recognition; the page
+calls the same touch actions. It never runs `createGestureCore` on camera frames.
+The legacy JS core remains solely for the unchanged oracle and pure calibration
+report. The browser design prototype is unchanged.
 
-Both `automaticallyConfiguresApplicationAudioSession` and `usesApplicationAudioSession`
-are false. There is no microphone input, AVAudioSession category/mode/activation write,
-image bridge, image storage, network request, laptop frame message or playback hook.
-Listening and audio routing continue through their existing paths.
+Capture keeps VGA and discards late buffers. It requests 60 fps when the active
+format supports 60, otherwise 30. Every delivered camera buffer is analysed; neither
+native nor Dart has the former 50 ms throttle. Actual sustainable analysis fps,
+Vision speed, thermal impact and 60 fps format negotiation need the iPad. No smaller
+preset was selected because its tracking/latency tradeoff cannot be measured here.
+Vision reads only the fifteen joints used by the classifier, not `.all`.
 
-The native method channel is `dev.yinwei/hand_gestures` (`permission`, `start`, `stop`);
-its event channel is `dev.yinwei/hand_gestures/frames`. Native status events report stopped
-or orientation-reset state; data frames contain only `{t, hand, g, score, x, y, s}`, or
-`{t, hand:false}`. Dart rejects malformed/nonfinite fields, bounds numeric values, rejects
-unknown poses and nonincreasing timestamps, and forwards only the whitelisted frame.
+No engine/crate, Listen audio loop, UDP path, ReplayKit audio, cover cache, audio
+route, laptop bundle, or owner library/player/music/list files were changed. The
+existing spatial state and playback action authority remain unchanged.
 
-`ListenGestures` holds consent and on/off preferences in `listen_gestures.json` in the
-application-support directory, the same storage location/pattern as `listen_sound_quality`.
-Missing or corrupt preferences default to off. Remembered on is not a camera-start request:
-opening the room always requires a hand-button tap. Backgrounding, closing, sign-out,
-audio interruption, page reload/loss, and disabling stop the camera. Returning to the
-foreground never automatically restarts it. Permission completion cannot undo a later stop.
+## Privacy and lifetime
 
-The one-time explanation precedes the native permission prompt. No video preview is used.
-The status chip shows pose/hold progress, pause state or a fixed camera error message.
-The hand button remains available while permission is pending so the owner can cancel.
-The chip's close button can also turn the preference off while paused, without reopening
-the camera first.
+The camera remains off by default and requires consent and a hand-button tap.
+Remembered on never automatically starts capture when a room opens or resumes.
+Background, sign-out, room closure, audio interruption, page loss/reload and off all
+stop capture. An outstanding permission/configuration/clock reply cannot undo a
+later suspension. Permission denial retains the existing explanation.
 
-The shipped pure core is copied from `docs/design/gestures/gestures.cjs` without changing
-its measured hold/swipe rules. Its 43 original assertions are retained; only the loaders
-now point at the shipped classic script (the repository root is an ES-module package).
-The new script tags are discovered automatically by the existing `ListenRoomHtml` inliner;
-no inliner rewrite or dependency is required. Neither new script contains a web address.
+Both `automaticallyConfiguresApplicationAudioSession` and
+`usesApplicationAudioSession` remain false. There is no microphone, audio-session
+write, image bridge, recording, image storage, network upload, or laptop frame path.
+The existing Info.plist camera explanation is unchanged:
 
-| Gesture | Existing touch entry point |
-| --- | --- |
-| Open_Palm, 500 ms | album -> `setBrowseMode("compact")` |
-| Closed_Fist, 400 ms | window -> compact; compact -> album |
-| Victory, 450 ms | compact -> `setBrowseMode("window")` |
-| Thumb_Up, 500 ms | `pkSelect(pkFocus)`, `winTap(winOffset)`, or `#play.click()` |
-| Left / right swipe | `#next.click()` / `#prev.click()` |
-| Up / down swipe in compact | `pkBrowse(1)` / `pkBrowse(-1)` |
+> Yinwei uses the front camera only while hand gestures are on, to see your hand.
+> Video stays on this iPad and is never saved or sent.
 
-Confirmation always calls the existing selection function, including when the current song
-is paused. This deliberately follows touch's resume behaviour, resolving the discrepancy
-identified in the audit. Existing selection refusals retain their own toast. Transport
-actions retain touch's existing Dart control-lease, pending/wait and connection behaviour.
-Browsing does not play or mutate spatial state.
+Only fixed gesture/state labels and bounded numeric results cross the local bridge.
+The channel name remains `dev.yinwei/hand_gestures/frames` for registration compatibility;
+its payload is now decisions/status, not hand frames:
 
-Calibration preserves the prototype's 1100 ms preparation, up to 2600 ms stroke, 700 ms
-return, three repetitions in each direction, and 5200 ms alternating run. It records
-stroke summaries in memory and suppresses all gesture actions while running. Apply stores
-only `{tuned,when}` in localStorage `yinwei.gestureCal`; finite whitelisted settings are
-capped at defaults on both apply and load. The explicit continuous-reverse checkbox sets
-returnMs to zero. Restore defaults clears that key. No frames/joints/video are persisted.
+- Decision: `{event, t, latencyMs}`. No decision is coalesced away.
+- Status, at most 10 Hz: `{t, pose, progress, strokes}`. Progress is in [0,1].
+- `strokes` contains only ended calibration summaries: direction/event, start time,
+  travel in hand sizes, peak speed, ratio, gap, fired. No coordinates or joints.
 
-## Geometry and classifier choices
+Dart validates each schema and whitelists every field. Events and status have
+independent monotonic checks so an event and status at the same camera time both
+arrive. WKWebView delivery is serial: up to 32 decisions wait, status is coalesced
+while retaining at most 16 summaries. Overflow stops capture; it does not silently
+lose a recognized action. Context generations clear queued work after suspension.
 
-The native connection physically rotates video buffers to the current interface orientation
-using APIs available at the existing iOS 16.2 minimum. Mirroring is explicitly disabled on
-that connection. Vision receives `.up`, with bottom-left origin. The pure adapter then does
-exactly one mirror and flip: `x = 1 - visionX`, `y = (1 - visionY) * height / width`.
-Palm centre is the mean of wrist and the four MCP joints. `s` is wrist-to-middle-MCP distance
-in those same frame-width units. Dart bounds X to [0,1], Y to [0,4/3], and s to
-[0.0001,5/3], covering either orientation of VGA. Native monotonic uptime in milliseconds
-is rebased once per camera run to the page's performance clock for guided calibration.
-Orientation changes reset the detector so a rotated image does not continue an old stroke.
+## Recognition and geometry
 
-The pure Swift classifier ignores joints below confidence 0.3. A finger is extended when
-its tip's wrist distance exceeds its PIP's wrist distance by more than `0.15 * s`.
-Tips no farther than their PIP count as curled; the positive dead band is unknown, never
-silently curled. All four extended -> Open_Palm; index/middle only -> Victory; all four
-curled plus an extended upward thumb -> Thumb_Up, otherwise Closed_Fist. Up requires the
-tip at least `0.15 * s` above the IP and vertical movement greater than horizontal movement
-in the user's view. Missing thumb information cannot confirm or classify a fist. Open_Palm
-and Victory do not require the thumb. Score is the minimum confidence of the required
-joints, capped to [0,1], not a calibrated MediaPipe probability. Low-confidence poses still
-have to satisfy the unchanged core's minScore 0.6. Vision/MediaPipe recognition equivalence
-and these new classifier parameters require device review.
+The connection physically rotates buffers into the current interface orientation.
+Connection mirroring is disabled; Vision receives `.up`. The classifier mirrors and
+flips once: `x=1-visionX`, `y=(1-visionY)*height/width`. X points right, Y down, in
+frame-width units. Palm centre is the mean of wrist and the four MCPs; size is
+wrist-to-middle-MCP distance. Orientation changes reset recognition.
 
-Audio and Three.js coordinates are unchanged: X right, Y up, -Z front; listener facing -Z,
-upright +Y. Azimuth 0 is front, +90 right; elevation positive up. Audio uses metres and a
-unit direction `(sin(az)*cos(el), sin(el), -cos(az)*cos(el))`. Listen Room displays radius
-`ln(1+d)/ln(11)*4.4`, with ear height 1.1; `RoomMath.toRoom`/`fromRoomPoint` remain the only
-room conversion. Hand coordinates never feed those spatial conversions.
+The existing 0.3 minimum joint confidence, 0.15-size extension dead band, joint
+requirements and four pose names are retained. The classifier additionally returns
+signed per-finger margins and minimum pose certainty multiplied by required-joint
+confidence. Ambiguous extension, curl or thumb-up geometry cannot become a high
+certainty pose. Required-joint confidence below 0.6 resets pose evidence.
 
-## Native project wiring
+The centre and size use a One Euro filter: a low-pass derivative drives an adaptive
+cutoff, strong at rest and responsive during motion. Derivative cutoff is 1 Hz,
+minimum cutoff 1.2 Hz; position beta is 400 in hand-normalized units. Swipe velocity
+uses the filtered position derivative; pose stability uses the filtered velocity.
+A quiet-frame check also prevents a nearly-ready pose firing as motion starts.
+Filter state survives a tracking gap up to 150 ms; any missing hand immediately
+clears pose evidence. Longer gaps reset the filters and stroke history too.
 
-Info.plist now includes the exact requested value:
+Swipes arm above 1.5 hand sizes/s. They commit after two consecutive frames above
+2.4 hand sizes/s, with a separate immutable peak gate of 3 hand sizes/s preserving
+the measured fidget protection. The consecutive evidence is retained through
+ordinary deceleration. Distance uses the approximately 150 ms motion window,
+including the pre-arm displacement. A tracking gap can extend that window by at
+most 150 ms without inventing movement frames.
 
-```xml
-<key>NSCameraUsageDescription</key>
-<string>Yinwei uses the front camera only while hand gestures are on, to see your hand. Video stays on this iPad and is never saved or sent.</string>
-```
+Defaults are 0.34 hand sizes for horizontal/vertical commit distance, with the
+original frame floors 0.045 horizontally and 0.036 vertically, axis ratio 1.2,
+straightness 0.6 and at least two actual moving frames. Clear fast flicks get a
+bounded distance discount down to the original 0.65 floor. A single tracker jump
+cannot turn its filter tail into a second moving frame. Blur/exit retains the
+original 70% distance / recent speed >=4 exception and movement/straightness gates.
 
-Runner pbxproj additions (each build ID also appears in Runner's Sources phase, and each
-file ID in the Runner group):
+There is no global 400 ms cooldown. A slow frame re-arms, otherwise a distinct stroke
+can re-arm after 250 ms. A continuous flick/recoil wave additionally retains the old
+400 ms anti-wave bound until it settles for 60 ms; this preserves the existing
+at-most-two-wave oracle without blocking the tested deliberate 300 ms repeat.
+Immediate opposite-direction returns along the same axis stay ignored for 600 ms.
+An ignored return never replaces the real flick or suppresses the next same-direction swipe.
 
-```text
-D8A0000B0000000000000201 /* YinweiHandPose.swift in Sources */ = {isa = PBXBuildFile; fileRef = D8A0000B0000000000000010 /* YinweiHandPose.swift */; };
-D8A0000B0000000000000202 /* YinweiHandGestures.swift in Sources */ = {isa = PBXBuildFile; fileRef = D8A0000B0000000000000011 /* YinweiHandGestures.swift */; };
-D8A0000B0000000000000010 /* YinweiHandPose.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YinweiHandPose.swift; sourceTree = "<group>"; };
-D8A0000B0000000000000011 /* YinweiHandGestures.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YinweiHandGestures.swift; sourceTree = "<group>"; };
-```
+Each pose has a leaky evidence accumulator, rapid decay for other poses, and a
+150 margin-ms threshold with an absolute minimum of 150 ms. Clear joint geometry
+at confidence 0.9 fires within 250 ms at both 30/60 fps in the harness. Movement,
+low confidence, missing hands and long gaps reset evidence. A fired same pose stays
+latched through movement until released; a held fist cannot repeatedly close menus.
+A clear 300 ms pose intentionally fires; <=120 ms flashes do not.
 
-AppDelegate registers the channel alongside the existing feature channels.
-`tools/test_ios_capture.sh` compiles `YinweiHandPose.swift` with
-`test/native_gestures/main.swift` in its own macOS Swift executable. The 26 cases cover all
-four poses, null, mirroring, rotated hands, confidence, missing/degenerate joints, centre,
-size and coordinate conversion. These Swift tests have NOT been run on this Windows host;
-no CI workflow was triggered. Runner compilation is also outstanding.
+Hand coordinates never enter spatial coordinates. Three.js/audio remain X right,
+Y up, -Z front, with listener facing -Z and upright +Y. Azimuth 0 is front and +90
+right; elevation is positive up. Audio's metre direction is
+`(sin(az)*cos(el), sin(el), -cos(az)*cos(el))`. Room display distance remains
+`ln(1+d)/ln(11)*4.4`, ear height 1.1; RoomMath remains the only room conversion.
 
-## Validation and handoff
+## Calibration, actions and instrumentation
 
-- Node regression: 118 passing test-runner entries, including the three unchanged prototype
-  scripts' 43 individual assertions and 23 new gesture page tests. Offline contract passes.
-- Flutter regression: 1053 passed, 7 skipped, zero failures with YINWEI_LISTEN_UDP=0 only in
-  the test process. The inherited environment sets it to 1 and breaks the existing test
-  asserting UDP is off by default. No application or user environment setting was changed.
-- Static analysis of the changed Dart implementation/tests: no issues.
-- Windows Dart/asset bundle built in ignored `build/gesture_validation_assets`. Both new
-  scripts and kernel_blob.bin are present; review-only dev assets are absent. No desktop
-  bundle was replaced or launched.
-- iOS-targeted asset bundle attempted but cannot complete native build hooks without xcrun.
-  This is not a successful iOS/Swift build. No IPA build, publication, push or CI run occurred.
-- Browser checks use `test/listen_room/gesture_browser_fixture.html`, a same-origin iframe
-  with synthetic native frames, not a camera. At room viewports 1024x768 and 768x1024:
-  consent, palm-to-picker, Victory-to-window, guided calibration through its report/apply,
-  and interruption-to-paused were exercised. Screenshots are retained outside the repository.
-  A fresh room's console was checked separately from browser-tool locator errors.
-- Before committing, compare SHA-256 against the pre-change baseline of the 70 protected
-  and owner files, and stage only the hand-gesture files. Existing dirty website, DLL,
-  golden, owner library/player/music, my_lists and other untracked work must remain intact.
+The guided 13 phases retain preparation/go/return timings and suppress all actions.
+Native ended-stroke summaries feed the existing pure calibration report. Its output
+is remapped to `commitHands`, `commitHandsV`, `swipeSpeed`, `swipeRatio`, `rearmMs`,
+`returnMs`; Dart and Swift independently enforce floors and default upper caps.
+Applying stores `{version:2,tuned,when}` under the existing `yinwei.gestureCal` key.
+Older unversioned data is discarded. The explicit continuous-reverse checkbox sets
+returnMs=0. Restoring defaults clears storage. Configuration resets the engine
+without restarting capture or touching audio. Request IDs and a native timestamp
+cutoff reject stale calibration replies and delayed calibration events.
 
-Device acceptance remains entirely outstanding: permission dialogs/revocation, front-camera
-orientation and mirroring on each iPad orientation, Vision accuracy, thermal/battery impact,
-release on every lifecycle transition, actual playback continuity/HRTF/audio route and AirPlay,
-and localStorage survival across WKWebView/app restarts. The camera remains opt-in and no
-distribution is authorized by this implementation commit. The owner/Claude performs the
-macOS CI build, device review and any later distribution.
+Action mapping remains: palm album->compact, fist window->compact->album, Victory
+compact->window, thumb-up through existing pkSelect/winTap/play, left/right through
+next/previous buttons, and up/down through existing picker browsing. Existing touch
+control leases, connection checks and selection refusals remain authoritative.
 
-Rollback: disable the hand button; alternatively revert only this feature's commit. No DSP,
-audio engine, routing, Listen scheduling, protected cover code or protocol migration is needed.
+Capture PTS is converted from `session.masterClock` to the CoreMedia host clock.
+`t` is the decision frame's capture timestamp, not main-thread delivery time.
+`latencyMs` is that frame time minus the actual arming frame (swipe) or first frame
+of the current steady evidence episode (pose). These algorithmic delays exclude
+processing after the decision frame was captured.
+
+The page estimates its clock offset from the best of three request/reply round trips
+and reports half-RTT uncertainty. Actions wait for that synchronization. Delivery
+is `act()` time minus the mapped event time, including Vision/engine/bridge delivery
+of the decision frame. It is an estimate, not a calibrated physical clock probe.
+The detail panel and Copy audio diagnostics expose per-event counts and decision /
+delivery p50/p95, with the last 256 samples per type and total counts for this page.
+Calibration decisions count but have no action-delivery sample. Only bounded numeric
+aggregates enter audio diagnostics; camera frames and raw event history do not.
+
+## Build wiring, verification and rollback
+
+Runner Sources includes `YinweiHandPose.swift`, `YinweiGestureEngine.swift` and
+`YinweiHandGestures.swift`. AppDelegate registration and camera privacy text remain
+unchanged. `tools/test_ios_capture.sh` checks fixture freshness and compiles the pure
+engine/classifier harness on macOS alongside the existing audio tests.
+
+See [the dated review report](validation/ipad-gestures-fast-2026-10-25.md) for every
+fixture's old/new event time, measured host latency, test results and device limits.
+The same pure Swift sources were compiled and run locally on Windows using an
+extracted official Swift toolchain, without running an installer or changing
+system settings. The macOS wrapper and iOS Runner still need the owner's Mac/CI.
+No push, CI run, IPA or publication was performed for this revision.
+
+Rollback is a revert of this revision's local commit, including its versioned
+calibration adapter. Alternatively, leave the existing hand switch off. No audio
+engine, spatial-state, transport or server migration is required.
+
+References: [One Euro paper](https://gery.casiez.net/publications/CHI2012-casiez.pdf),
+[Apple capture clock](https://developer.apple.com/documentation/avfoundation/avcapturesession/masterclock),
+[official Windows Swift toolchain](https://www.swift.org/install/windows/).

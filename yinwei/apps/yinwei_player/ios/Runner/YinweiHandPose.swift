@@ -14,6 +14,9 @@ struct YinweiHandPose {
   let x: Double
   let y: Double
   let size: Double
+  var margin = 0.0
+  // Signed geometry certainty per finger: +1 clearly extended, -1 clearly curled.
+  var fingerMargins: [String: Double] = [:]
 }
 
 enum YinweiHandClassifier {
@@ -41,14 +44,24 @@ enum YinweiHandClassifier {
     let y = palm.reduce(0) { $0 + $1.y } / 5
     var required = palm
     var fingers: [Bool] = []
+    var margins: [String: Double] = [:]
+    var certainty = 1.0
     for finger in ["index", "middle", "ring", "little"] {
       guard let tip = joint(finger + "Tip"), let pip = joint(finger + "PIP") else {
         return YinweiHandPose(gesture: nil, score: 0, x: x, y: y, size: size)
       }
       required += [tip, pip]
       let delta = distance(wrist, tip) - distance(wrist, pip)
-      if delta > size * extensionMargin { fingers.append(true) }
-      else if delta <= 0 { fingers.append(false) }
+      if delta > size * extensionMargin {
+        fingers.append(true)
+        let m = min(1, (delta / size - extensionMargin) / 0.5)
+        margins[finger] = m; certainty = min(certainty, m)
+      }
+      else if delta <= 0 {
+        fingers.append(false)
+        let m = min(1, -delta / size / 0.4)
+        margins[finger] = -m; certainty = min(certainty, m)
+      }
       else { return YinweiHandPose(gesture: nil, score: 0, x: x, y: y, size: size) }
     }
     var gesture: String?
@@ -62,10 +75,21 @@ enum YinweiHandClassifier {
       let extended = distance(wrist, tip) - distance(wrist, ip) > size * extensionMargin
       let up = tip.y < ip.y - size * extensionMargin && ip.y - tip.y > abs(tip.x - ip.x)
       gesture = extended && up ? "Thumb_Up" : "Closed_Fist"
+      let thumb = (distance(wrist, tip) - distance(wrist, ip)) / size
+      margins["thumb"] = max(-1, min(1, thumb / 0.5))
+      if gesture == "Thumb_Up" {
+        certainty = min(certainty, max(0, min(1, (thumb - extensionMargin) / 0.5)))
+        certainty = min(certainty, max(0, min(1, (ip.y - tip.y - abs(tip.x - ip.x)) / size / 0.5)))
+      } else {
+        let curled = max(0, min(1, -thumb / 0.4))
+        let clearlyNotUp = max(0, min(1, (abs(tip.x - ip.x) - (ip.y - tip.y)) / size / 0.5))
+        certainty = min(certainty, max(curled, clearlyNotUp))
+      }
     }
     // Minimum confidence of every joint used by this classification, never a model probability.
     let score = gesture == nil ? 0 : min(1, required.map { $0.confidence }.min() ?? 0)
-    return YinweiHandPose(gesture: gesture, score: score, x: x, y: y, size: size)
+    return YinweiHandPose(gesture: gesture, score: score, x: x, y: y, size: size,
+                          margin: gesture == nil ? 0 : certainty * score, fingerMargins: margins)
   }
 
   /// Vision's upright, unmirrored lower-left frame → user's view. Mirror exactly once.

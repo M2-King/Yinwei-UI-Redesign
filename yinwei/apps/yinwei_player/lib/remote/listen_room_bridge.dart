@@ -89,7 +89,8 @@ class ListenRoomBridge {
     try {
       var url = await covers.get(sel.stable);
       if (url == null) {
-        final value = await session.sodaCover({'source': sel.source, ...sel.payload});
+        final value =
+            await session.sodaCover({'source': sel.source, ...sel.payload});
         final mime = value['mime'], data = value['data'];
         if (mime is String &&
             const ['image/jpeg', 'image/png', 'image/webp'].contains(mime) &&
@@ -119,31 +120,68 @@ class ListenRoomBridge {
 
   /// Local camera feature; never enters the listening or laptop protocol.
   final ListenGestures? gestures;
-  bool _gestureFrameInFlight = false;
+  bool _gestureResultInFlight = false;
+  int _gestureDeliveryGeneration = 0;
+  final List<Map<String, Object?>> _gestureEvents = [];
+  Map<String, Object?>? _gestureStatus;
+  Map<String, Object?> _gestureMetrics = {};
 
   Future<void> _gestureRun(String script) async {
     try {
       await run(script);
     } catch (_) {
-      // A lost web process cannot keep the camera running.
       if (!_disposed) pageReloaded();
     }
   }
 
-  Future<void> _sendGestureFrame(Map<String, Object?> frame) async {
-    if (_gestureFrameInFlight ||
-        !_ready ||
-        _disposed ||
-        _background ||
-        !session.signedIn ||
-        session.interrupted) {
-      return;
+  bool get _canDeliverGesture =>
+      _ready &&
+      !_disposed &&
+      !_background &&
+      session.signedIn &&
+      !session.interrupted;
+
+  Future<void> _sendGestureResult(Map<String, Object?> value) async {
+    if (!_canDeliverGesture) return;
+    if (value.containsKey('event')) {
+      if (_gestureEvents.length >= 32) {
+        gestures?.suspend();
+        return;
+      }
+      _gestureEvents.add(value);
+    } else {
+      final strokes = <Object?>[
+        ...?(_gestureStatus?['strokes'] as List?),
+        ...?(value['strokes'] as List?)
+      ];
+      if (strokes.length > 16) {
+        gestures?.suspend();
+        return;
+      }
+      _gestureStatus = {...value, 'strokes': strokes};
     }
-    _gestureFrameInFlight = true;
+    await _drainGestureResults();
+  }
+
+  Future<void> _drainGestureResults() async {
+    if (_gestureResultInFlight) return;
+    _gestureResultInFlight = true;
+    final generation = _gestureDeliveryGeneration;
     try {
-      await _gestureRun('YinweiListen.handFrame(${jsonEncode(frame)})');
+      while (_canDeliverGesture && generation == _gestureDeliveryGeneration) {
+        final next = _gestureEvents.isNotEmpty
+            ? _gestureEvents.removeAt(0)
+            : _gestureStatus;
+        if (next == null) break;
+        if (!next.containsKey('event')) _gestureStatus = null;
+        await _gestureRun('YinweiListen.handResult(${jsonEncode(next)})');
+      }
     } finally {
-      _gestureFrameInFlight = false;
+      _gestureResultInFlight = false;
+      if (_canDeliverGesture &&
+          (_gestureEvents.isNotEmpty || _gestureStatus != null)) {
+        unawaited(_drainGestureResults());
+      }
     }
   }
 
@@ -161,6 +199,9 @@ class ListenRoomBridge {
   }
 
   void _gestureReset() {
+    ++_gestureDeliveryGeneration;
+    _gestureEvents.clear();
+    _gestureStatus = null;
     if (_ready && !_disposed && !_background) {
       unawaited(_gestureRun('YinweiListen.gestureReset()'));
     }
@@ -484,8 +525,8 @@ class ListenRoomBridge {
   void attach() {
     gestures?.addListener(_gestureChanged);
     gestures?.onReset = _gestureReset;
-    gestures?.onFrame = (frame) {
-      unawaited(_sendGestureFrame(frame));
+    gestures?.onResult = (value) {
+      unawaited(_sendGestureResult(value));
     };
     _gestureContext();
     unawaited(gestures?.initialize());
@@ -821,6 +862,37 @@ class ListenRoomBridge {
       case 'gestures':
         _gestureContext();
         if (m['on'] is bool) await gestures?.setEnabled(m['on'] as bool);
+      case 'gestureConfig':
+        if (_canDeliverGesture && gestures?.active == true) {
+          ++_gestureDeliveryGeneration;
+          _gestureEvents.clear();
+          _gestureStatus = null;
+          final t = await gestures!.configure(m['config']);
+          if (t != null && _canDeliverGesture) {
+            await _gestureRun('YinweiListen.gestureConfigured(${jsonEncode({
+                  'request': m['request'],
+                  't': t
+                })})');
+          }
+        }
+      case 'gestureClock':
+        final pageT = m['pageT'];
+        if (pageT is num &&
+            pageT.isFinite &&
+            pageT >= 0 &&
+            _canDeliverGesture) {
+          final nativeT = await gestures?.clock();
+          if (nativeT != null && _canDeliverGesture) {
+            await _gestureRun('YinweiListen.gestureClock(${jsonEncode({
+                  'pageT': pageT,
+                  'nativeT': nativeT
+                })})');
+          }
+        }
+      case 'gestureMetrics':
+        if (_canDeliverGesture) {
+          _gestureMetrics = ListenGestures.metrics(m['metrics']);
+        }
       case 'quality':
         final quality = ListenQuality.parse(m['quality']);
         if (quality != null) session.setSoundQuality(quality);
@@ -829,8 +901,10 @@ class ListenRoomBridge {
       case 'copyAudioDiagnostics':
         try {
           await Clipboard.setData(ClipboardData(
-              text: const JsonEncoder.withIndent('  ')
-                  .convert(session.audioDiagnostics())));
+              text: const JsonEncoder.withIndent('  ').convert({
+            ...session.audioDiagnostics(),
+            'gestures': _gestureMetrics
+          })));
           await toast('Audio diagnostics copied');
         } catch (_) {
           await toast('Could not copy audio diagnostics');

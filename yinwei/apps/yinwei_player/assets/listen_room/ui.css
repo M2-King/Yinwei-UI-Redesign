@@ -532,7 +532,7 @@ html.kbd .win-list:focus-within button:not(:focus) { position: absolute; width: 
 .gesture-ring { --hold: 0; flex: 0 0 18px; height: 18px; border-radius: 50%; background: conic-gradient(rgba(237,240,245,0.9) calc(var(--hold) * 1turn), rgba(255,255,255,0.12) 0); mask: radial-gradient(transparent 48%, #000 53%); }
 #gesture-btn[aria-pressed="true"] { background: rgba(255,255,255,0.18); border-color: rgba(255,255,255,0.35); }
 #gesture-cal-progress { width: 100%; height: 6px; margin: 4px 0 16px; accent-color: #c5cbd4; }
-#gesture-cal-result { font: 12px/1.7 ui-monospace, monospace; white-space: pre-wrap; }
+#gesture-cal-result, #gesture-latency { font: 12px/1.7 ui-monospace, monospace; white-space: pre-wrap; overflow-wrap: anywhere; }
 #gesture-report label { display: block; font-size: 12px; line-height: 1.6; margin: 14px 0; }
 .gesture-card[hidden], .gesture-chip[hidden], #gesture-calibration[hidden], #gesture-report[hidden] { display: none; }
 @media (max-width: 600px) { .gesture-chip { top: calc(env(safe-area-inset-top, 0px) + 76px); } .gesture-panel { top: calc(env(safe-area-inset-top, 0px) + 126px); max-height: calc(100dvh - 150px); } }

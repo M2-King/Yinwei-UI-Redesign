@@ -1,29 +1,24 @@
 <!doctype html>
 <html lang="en"><meta charset="utf-8"><title>Hand gesture browser fixture</title>
 <style>body{margin:0;background:#16181c;color:#eee;font:12px system-ui}nav{height:48px;display:flex;align-items:center;gap:8px;padding:0 12px}button{color:inherit;background:#292d34;border:1px solid #555;border-radius:8px;padding:7px}iframe{display:block;width:100vw;height:calc(100vh - 48px);border:0}span{margin-right:auto}</style>
-<nav><span>Synthetic hand frames · no camera</span><button data-pose="Open_Palm">Palm</button><button data-pose="Closed_Fist">Fist</button><button data-pose="Victory">Victory</button><button data-pose="Thumb_Up">Confirm</button><button data-swipe="left">Left</button><button data-swipe="right">Right</button><button data-swipe="up">Up</button><button data-swipe="down">Down</button><button id="interrupt">Interrupt</button></nav>
+<nav><span>Synthetic native decisions · no camera</span><button data-pose="Open_Palm">Palm</button><button data-pose="Closed_Fist">Fist</button><button data-pose="Victory">Victory</button><button data-pose="Thumb_Up">Confirm</button><button data-swipe="left">Left</button><button data-swipe="right">Right</button><button data-swipe="up">Up</button><button data-swipe="down">Down</button><button id="interrupt">Interrupt</button></nav>
 <iframe id="room" title="Listen Room under test" src="../../assets/listen_room/index.html?dev"></iframe>
 <script>
 const room=document.getElementById('room');let action=null;
 let status={on:false,consent:false,active:false,starting:false,permission:'granted',error:null};
 function update(){room.contentWindow.YinweiListen.gestureState(status);}
-function frame(value){room.contentWindow.YinweiListen.handFrame({t:1000000+performance.now(),...value});}
+function result(value){room.contentWindow.YinweiListen.handResult({t:1000000+performance.now(),...value});}
 room.addEventListener('load',()=>{
   room.contentWindow.addEventListener('yinwei-intent',({detail:i})=>{
+    const api=room.contentWindow.YinweiListen;
     if(i.t==='gestureConsent'){status.consent=true;update();}
     if(i.t==='gestures'){status.on=i.on;status.active=i.on&&status.consent;update();}
-  });
-  update();
+    if(i.t==='gestureConfig')api.gestureConfigured({request:i.request,t:1000000+performance.now()});
+    if(i.t==='gestureClock')api.gestureClock({pageT:i.pageT,nativeT:1000000+performance.now()});
+  });update();
 });
-for(const button of document.querySelectorAll('[data-pose]'))button.onclick=()=>{frame({hand:false});action={pose:button.dataset.pose,t:performance.now()};};
-for(const button of document.querySelectorAll('[data-swipe]'))button.onclick=()=>{frame({hand:false});action={swipe:button.dataset.swipe,t:performance.now()};};
-setInterval(()=>{
-  if(!status.active)return;
-  const age=action?performance.now()-action.t:Infinity;
-  if(age>1100){action=null;frame({hand:false});return;}
-  if(action.pose){frame({hand:true,g:action.pose,score:0.95,x:0.5,y:0.4,s:0.12});return;}
-  const direction=action.swipe,u=Math.max(0,Math.min(1,(age-250)/250)),e=u*u*(3-2*u),horizontal=['left','right'].includes(direction),sign=['left','up'].includes(direction)?-1:1;
-  frame({hand:true,g:null,score:0,x:0.5+(horizontal?sign*0.15*e:0),y:0.4+(!horizontal?sign*0.15*e:0),s:0.12});
-},50);
+for(const button of document.querySelectorAll('[data-pose]'))button.onclick=()=>{if(status.active)result({event:button.dataset.pose,latencyMs:198});};
+for(const button of document.querySelectorAll('[data-swipe]'))button.onclick=()=>{if(status.active)result({event:'swipe'+button.dataset.swipe[0].toUpperCase()+button.dataset.swipe.slice(1),latencyMs:99});};
+setInterval(()=>{if(status.active)result({pose:null,progress:0,strokes:[]});},100);
 document.getElementById('interrupt').onclick=()=>{action=null;status.active=false;update();};
 </script></html>

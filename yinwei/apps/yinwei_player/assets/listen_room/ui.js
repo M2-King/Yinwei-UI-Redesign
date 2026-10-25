@@ -1132,7 +1132,9 @@ const handGestures = typeof ListenGestureUI === "undefined" ? null : ListenGestu
 });
 // Dart calls these with runJavaScript(...). Everything else stays private.
 window.YinweiListen = Object.freeze({
-  handFrame: frame => handGestures?.frame(frame),
+  handResult: value => handGestures?.result(value),
+  gestureConfigured: t => handGestures?.configured(t),
+  gestureClock: value => handGestures?.clock(value),
   gestureState: state => handGestures?.update(state),
   gestureReset: () => handGestures?.reset(),
   music: (value) => musicSheet.receive(value),

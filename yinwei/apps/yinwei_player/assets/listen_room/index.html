@@ -130,6 +130,7 @@
 <section class="gesture-card gesture-panel glass" id="gesture-panel" role="dialog" aria-labelledby="gesture-panel-title" hidden>
   <div class="gesture-panel-head"><h2 id="gesture-panel-title">手势校准</h2><button id="gesture-panel-close" type="button" aria-label="Close hand gesture calibration">×</button></div>
   <p id="gesture-cal-note"></p>
+  <pre id="gesture-latency" aria-live="polite"></pre>
   <p>张掌打开歌单 · 握拳收起 · 剪刀手展开 · 拇指确认。左右挥切歌，歌单内上下挥浏览。</p>
   <div class="gesture-buttons"><button id="gesture-calibrate" type="button">开始校准</button><button id="gesture-cal-reset" type="button">恢复默认</button></div>
   <div id="gesture-calibration" hidden><h3 id="gesture-cal-title"></h3><p id="gesture-cal-step"></p><progress id="gesture-cal-progress" max="1" value="1"></progress><button id="gesture-cal-cancel" type="button">取消校准</button></div>

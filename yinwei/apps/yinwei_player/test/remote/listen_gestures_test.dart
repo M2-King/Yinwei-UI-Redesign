@@ -19,12 +19,8 @@ class _Store implements GestureSettingsStore {
 
 Map<String, Object?> frame([double t = 100]) => {
       't': t,
-      'hand': true,
-      'g': 'Open_Palm',
-      'score': 0.9,
-      'x': 0.5,
-      'y': 0.4,
-      's': 0.15,
+      'event': 'Open_Palm',
+      'latencyMs': 198.0,
     };
 
 void main() {
@@ -36,6 +32,7 @@ void main() {
   late List<String> calls;
   late List<Map<String, Object?>> frames;
   Future<Map<String, Object?>> Function()? start;
+  Future<Object?> Function(String)? nativeResult;
 
   setUp(() {
     events = StreamController<Object?>.broadcast(sync: true);
@@ -43,10 +40,14 @@ void main() {
     calls = [];
     frames = [];
     start = null;
+    nativeResult = null;
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(methods, (call) async {
       calls.add(call.method);
       if (call.method == 'permission') return 'granted';
+      if (call.method == 'clock' || call.method == 'configure') {
+        return nativeResult == null ? 50.0 : await nativeResult!(call.method);
+      }
       if (call.method == 'start') {
         return await start?.call() ?? {'permission': 'granted', 'active': true};
       }
@@ -54,7 +55,7 @@ void main() {
     });
     gestures =
         ListenGestures(store: store, methods: methods, events: events.stream)
-          ..onFrame = frames.add;
+          ..onResult = frames.add;
     gestures.setContext(ready: true, foreground: true, available: true);
   });
   tearDown(() async {
@@ -156,49 +157,190 @@ void main() {
     expect(gestures.error, contains('Settings'));
     expect(frames, isEmpty);
   });
-  test('throttle is at most 20 fps and rejects backwards or duplicate time',
+  test(
+      'decisions have no frame throttle and reject duplicate or backwards time',
       () async {
     await enable();
     for (final t in [100.0, 100.0, 90.0, 120.0, 149.0, 150.0, 200.0]) {
       events.add(frame(t));
     }
-    expect(frames.map((f) => f['t']), [100, 150, 200]);
+    expect(frames.map((f) => f['t']), [100, 120, 149, 150, 200]);
   });
-  test('clamps finite numbers and whitelists fields; never forwards images',
-      () {
-    final clean = ListenGestures.sanitize({
-      ...frame(),
-      't': -1,
-      'x': 4,
-      'y': -2,
-      'score': 3,
-      's': 99,
-      'pixels': [1, 2]
-    })!;
-    expect(clean['t'], 0);
-    expect(clean['x'], 1);
-    expect(clean['y'], 0);
-    expect(clean['score'], 1);
-    expect(clean['s'] as double, closeTo(5 / 3, 1e-9));
-    expect(clean.keys,
-        unorderedEquals(['t', 'hand', 'g', 'score', 'x', 'y', 's']));
+  test('decision fields are clamped and whitelisted; frames never cross', () {
     expect(
-        ListenGestures.sanitize({'t': 1, 'hand': false, 'pixels': 'discard'}),
-        {'t': 1.0, 'hand': false});
+        ListenGestures.sanitize({
+          ...frame(),
+          't': -1,
+          'latencyMs': 99999,
+          'pixels': [1],
+          'x': 1
+        }),
+        {'event': 'Open_Palm', 't': 0.0, 'latencyMs': 10000.0});
+    expect(
+        ListenGestures.sanitize({
+          't': 1,
+          'hand': true,
+          'g': 'Open_Palm',
+          'score': 1,
+          'x': 0.5,
+          'y': 0.5,
+          's': 0.12
+        }),
+        isNull);
+    expect(
+        ListenGestures.sanitize({
+          't': 1,
+          'pose': null,
+          'progress': 4,
+          'strokes': [],
+          'pixels': 'discard'
+        }),
+        {'t': 1.0, 'pose': null, 'progress': 1.0, 'strokes': []});
   });
-  test('malformed, unknown gesture and nonfinite frames are ignored', () {
-    for (final bad in [
+  test('malformed decisions and status are ignored', () {
+    for (final value in [
       null,
       'frame',
       {},
-      {...frame(), 'hand': 1},
-      {...frame(), 'g': 'other'},
-      {...frame(), 'x': double.nan},
-      {...frame(), 's': double.infinity},
-      {...frame(), 't': '100'}
+      {...frame(), 'event': 'other'},
+      {...frame(), 'latencyMs': double.nan},
+      {...frame(), 't': double.infinity},
+      {...frame(), 't': '100'},
+      {'t': 1, 'pose': 'other', 'progress': 1}
     ]) {
-      expect(ListenGestures.sanitize(bad), isNull);
+      expect(ListenGestures.sanitize(value), isNull);
     }
+  });
+  test('status and a decision at the same timestamp are both delivered',
+      () async {
+    await enable();
+    events.add({'t': 100, 'pose': 'Open_Palm', 'progress': 0.5, 'strokes': []});
+    events.add(frame(100));
+    events.add(frame(100));
+    expect(frames, hasLength(2));
+  });
+  test('numeric calibration summaries are bounded and never include joints',
+      () {
+    final status = ListenGestures.sanitize({
+      't': 1,
+      'pose': null,
+      'progress': 0,
+      'strokes': [
+        {
+          't': 0,
+          'event': 'swipeLeft',
+          'travel': 0.5,
+          'peak': 4,
+          'ratio': 3,
+          'gap': null,
+          'fired': true,
+          'joints': [1]
+        },
+        {
+          't': 0,
+          'event': 'other',
+          'travel': 1,
+          'peak': 2,
+          'ratio': 3,
+          'fired': false
+        }
+      ]
+    })!;
+    final strokes = status['strokes'] as List;
+    expect(strokes, hasLength(1));
+    expect((strokes.first as Map).containsKey('joints'), false);
+  });
+  test('old calibration is ignored and new thresholds cannot be stricter', () {
+    expect(
+        ListenGestures.tuning({'swipeHands': 0}), ListenGestures.tuning(null));
+    final tuned = ListenGestures.tuning({
+      'version': 2,
+      'commitHands': 99,
+      'swipeSpeed': double.nan,
+      'rearmMs': 0,
+      'returnMs': 0
+    });
+    expect(tuned['commitHands'], 0.34);
+    expect(tuned['swipeSpeed'], 2.4);
+    expect(tuned['rearmMs'], 100);
+    expect(tuned['returnMs'], 0);
+  });
+  test(
+      'configuration and clock never open the camera and require an active context',
+      () async {
+    expect(await gestures.configure({'version': 2}), isNull);
+    expect(await gestures.clock(), isNull);
+    await enable();
+    expect(await gestures.configure({'version': 2}), 50);
+    expect(await gestures.clock(), 50);
+    gestures.setContext(ready: true, foreground: false, available: true);
+    final before = calls.length;
+    expect(await gestures.configure({'version': 2}), isNull);
+    expect(await gestures.clock(), isNull);
+    expect(calls.length, before);
+  });
+  test('diagnostics keep numeric aggregates only', () {
+    expect(
+        ListenGestures.metrics({
+          'Open_Palm': {
+            'count': 1,
+            'decisionP50': 198,
+            'pixels': [1],
+            'deliveryP95': double.nan
+          },
+          'other': {'count': 1}
+        }),
+        {
+          'Open_Palm': {'count': 1.0, 'decisionP50': 198.0}
+        });
+  });
+  test('native configuration failure stops the camera and does not resume',
+      () async {
+    await enable();
+    nativeResult = (_) async => throw PlatformException(code: 'native_lost');
+    expect(await gestures.configure({'version': 2}), isNull);
+    expect(gestures.active, false);
+    events.add(frame());
+    expect(frames, isEmpty);
+    expect(calls, contains('stop'));
+  });
+  test('a late clock reply cannot survive a background transition', () async {
+    await enable();
+    final pending = Completer<Object?>();
+    nativeResult = (_) => pending.future;
+    final reply = gestures.clock();
+    gestures.setContext(ready: true, foreground: false, available: true);
+    pending.complete(200);
+    expect(await reply, isNull);
+  });
+  test('Copy audio diagnostics includes only sanitized gesture aggregates',
+      () async {
+    final session = room.FakeSession()..snapshot = room.snapshot();
+    final bridge = ListenRoomBridge(
+        session: session, gestures: gestures, run: (_) async {});
+    final messenger =
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+    Map<String, dynamic>? copied;
+    messenger.setMockMethodCallHandler(SystemChannels.platform, (call) async {
+      if (call.method == 'Clipboard.setData') {
+        copied = jsonDecode((call.arguments as Map)['text'] as String)
+            as Map<String, dynamic>;
+      }
+      return null;
+    });
+    addTearDown(() =>
+        messenger.setMockMethodCallHandler(SystemChannels.platform, null));
+    bridge.attach();
+    await bridge.handle('{"t":"ready"}');
+    await bridge.handle(
+        '{"t":"gestureMetrics","metrics":{"swipeLeft":{"count":2,"decisionP50":66,"deliveryP95":8,"pixels":[1]},"unknown":{"count":8}}}');
+    await bridge.handle('{"t":"copyAudioDiagnostics"}');
+    expect(copied?['gestures'], {
+      'swipeLeft': {'count': 2.0, 'decisionP50': 66.0, 'deliveryP95': 8.0}
+    });
+    expect(session.calls, isEmpty);
+    bridge.dispose();
+    session.dispose();
   });
   test('file preferences round-trip locally and corrupt content defaults off',
       () async {
@@ -227,13 +369,13 @@ void main() {
     await bridge.handle('{"t":"gestureConsent"}');
     await bridge.handle('{"t":"gestures","on":true}');
     events.add(frame());
-    expect(scripts.where((s) => s.startsWith('YinweiListen.handFrame(')),
+    expect(scripts.where((s) => s.startsWith('YinweiListen.handResult(')),
         hasLength(1));
     final raw =
-        scripts.firstWhere((s) => s.startsWith('YinweiListen.handFrame('));
+        scripts.firstWhere((s) => s.startsWith('YinweiListen.handResult('));
     expect(
         jsonDecode(
-            raw.substring('YinweiListen.handFrame('.length, raw.length - 1)),
+            raw.substring('YinweiListen.handResult('.length, raw.length - 1)),
         frame());
     expect(session.calls, isEmpty);
     bridge.background = true;
@@ -281,7 +423,11 @@ void main() {
             .toList();
     expect(ids.toSet(), hasLength(ids.length),
         reason: 'new feature IDs cannot shadow existing native sources');
-    for (final name in ['YinweiHandPose.swift', 'YinweiHandGestures.swift']) {
+    for (final name in [
+      'YinweiHandPose.swift',
+      'YinweiHandGestures.swift',
+      'YinweiGestureEngine.swift'
+    ]) {
       expect(RegExp(RegExp.escape('$name in Sources')).allMatches(project),
           hasLength(2));
       expect(project, contains('path = $name;'));
@@ -298,7 +444,7 @@ void main() {
         contains('test/native_gestures/main.swift'));
   });
 
-  test('a slow page drops new frames instead of queuing work behind audio',
+  test('a slow page preserves decisions in order without blocking audio',
       () async {
     final session = room.FakeSession()..snapshot = room.snapshot();
     final gate = Completer<void>();
@@ -307,7 +453,7 @@ void main() {
         session: session,
         gestures: gestures,
         run: (script) async {
-          if (script.startsWith('YinweiListen.handFrame(')) {
+          if (script.startsWith('YinweiListen.handResult(')) {
             delivered++;
             await gate.future;
           }
@@ -322,7 +468,8 @@ void main() {
     gate.complete();
     await Future<void>.delayed(Duration.zero);
     events.add(frame(300));
-    expect(delivered, 2);
+    await Future<void>.delayed(Duration.zero);
+    expect(delivered, 3);
     bridge.dispose();
     session.dispose();
   });
@@ -334,7 +481,7 @@ void main() {
         session: session,
         gestures: gestures,
         run: (script) async {
-          if (script.startsWith('YinweiListen.handFrame(')) {
+          if (script.startsWith('YinweiListen.handResult(')) {
             throw StateError('page gone');
           }
         });
@@ -369,13 +516,17 @@ void main() {
     ]) {
       expect(source, isNot(contains(protected)));
     }
+    expect(source, isNot(contains('recognizedPoints(.all)')));
+    expect(source, isNot(contains('lastAnalysis')));
     for (final required in [
       'automaticallyConfiguresApplicationAudioSession = false',
       'usesApplicationAudioSession = false',
       'alwaysDiscardsLateVideoFrames = true',
       'maximumHandCount = 1',
       'qos: .utility',
-      't - lastAnalysis >= 50',
+      'CMSampleBufferGetPresentationTimeStamp',
+      'CMSyncConvertTime',
+      'engine.feed(t: t, pose: pose)',
       'UIApplication.didEnterBackgroundNotification',
       'AVAudioSession.interruptionNotification'
     ]) {

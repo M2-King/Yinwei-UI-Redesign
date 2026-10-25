@@ -10,14 +10,15 @@ final class YinweiHandGestures: NSObject, FlutterStreamHandler, AVCaptureVideoDa
   private let lock = NSLock()
   private var generation = 0
   private var wanted = false
-  private var deliveryPending = false
   private var sink: FlutterEventSink?
   // Session, request and timestamps are confined to queue. Vision runs synchronously there;
   // alwaysDiscardsLateVideoFrames means a busy analysis never queues a backlog of buffers.
   private var session: AVCaptureSession?
   private var videoOutput: AVCaptureVideoDataOutput?
   private let request = VNDetectHumanHandPoseRequest()
-  private var lastAnalysis = -Double.infinity
+  private let engine = YinweiGestureEngine()
+  private var lastStatus = -Double.infinity
+  private var summaries: [[String: Any]] = []
   private var observers: [NSObjectProtocol] = []
 
   static func register(messenger: FlutterBinaryMessenger) {
@@ -30,6 +31,15 @@ final class YinweiHandGestures: NSObject, FlutterStreamHandler, AVCaptureVideoDa
       case "permission": result(service.permission)
       case "start": service.start(result)
       case "stop": service.stop(); result(nil)
+      case "clock": result(service.hostTime)
+      case "configure":
+        let values = call.arguments as? [String: Any] ?? [:]
+        service.queue.async {
+          service.engine.config = YinweiGestureConfig(values)
+          service.engine.reset(); service.summaries = []; service.lastStatus = -.infinity
+          let t = service.hostTime
+          DispatchQueue.main.async { result(t) }
+        }
       default: result(FlutterMethodNotImplemented)
       }
     }
@@ -112,9 +122,11 @@ final class YinweiHandGestures: NSObject, FlutterStreamHandler, AVCaptureVideoDa
             guard session.canAddInput(input) else { throw NSError(domain: "hand_gestures", code: 2) }
             session.addInput(input)
             try camera.lockForConfiguration()
-            if camera.activeFormat.videoSupportedFrameRateRanges.contains(where: { $0.minFrameRate <= 30 && $0.maxFrameRate >= 30 }) {
-              camera.activeVideoMinFrameDuration = CMTime(value: 1, timescale: 30)
-              camera.activeVideoMaxFrameDuration = CMTime(value: 1, timescale: 30)
+            let ranges = camera.activeFormat.videoSupportedFrameRateRanges
+            let fps: Int32 = ranges.contains(where: { $0.minFrameRate <= 60 && $0.maxFrameRate >= 60 }) ? 60 : 30
+            if ranges.contains(where: { $0.minFrameRate <= Double(fps) && $0.maxFrameRate >= Double(fps) }) {
+              camera.activeVideoMinFrameDuration = CMTime(value: 1, timescale: fps)
+              camera.activeVideoMaxFrameDuration = CMTime(value: 1, timescale: fps)
             }
             camera.unlockForConfiguration()
             let output = AVCaptureVideoDataOutput()
@@ -123,7 +135,8 @@ final class YinweiHandGestures: NSObject, FlutterStreamHandler, AVCaptureVideoDa
             output.setSampleBufferDelegate(self, queue: self.queue)
             guard session.canAddOutput(output) else { throw NSError(domain: "hand_gestures", code: 3) }
             session.addOutput(output)
-            self.session = session; self.videoOutput = output; self.lastAnalysis = -Double.infinity
+            self.session = session; self.videoOutput = output
+            self.engine.reset(); self.summaries = []; self.lastStatus = -.infinity
             self.applyOrientation(orientation)
             guard self.current(token) else {
               self.releaseCamera()
@@ -161,6 +174,7 @@ final class YinweiHandGestures: NSObject, FlutterStreamHandler, AVCaptureVideoDa
       capture.outputs.forEach { capture.removeOutput($0) }
     }
     session = nil; videoOutput = nil
+    engine.reset(); summaries = []; lastStatus = -.infinity
   }
 
   private var orientation: AVCaptureVideoOrientation {
@@ -178,6 +192,7 @@ final class YinweiHandGestures: NSObject, FlutterStreamHandler, AVCaptureVideoDa
     let value = orientation
     queue.async {
       self.applyOrientation(value)
+      self.engine.reset(); self.summaries = []; self.lastStatus = -.infinity
       DispatchQueue.main.async { self.sink?(["state": "reset"]) }
     }
   }
@@ -192,18 +207,31 @@ final class YinweiHandGestures: NSObject, FlutterStreamHandler, AVCaptureVideoDa
     }
   }
 
+  private var hostTime: Double {
+    CMTimeGetSeconds(CMClockGetTime(CMClockGetHostTimeClock())) * 1000
+  }
+
+  private func deliver(_ values: [String: Any], token: Int) {
+    // Decisions are rare and are never coalesced or dropped. Status is capped on queue.
+    DispatchQueue.main.async {
+      if self.current(token) { self.sink?(values) }
+    }
+  }
+
   func captureOutput(_ output: AVCaptureOutput, didOutput sampleBuffer: CMSampleBuffer,
                      from connection: AVCaptureConnection) {
     lock.lock(); let token = generation; let enabled = wanted; lock.unlock()
-    guard enabled, output === videoOutput, let pixels = CMSampleBufferGetImageBuffer(sampleBuffer) else { return }
-    let t = ProcessInfo.processInfo.systemUptime * 1000
-    guard t - lastAnalysis >= 50 else { return }
-    lastAnalysis = t
-    var frame: [String: Any] = ["t": t, "hand": false]
+    guard enabled, output === videoOutput, let pixels = CMSampleBufferGetImageBuffer(sampleBuffer),
+          let clock = session?.masterClock else { return }
+    // Capture output PTS is on the session clock. Convert to the host monotonic clock,
+    // also exposed by `clock`; queueing and Vision time never alter the frame timestamp.
+    let pts = CMSampleBufferGetPresentationTimeStamp(sampleBuffer)
+    let t = CMTimeGetSeconds(CMSyncConvertTime(pts, from: clock, to: CMClockGetHostTimeClock())) * 1000
+    guard t.isFinite else { return }
+    var pose: YinweiHandPose?
     do {
       try VNImageRequestHandler(cmSampleBuffer: sampleBuffer, orientation: .up, options: [:]).perform([request])
       if let observation = request.results?.first {
-        let points = try observation.recognizedPoints(.all)
         let aspect = Double(CVPixelBufferGetHeight(pixels)) / Double(CVPixelBufferGetWidth(pixels))
         let names: [(String, VNHumanHandPoseObservation.JointName)] = [
           ("wrist", .wrist), ("indexMCP", .indexMCP), ("middleMCP", .middleMCP),
@@ -214,26 +242,26 @@ final class YinweiHandGestures: NSObject, FlutterStreamHandler, AVCaptureVideoDa
         ]
         var joints: [String: YinweiHandJoint] = [:]
         for (name, key) in names {
-          if let p = points[key] {
+          if let p = try? observation.recognizedPoint(key) {
             joints[name] = YinweiHandClassifier.userJoint(x: Double(p.location.x), y: Double(p.location.y),
                                                          confidence: Double(p.confidence), aspect: aspect)
           }
         }
-        if let pose = YinweiHandClassifier.classify(joints) {
-          let gesture: Any = pose.gesture.map { $0 as Any } ?? NSNull()
-          frame = ["t": t, "hand": true, "g": gesture,
-                   "score": pose.score, "x": pose.x, "y": pose.y, "s": pose.size]
-        }
+        pose = YinweiHandClassifier.classify(joints)
       }
     } catch { /* transient Vision failure behaves exactly like a lost hand */ }
-    let values = frame
-    lock.lock()
-    if deliveryPending { lock.unlock(); return }
-    deliveryPending = true
-    lock.unlock()
-    DispatchQueue.main.async {
-      self.lock.lock(); self.deliveryPending = false; self.lock.unlock()
-      if self.current(token) { self.sink?(values) }
+    let decision = engine.feed(t: t, pose: pose)
+    if let event = decision.event {
+      deliver(["event": event, "t": t, "latencyMs": decision.latencyMs], token: token)
+    }
+    // Ended-stroke calibration results contain no positions, joints or camera frames.
+    if let stroke = decision.stroke { summaries.append(stroke.values) }
+    if t - lastStatus >= 100 {
+      lastStatus = t
+      let values: [String: Any] = ["t": t, "pose": decision.pose.map { $0 as Any } ?? NSNull(),
+                                   "progress": decision.progress, "strokes": summaries]
+      summaries = []
+      deliver(values, token: token)
     }
   }
 }

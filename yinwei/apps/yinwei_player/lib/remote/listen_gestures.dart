@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
-import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
@@ -56,7 +55,7 @@ class ListenGestures extends ChangeNotifier {
   final MethodChannel _methods;
   final Stream<Object?> _events;
   StreamSubscription<Object?>? _subscription;
-  void Function(Map<String, Object?> frame)? onFrame;
+  void Function(Map<String, Object?> result)? onResult;
   VoidCallback? onReset;
   bool enabled = false, consent = false, active = false, starting = false;
   bool _ready = false,
@@ -67,7 +66,7 @@ class ListenGestures extends ChangeNotifier {
   String permission = 'notDetermined';
   String? error;
   int _generation = 0;
-  double _lastTime = -1;
+  double _lastEventTime = -1, _lastStatusTime = -1;
   Future<void> _writes = Future<void>.value();
 
   Map<String, Object?> get state => {
@@ -136,7 +135,7 @@ class ListenGestures extends ChangeNotifier {
     starting = true;
     error = null;
     final token = ++_generation;
-    _lastTime = -1;
+    _lastEventTime = _lastStatusTime = -1;
     _subscription ??= _events.listen(_event, onError: (Object _) {
       error = 'The camera is unavailable. Tap the hand button to try again.';
       suspend();
@@ -177,7 +176,7 @@ class ListenGestures extends ChangeNotifier {
     ++_generation;
     active = false;
     starting = false;
-    _lastTime = -1;
+    _lastEventTime = _lastStatusTime = -1;
     if (wasRunning) unawaited(_stopNative());
     onReset?.call();
     _notify();
@@ -218,55 +217,149 @@ class ListenGestures extends ChangeNotifier {
     }
     if (raw['state'] == 'reset') {
       onReset?.call();
-      _lastTime = -1;
+      _lastEventTime = _lastStatusTime = -1;
       return;
     }
     if (!enabled || !active || !_ready || !_foreground || !_available) return;
-    final frame = sanitize(raw);
-    if (frame == null) return;
-    final t = (frame['t'] as num).toDouble();
-    if (t <= _lastTime || t - _lastTime < 50) return;
-    _lastTime = t;
-    onFrame?.call(frame);
+    final value = sanitize(raw);
+    if (value == null) return;
+    final t = (value['t'] as num).toDouble();
+    if (value.containsKey('event')) {
+      if (t <= _lastEventTime) return;
+      _lastEventTime = t;
+    } else {
+      if (t <= _lastStatusTime) return;
+      _lastStatusTime = t;
+    }
+    onResult?.call(value);
   }
 
-  /// Strict whitelist: the page receives only this schema, never joints/pixels/diagnostics.
-  static Map<String, Object?>? sanitize(Object? raw) {
-    if (raw is! Map || raw['hand'] is! bool) return null;
-    double? number(String key, double low, double high) {
-      final value = raw[key];
-      return value is num && value.isFinite
-          ? value.toDouble().clamp(low, high)
-          : null;
-    }
+  static const poses = ['Open_Palm', 'Closed_Fist', 'Victory', 'Thumb_Up'];
+  static const swipes = ['swipeLeft', 'swipeRight', 'swipeUp', 'swipeDown'];
+  static const eventNames = [...poses, ...swipes];
 
-    final t = number('t', 0, 1e12);
+  static double? _number(Object? value, double low, double high) =>
+      value is num && value.isFinite ? value.toDouble().clamp(low, high) : null;
+
+  /// Results only. Camera frames, positions, joints and arbitrary diagnostics are rejected.
+  static Map<String, Object?>? sanitize(Object? raw) {
+    if (raw is! Map) return null;
+    final t = _number(raw['t'], 0, 1e12);
     if (t == null) return null;
-    if (raw['hand'] == false) return {'t': t, 'hand': false};
-    // Upright VGA is 640x480 or 480x640; all lengths use frame-width units.
-    const maxAspect = 4 / 3;
-    final x = number('x', 0, 1), y = number('y', 0, maxAspect);
-    final s = number('s', 0.0001, math.sqrt(1 + maxAspect * maxAspect));
-    final score = number('score', 0, 1);
-    final g = raw['g'];
-    if (x == null ||
-        y == null ||
-        s == null ||
-        score == null ||
-        (g != null &&
-            !const ['Open_Palm', 'Closed_Fist', 'Victory', 'Thumb_Up']
-                .contains(g))) {
+    if (raw.containsKey('event')) {
+      final latency = _number(raw['latencyMs'], 0, 10000);
+      if (!eventNames.contains(raw['event']) || latency == null) return null;
+      return {'event': raw['event'], 't': t, 'latencyMs': latency};
+    }
+    final progress = _number(raw['progress'], 0, 1), pose = raw['pose'];
+    if (progress == null || (pose != null && !poses.contains(pose))) {
       return null;
     }
-    return {
-      't': t,
-      'hand': true,
-      'g': g,
-      'score': score,
-      'x': x,
-      'y': y,
-      's': s
+    final strokes = <Map<String, Object?>>[];
+    if (raw['strokes'] is List) {
+      for (final item in (raw['strokes'] as List).take(16)) {
+        if (item is! Map || !swipes.contains(item['event'])) continue;
+        final start = _number(item['t'], 0, 1e12);
+        final travel = _number(item['travel'], 0, 10);
+        final peak = _number(item['peak'], 0, 100);
+        final ratio = _number(item['ratio'], 0, 99);
+        final gap = item['gap'] == null ? null : _number(item['gap'], 0, 10000);
+        if (start == null ||
+            travel == null ||
+            peak == null ||
+            ratio == null ||
+            (item['gap'] != null && gap == null) ||
+            item['fired'] is! bool) {
+          continue;
+        }
+        strokes.add({
+          'event': item['event'],
+          't': start,
+          'travel': travel,
+          'peak': peak,
+          'ratio': ratio,
+          'gap': gap,
+          'fired': item['fired']
+        });
+      }
+    }
+    return {'t': t, 'pose': pose, 'progress': progress, 'strokes': strokes};
+  }
+
+  static Map<String, Object?> tuning(Object? raw) {
+    const defaults = {
+      'commitHands': 0.34,
+      'commitHandsV': 0.34,
+      'swipeSpeed': 2.4,
+      'swipeRatio': 1.2,
+      'rearmMs': 250.0,
+      'returnMs': 600.0
     };
+    const floors = {
+      'commitHands': 0.25,
+      'commitHandsV': 0.25,
+      'swipeSpeed': 2.2,
+      'swipeRatio': 1.05,
+      'rearmMs': 100.0,
+      'returnMs': 0.0
+    };
+    final out = <String, Object?>{'version': 2, ...defaults};
+    if (raw is! Map || raw['version'] != 2) return out;
+    for (final key in defaults.keys) {
+      out[key] =
+          _number(raw[key], floors[key]!, defaults[key]!) ?? defaults[key];
+    }
+    return out;
+  }
+
+  Future<double?> configure(Object? value) async {
+    if (!_current(_generation) || !active) return null;
+    final token = _generation;
+    try {
+      final t = await _methods.invokeMethod<num>('configure', tuning(value));
+      return _current(token) ? _number(t, 0, 1e12) : null;
+    } catch (_) {
+      if (_current(token)) suspend();
+      return null;
+    }
+  }
+
+  Future<double?> clock() async {
+    if (!_current(_generation) || !active) return null;
+    final token = _generation;
+    try {
+      final t = await _methods.invokeMethod<num>('clock');
+      return _current(token) ? _number(t, 0, 1e12) : null;
+    } catch (_) {
+      if (_current(token)) suspend();
+      return null;
+    }
+  }
+
+  /// Only bounded numeric aggregates from the page, never its raw event history.
+  static Map<String, Object?> metrics(Object? raw) {
+    if (raw is! Map) return {};
+    final out = <String, Object?>{};
+    for (final name in eventNames) {
+      final row = raw[name];
+      if (row is! Map) continue;
+      final values = <String, Object?>{};
+      for (final key in [
+        'count',
+        'deliveryCount',
+        'decisionP50',
+        'decisionP95',
+        'deliveryP50',
+        'deliveryP95',
+        'clockUncertaintyMs'
+      ]) {
+        final v = _number(row[key], 0,
+            key.endsWith('count') || key.endsWith('Count') ? 1e9 : 60000);
+        if (v != null) values[key] = v;
+      }
+      out[name] = values;
+    }
+    return out;
   }
 
   void _notify() {
@@ -280,7 +373,7 @@ class ListenGestures extends ChangeNotifier {
     ++_generation;
     active = false;
     starting = false;
-    onFrame = null;
+    onResult = null;
     onReset = null;
     unawaited(_subscription?.cancel());
     unawaited(_stopNative());

@@ -6,8 +6,8 @@ const require = path => { const module = { exports: {} }; new Function("module",
 const { createGestureCore, GESTURE } = require(process.argv[2] || fileURLToPath(new URL("../../assets/listen_room/gesture-core.js", import.meta.url)));
 
 const STEP = 33;
-const run = (frames) => { const feed = createGestureCore(GESTURE); return frames.map(feed).filter((o) => o.event).map((o) => o.event); };
-const outs = (frames) => { const feed = createGestureCore(GESTURE); return frames.map(feed); };
+const outs = (frames) => { const feed = createGestureCore(GESTURE); const out = frames.map(feed); globalThis.__yinweiGestureFixtures?.record(frames, out); return out; };
+const run = (frames) => outs(frames).filter((o) => o.event).map((o) => o.event);
 const seq = (ms, fn, t0 = 0) => { const out = []; for (let t = t0; t <= t0 + ms; t += STEP) out.push({ s: 0.12, ...fn(t, (t - t0) / ms) }); return out; };
 const jitter = (k) => (Math.sin(k * 12.9898) * 43758.5453 % 1) * 0.012; // small, deterministic hand tremor
 const hand = (t, x, y, s = 0.12) => ({ t, hand: true, g: null, score: 0, x, y, s });
@@ -15,14 +15,14 @@ const still = (t0, ms, x, y = 0.5, s = 0.12) => seq(ms, (t) => hand(t, x, y, s),
 // A stroke from (x0,y0) to (x1,y1) over ms, with a smooth (ease in-out) speed profile like a real hand.
 const stroke = (t0, ms, x0, y0, x1, y1, s = 0.12) => { const o = []; for (let t = t0 + STEP; t <= t0 + ms; t += STEP) { const u = (t - t0) / ms, e = u * u * (3 - 2 * u); o.push(hand(t, x0 + (x1 - x0) * e, y0 + (y1 - y0) * e, s)); } return o; };
 let pass = 0;
-const test = (name, fn) => { fn(); pass++; console.log("ok -", name); };
+const test = (name, fn) => { globalThis.__yinweiGestureFixtures?.begin(name); fn(); pass++; console.log("ok -", name); };
 
 // ---- poses (unchanged behaviour)
 test("open palm held 0.6 s fires once", () => {
   assert.deepEqual(run(seq(600, (t) => ({ t, hand: true, g: "Open_Palm", score: 0.9, x: 0.5 + jitter(t), y: 0.5 }))), ["Open_Palm"]);
 });
-test("a short palm (0.3 s) does nothing", () => {
-  assert.deepEqual(run(seq(300, (t) => ({ t, hand: true, g: "Open_Palm", score: 0.9, x: 0.5, y: 0.5 }))), []);
+test("a flashed palm (0.12 s) does nothing", () => {
+  assert.deepEqual(run(seq(120, (t) => ({ t, hand: true, g: "Open_Palm", score: 0.9, x: 0.5, y: 0.5 }))), []);
 });
 test("holding a pose for 3 s fires only once", () => {
   assert.deepEqual(run(seq(3000, (t) => ({ t, hand: true, g: "Thumb_Up", score: 0.9, x: 0.5 + jitter(t), y: 0.5 }))), ["Thumb_Up"]);
@@ -96,9 +96,9 @@ test("a fast back-and-forth wave gives at most two swipes", () => {
   assert.equal(run(seq(1000, (t) => hand(t, 0.5 + 0.1 * Math.sin((t / 1000) * Math.PI * 6), 0.5))).length <= 2, true);
 });
 test("the hand leaving the frame resets a hold", () => {
-  const a = seq(300, (t) => ({ t, hand: true, g: "Victory", score: 0.9, x: 0.5, y: 0.5 }));
+  const a = seq(120, (t) => ({ t, hand: true, g: "Victory", score: 0.9, x: 0.5, y: 0.5 }));
   const b = [333, 366, 400, 433, 466, 600].map((t) => ({ t, hand: false }));
-  const c = seq(300, (t) => ({ t, hand: true, g: "Victory", score: 0.9, x: 0.5, y: 0.5 }), 633);
+  const c = seq(120, (t) => ({ t, hand: true, g: "Victory", score: 0.9, x: 0.5, y: 0.5 }), 633);
   assert.deepEqual(run([...a, ...b, ...c]), []);
 });
 test("each stroke is reported with its reason (for the panel)", () => {
