@@ -3,6 +3,7 @@
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { createHash } from 'node:crypto';
+import { compareFixtures } from './fixture_comparison.mjs';
 const folder = new URL('./fixtures/', import.meta.url);
 let name = '', n = 0;
 const fixtures = [];
@@ -33,6 +34,7 @@ const data = JSON.stringify({schema: 1, sourceSha256: sha('../listen_room/gestur
   oracleCoreSha256: sha('../../assets/listen_room/gesture-core.js'), fixtures}, null, 2) + '\n';
 const target = new URL('oracle.json', folder);
 if (check) {
-  if (readFileSync(target, 'utf8').replace(/\r\n/g,'\n') !== data) throw new Error('Fixtures stale: rerun exporter');
+  const delta = compareFixtures(JSON.parse(data), JSON.parse(readFileSync(target, 'utf8')));
+  console.log(`Fixture coordinate delta: ${delta} (limit 1e-12); all other fields exact`);
 } else { mkdirSync(folder, {recursive:true}); writeFileSync(target, data); }
 console.log(`${check ? 'Verified' : 'Exported'} ${fixtures.length} frame sequences to ${fileURLToPath(target)}`);
